@@ -1,0 +1,92 @@
+# Production stack for deployment via Dokploy (Traefik + Let's Encrypt handled
+# by Dokploy itself — no Caddy service here, and no published host ports:
+# Dokploy injects the Traefik labels + dokploy-network for the services that
+# have a Domain configured (frontend on "/", api on "/api")).
+#
+# Everything else (db, redis, minio, mailpit) stays on the internal compose
+# network only.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Stockage objet S3-compatible pour les images produit. Le navigateur ne lui
+  # parle jamais directement : tout passe par GET /uploads/images/{key} côté API.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Puits SMTP : l'API envoie les codes de vérification vendeur et les
+  # notifications de commande ici. Rien ne sort du serveur tant qu'un vrai
+  # fournisseur SMTP (Resend, Mailgun, Gmail...) n'a pas été renseigné dans
+  # le .env (SMTP_HOST/PORT/USERNAME/PASSWORD) — voir .env.example.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    # CMD par défaut de l'image (backend/Dockerfile) :
+    # uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      # Adresse publique de l'API (Nitro lit NUXT_PUBLIC_* au démarrage et
+      # écrase runtimeConfig.public.apiBase — voir frontend/nuxt.config.ts).
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE}
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  minio_data:
