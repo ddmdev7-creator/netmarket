@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { PhImage, PhLink, PhSpinner, PhUploadSimple, PhX } from '@phosphor-icons/vue'
-import type { CategoryRead } from '~/types/api'
+import { PhImage, PhLink, PhSparkle, PhSpinner, PhUploadSimple, PhX } from '@phosphor-icons/vue'
+import type { CategoryRead, VendorSubscriptionRead } from '~/types/api'
 
 export interface ProductFormValues {
   category_id: string | null
@@ -18,11 +18,46 @@ const toast = useToastStore()
 const { apiFetch } = useApi()
 const apiBase = useApiBase()
 
+// Pas d'await ici : ProductForm est un composant enfant, pas une page — on
+// laisse le statut premium arriver de façon réactive plutôt que de bloquer
+// le rendu du formulaire dessus.
+const { data: subscription } = useAsyncData(
+  'product-form-subscription',
+  () => apiFetch<VendorSubscriptionRead | null>('/subscriptions/me'),
+  { default: () => null },
+)
+const isPremium = computed(() => subscription.value?.status === 'active')
+
 const uploading = ref(false)
+const enhancing = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const enhanceFileInput = ref<HTMLInputElement | null>(null)
 
 function pickFiles() {
   fileInput.value?.click()
+}
+
+function pickEnhanceFiles() {
+  if (!isPremium.value) {
+    navigateTo('/vendeur/abonnement')
+    return
+  }
+  enhanceFileInput.value?.click()
+}
+
+async function uploadFiles(files: File[], endpoint: string, setBusy: (busy: boolean) => void) {
+  setBusy(true)
+  try {
+    const formData = new FormData()
+    for (const file of files) formData.append('files', file)
+    const { keys } = await apiFetch<{ keys: string[] }>(endpoint, { method: 'POST', body: formData })
+    model.value.images.push(...keys)
+    toast.success(keys.length > 1 ? `${keys.length} images ajoutées.` : 'Image ajoutée.')
+  } catch (e) {
+    toast.error(apiErrorMessage(e, "Impossible d'envoyer ces images."))
+  } finally {
+    setBusy(false)
+  }
 }
 
 async function onFilesSelected(event: Event) {
@@ -30,19 +65,15 @@ async function onFilesSelected(event: Event) {
   const files = input.files ? Array.from(input.files) : []
   input.value = '' // permet de re-sélectionner le même fichier plus tard
   if (files.length === 0) return
+  await uploadFiles(files, '/uploads/images', (busy) => (uploading.value = busy))
+}
 
-  uploading.value = true
-  try {
-    const formData = new FormData()
-    for (const file of files) formData.append('files', file)
-    const { keys } = await apiFetch<{ keys: string[] }>('/uploads/images', { method: 'POST', body: formData })
-    model.value.images.push(...keys)
-    toast.success(keys.length > 1 ? `${keys.length} images ajoutées.` : 'Image ajoutée.')
-  } catch (e) {
-    toast.error(apiErrorMessage(e, "Impossible d'envoyer ces images."))
-  } finally {
-    uploading.value = false
-  }
+async function onEnhanceFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  input.value = ''
+  if (files.length === 0) return
+  await uploadFiles(files, '/uploads/images/enhance', (busy) => (enhancing.value = busy))
 }
 
 function removeImage(index: number) {
@@ -115,6 +146,20 @@ function addManualUrl() {
       <PhSpinner v-if="uploading" :size="14" class="mr-1" />
       <PhUploadSimple v-else :size="14" class="mr-1" />
       Choisir des images
+    </v-btn>
+
+    <input
+      ref="enhanceFileInput"
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      multiple
+      class="d-none"
+      @change="onEnhanceFilesSelected"
+    />
+    <v-btn variant="outlined" size="small" block class="mb-2" :loading="enhancing" @click="pickEnhanceFiles">
+      <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
+      <PhSparkle v-else :size="14" class="mr-1" />
+      Améliorer avec l'IA {{ isPremium ? '' : '(Premium)' }}
     </v-btn>
 
     <details class="manual-url mb-2">

@@ -13,6 +13,10 @@ RUN apt-get update \
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install -r requirements-dev.txt
 
+# Bakes the u2netp background-removal model into the image (app/uploads/enhance.py)
+# so premium image enhancement has zero network dependency at runtime.
+RUN python -c "from rembg import new_session; new_session('u2netp')"
+
 COPY . .
 
 EXPOSE 8000

@@ -49,7 +49,9 @@ const displayIdentity = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px;
+  /* The notch/status-bar offset itself now lives on `.v-main` (main.css) —
+     applying it here too would double it up. */
+  padding: 8px 16px 8px;
   background: var(--color-neutral-900);
   border-bottom: 1px solid var(--color-divider);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);

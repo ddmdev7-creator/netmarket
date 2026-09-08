@@ -19,6 +19,7 @@ export type OrderStatus =
 export type PaymentMethod = 'cash_on_delivery'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled'
 export type DeliveryType = 'home_delivery' | 'pickup_point'
+export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled'
 
 export interface TokenPair {
   access_token: string
@@ -51,6 +52,22 @@ export interface VendorRead {
   zone: string | null
   commission_rate: number
   preparation_days: number
+}
+
+export interface SubscriptionPlanRead {
+  id: string
+  name: string
+  price_gnf: number
+  duration_days: number
+}
+
+export interface VendorSubscriptionRead {
+  id: string
+  vendor_id: string
+  status: SubscriptionStatus
+  started_at: string | null
+  expires_at: string | null
+  plan: SubscriptionPlanRead
 }
 
 export interface AddressRead {

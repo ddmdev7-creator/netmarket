@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhSparkle } from '@phosphor-icons/vue'
 import type { VendorRead, VendorStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -97,6 +97,10 @@ async function submit() {
     </template>
 
     <v-divider class="mb-2" />
+    <NuxtLink to="/vendeur/abonnement" class="list-item">
+      <PhSparkle :size="18" color="var(--color-neutral-400)" />
+      <span>Abonnement premium</span>
+    </NuxtLink>
     <NuxtLink to="/profil" class="list-item">
       <PhArrowLeft :size="18" color="var(--color-neutral-400)" />
       <span>Retour à l'espace acheteur</span>

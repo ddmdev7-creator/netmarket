@@ -2,6 +2,9 @@
 .env
 *.env.local
 
+# Notes internes (non destinées au dépôt)
+.securite-serveur.txt
+
 # Python
 __pycache__/
 *.py[cod]

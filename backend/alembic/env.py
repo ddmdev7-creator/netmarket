@@ -23,6 +23,7 @@ from app.pickup_point_managers import models as pickup_point_managers_models  # 
 from app.pickup_points import models as pickup_points_models  # noqa: F401
 from app.reports import models as reports_models  # noqa: F401
 from app.reviews import models as reviews_models  # noqa: F401
+from app.subscriptions import models as subscriptions_models  # noqa: F401
 from app.users import models as users_models  # noqa: F401
 from app.vendors import models as vendors_models  # noqa: F401
 

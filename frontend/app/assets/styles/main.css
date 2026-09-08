@@ -89,8 +89,11 @@ body {
 
 /* viewport-fit=cover (nuxt.config app.head) lets content draw under the
    notch/status bar in standalone mode — push it back down here so headers
-   and back buttons stay tappable instead of hiding behind it. */
-.v-main__wrap {
+   and back buttons stay tappable instead of hiding behind it. Targets
+   `.v-main` itself, not a `.v-main__wrap` inner div: Vuetify 4 no longer
+   renders that wrapper (confirmed against the actual rendered markup), so
+   that selector was dead and this padding never applied. */
+.v-main {
   padding-top: env(safe-area-inset-top, 0px);
 }
 

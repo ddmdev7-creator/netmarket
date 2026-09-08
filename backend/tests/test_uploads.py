@@ -3,11 +3,15 @@ service (docker-compose), not a mock, to prove the whole pipeline works."""
 
 import io
 import re
+from datetime import datetime, timedelta, timezone
 
 from httpx import AsyncClient
 from PIL import Image
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.subscriptions.models import SubscriptionPlan, SubscriptionStatus, VendorSubscription
 from app.users.models import User
+from app.vendors.models import Vendor
 from tests.conftest import auth_headers
 
 _KEY_PATTERN = re.compile(r"^[0-9a-f-]{36}\.jpg$")
@@ -18,6 +22,19 @@ def _fake_jpeg(color: tuple[int, int, int] = (200, 120, 50)) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG")
     return buffer.getvalue()
+
+
+async def _make_premium(db_session: AsyncSession, vendor: Vendor, plan: SubscriptionPlan) -> None:
+    db_session.add(
+        VendorSubscription(
+            vendor_id=vendor.id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            started_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+        )
+    )
+    await db_session.flush()
 
 
 async def test_vendor_can_upload_images(client: AsyncClient, vendor_user: User) -> None:
@@ -102,3 +119,34 @@ async def test_fetching_a_malformed_image_key_is_404(client: AsyncClient) -> Non
     response = await client.get("/uploads/images/not-a-valid-key")
 
     assert response.status_code == 404
+
+
+async def test_non_premium_vendor_cannot_enhance_images(client: AsyncClient, vendor_user: User) -> None:
+    response = await client.post(
+        "/uploads/images/enhance",
+        files=[("files", ("produit.jpg", _fake_jpeg(), "image/jpeg"))],
+        headers=auth_headers(vendor_user),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_premium_vendor_can_enhance_images(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    vendor_user: User,
+    vendor: Vendor,
+    subscription_plan: SubscriptionPlan,
+) -> None:
+    await _make_premium(db_session, vendor, subscription_plan)
+
+    response = await client.post(
+        "/uploads/images/enhance",
+        files=[("files", ("produit.jpg", _fake_jpeg(), "image/jpeg"))],
+        headers=auth_headers(vendor_user),
+    )
+
+    assert response.status_code == 200
+    keys = response.json()["keys"]
+    assert len(keys) == 1
+    assert _KEY_PATTERN.match(keys[0])

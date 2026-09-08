@@ -29,6 +29,7 @@ from app.payments.models import Payment  # noqa: F401
 from app.pickup_point_managers.models import PickupPointManager  # noqa: F401
 from app.pickup_points.models import PickupPoint  # noqa: F401
 from app.reviews.models import Review  # noqa: F401
+from app.subscriptions.models import SubscriptionPlan
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor, VendorStatus
 
@@ -130,6 +131,14 @@ async def product(db_session: AsyncSession, vendor: Vendor, category: Category) 
     db_session.add(item)
     await db_session.flush()
     return item
+
+
+@pytest_asyncio.fixture
+async def subscription_plan(db_session: AsyncSession) -> SubscriptionPlan:
+    plan = SubscriptionPlan(name="Premium mensuel", price_gnf=20000, duration_days=30)
+    db_session.add(plan)
+    await db_session.flush()
+    return plan
 
 
 async def make_vendor(db_session: AsyncSession, *, phone: str, shop_name: str) -> tuple[User, Vendor]:
