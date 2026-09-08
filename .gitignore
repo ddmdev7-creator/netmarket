@@ -5,6 +5,9 @@
 # Notes internes (non destinées au dépôt)
 .securite-serveur.txt
 
+# Secrets (ne jamais committer)
+token
+
 # Python
 __pycache__/
 *.py[cod]
