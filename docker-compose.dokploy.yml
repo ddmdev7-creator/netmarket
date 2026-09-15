@@ -3,8 +3,8 @@
 # Dokploy injects the Traefik labels + dokploy-network for the services that
 # have a Domain configured (frontend on "/", api on "/api")).
 #
-# Everything else (db, redis, minio, mailpit) stays on the internal compose
-# network only.
+# Everything else (db, redis, minio) stays on the internal compose network
+# only.
 services:
   db:
     image: postgres:16-alpine
@@ -47,14 +47,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # Puits SMTP : l'API envoie les codes de vérification vendeur et les
-  # notifications de commande ici. Rien ne sort du serveur tant qu'un vrai
-  # fournisseur SMTP (Resend, Mailgun, Gmail...) n'a pas été renseigné dans
-  # le .env (SMTP_HOST/PORT/USERNAME/PASSWORD) — voir .env.example.
-  mailpit:
-    image: axllent/mailpit:latest
-    restart: unless-stopped
-
   api:
     build:
       context: ./backend
@@ -71,10 +63,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      mailpit:
-        condition: service_started
     # CMD par défaut de l'image (backend/Dockerfile) :
     # uvicorn app.main:app --host 0.0.0.0 --port 8000
+    #
+    # Email : pas de puits SMTP local ici (contrairement à docker-compose.yml
+    # en dev) — un vrai fournisseur SMTP doit être renseigné dans le .env de
+    # ce déploiement (SMTP_HOST/PORT/FROM/USERNAME/PASSWORD, voir
+    # .env.example) avant de démarrer, sous peine d'échec silencieux de tout
+    # envoi (code de vérification, arrivée de colis — voir
+    # backend/app/core/email.py et backend/app/notifications/service.py).
 
   frontend:
     build:
