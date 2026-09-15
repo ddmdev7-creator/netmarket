@@ -360,9 +360,14 @@ Le module `notifications/` a deux canaux, déclenchés aux deux mêmes endroits
   `plugins/notifications.client.ts`. Un clic redirige vers le suivi de la
   commande (`/commandes/{id}` acheteur, `/vendeur/commandes?highlight={id}`
   vendeur).
-- **Email** à l'acheteur à chaque changement de statut d'une sous-commande
-  (confirmée, en préparation, expédiée, livrée, annulée par le vendeur), via
-  l'infra SMTP existante (`app/core/email.py` — mailpit en dev).
+- **Email** à l'acheteur, mais seulement sur les deux transitions où le colis
+  arrive physiquement quelque part et où il doit agir : arrivée à son point
+  de retrait (`arrived_at_pickup_point`), ou livraison à domicile
+  (`delivered` en `home_delivery` — pas de mail sur le `delivered` d'un point
+  de retrait, l'acheteur est déjà sur place à ce moment-là). Les autres
+  transitions (confirmée, en préparation, expédiée, annulée) ne passent que
+  par le canal in-app/WebSocket, pour limiter le volume de mails envoyés.
+  Via l'infra SMTP existante (`app/core/email.py` — mailpit en dev).
   Silencieusement ignoré si l'acheteur n'a pas renseigné d'email (champ
   optionnel à l'inscription).
 

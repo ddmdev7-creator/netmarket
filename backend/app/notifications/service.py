@@ -1,7 +1,15 @@
 """Order notifications: an in-app entry (persisted + pushed live over
-WebSocket, see ws_manager.py) plus, for status changes, an email to the
-buyer — both best-effort side effects of the action that triggered them
-(placing an order, a vendor moving a sub-order forward).
+WebSocket, see ws_manager.py) plus, for the two status changes that mean
+"go get your package" (arrival at a pickup point, or delivery at home), an
+email to the buyer — both best-effort side effects of the action that
+triggered them (placing an order, a vendor/courier/pickup point manager
+moving a sub-order forward).
+
+Email is intentionally NOT sent for every status change (confirmed,
+preparing, shipped, cancelled) — the in-app + WebSocket channel already
+covers those in real time, and mailing on every hop was pure volume with no
+buyer action attached to it. Only the two "package has physically arrived
+somewhere the buyer needs to act on" transitions justify the extra channel.
 
 SMS is on the roadmap (cahier des charges §4.1) but no SMS gateway is
 integrated yet — there is no provider account for the Guinean market at
@@ -23,7 +31,7 @@ from app.core.email import send_email
 from app.notifications import repository
 from app.notifications.models import Notification, NotificationType
 from app.notifications.ws_manager import manager as ws_manager
-from app.orders.models import OrderStatus, SubOrder
+from app.orders.models import DeliveryType, OrderStatus, SubOrder
 from app.users.models import User
 
 logger = logging.getLogger(__name__)
@@ -102,6 +110,12 @@ async def notify_sub_order_status_changed(db: AsyncSession, buyer: User, sub_ord
         body=f"Votre commande chez « {sub_order.shop_name} » est maintenant {label}.",
         order_id=sub_order.order_id,
     )
+
+    is_home_delivery_arrival = (
+        sub_order.status == OrderStatus.DELIVERED and sub_order.order.delivery_type == DeliveryType.HOME_DELIVERY
+    )
+    if sub_order.status != OrderStatus.ARRIVED_AT_PICKUP_POINT and not is_home_delivery_arrival:
+        return
 
     if not buyer.email:
         return
