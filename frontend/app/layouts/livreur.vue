@@ -7,5 +7,6 @@
       </div>
     </v-main>
     <LayoutCourierBottomNav />
+    <LayoutDeliveryRequestModal />
   </v-app>
 </template>

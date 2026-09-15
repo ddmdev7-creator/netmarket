@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhSparkle } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhMapPin, PhSparkle } from '@phosphor-icons/vue'
 import type { VendorRead, VendorStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
 const { apiFetch } = useApi()
 const toast = useToastStore()
+const { locating, locate } = useGeolocation()
 
 // getCachedData: () => undefined — see app/pages/vendeur/index.vue.
 const { data: vendor } = await useAsyncData('vendor-me-settings', () => apiFetch<VendorRead>('/vendors/me'), {
@@ -15,6 +16,8 @@ const { data: vendor } = await useAsyncData('vendor-me-settings', () => apiFetch
 const shopName = ref('')
 const zone = ref('')
 const preparationDays = ref(1)
+const latitude = ref<number | null>(null)
+const longitude = ref<number | null>(null)
 watch(
   vendor,
   (v) => {
@@ -22,9 +25,27 @@ watch(
     shopName.value = v.shop_name
     zone.value = v.zone ?? ''
     preparationDays.value = v.preparation_days
+    latitude.value = v.latitude
+    longitude.value = v.longitude
   },
   { immediate: true },
 )
+
+const hasPosition = computed(() => latitude.value !== null && longitude.value !== null)
+const positionLabel = computed(() =>
+  hasPosition.value ? `${latitude.value!.toFixed(4)}, ${longitude.value!.toFixed(4)}` : '',
+)
+
+async function useCurrentPosition() {
+  try {
+    const position = await locate()
+    latitude.value = position.latitude
+    longitude.value = position.longitude
+    toast.success('Position enregistrée.')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Impossible de récupérer ta position.')
+  }
+}
 
 const statusMeta: Record<VendorStatus, { label: string; color: string }> = {
   pending: { label: 'En attente de validation', color: 'warning' },
@@ -47,6 +68,8 @@ async function submit() {
       body: {
         shop_name: shopName.value.trim(),
         zone: zone.value.trim() || null,
+        latitude: latitude.value,
+        longitude: longitude.value,
         preparation_days: preparationDays.value,
       },
     })
@@ -80,6 +103,23 @@ async function submit() {
 
       <label class="field-label">Zone</label>
       <v-text-field v-model="zone" placeholder="Ex: Kaloum" class="mb-2" />
+
+      <label class="field-label">Position de la boutique</label>
+      <p class="text-muted mb-2" style="font-size: 11.5px">
+        Utilisée pour proposer la livraison au livreur disponible le plus proche.
+      </p>
+      <v-btn color="primary" block :loading="locating" class="mb-2" @click="useCurrentPosition">
+        <PhMapPin :size="17" class="mr-1" />
+        {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
+      </v-btn>
+      <p class="text-muted mb-2" style="font-size: 11.5px">Ou touche la carte pour placer le repère toi-même.</p>
+      <CommonMapPicker v-model:latitude="latitude" v-model:longitude="longitude" class="mb-2" />
+      <div v-if="hasPosition" class="d-flex align-center ga-1 mb-4" style="font-size: 12px">
+        <span class="text-muted">{{ positionLabel }}</span>
+      </div>
+      <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-4">
+        Sans position, tu ne pourras pas rechercher automatiquement un livreur.
+      </v-alert>
 
       <label class="field-label">Délai de préparation habituel (jours)</label>
       <v-text-field

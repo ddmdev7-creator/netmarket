@@ -1,3 +1,7 @@
+<script setup lang="ts">
+useAppTheme()
+</script>
+
 <template>
   <VitePwaManifest />
   <NuxtLayout>
@@ -8,5 +12,5 @@
   <!-- Barre de progression fixe en haut d'écran — se déclenche automatiquement
        sur toute navigation/chargement de données de page, indépendamment du
        scroll (position fixed native à ce composant Nuxt). -->
-  <NuxtLoadingIndicator color="var(--color-accent)" :height="3" :throttle="150" />
+  <NuxtLoadingIndicator color="var(--color-primary)" :height="3" :throttle="150" />
 </template>

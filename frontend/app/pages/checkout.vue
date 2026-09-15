@@ -191,7 +191,7 @@ function continueShopping() {
       <v-btn icon variant="text" @click="router.back()">
         <PhArrowLeft :size="20" />
       </v-btn>
-      <h1 class="text-h6">Livraison &amp; paiement</h1>
+      <h1 class="text-h6">Commande et paiement</h1>
       <LayoutHomeLink />
     </div>
 
@@ -325,7 +325,7 @@ function continueShopping() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
   opacity: 0.85;
 }
 
@@ -341,6 +341,6 @@ function continueShopping() {
 }
 
 .address-option--selected {
-  border-color: var(--color-accent);
+  border-color: var(--color-primary);
 }
 </style>

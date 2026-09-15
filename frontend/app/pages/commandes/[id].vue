@@ -132,7 +132,7 @@ function shortId(id: string) {
 .amount {
   font-family: var(--font-heading);
   font-weight: 600;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
 }
 
 .amount--total {

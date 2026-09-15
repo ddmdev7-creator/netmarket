@@ -1,5 +1,7 @@
 """Checkout (cart → order split by vendor), order tracking and sub-order status transitions."""
 
+import asyncio
+import logging
 import uuid
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -8,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cart import repository as cart_repository
 from app.common.delivery_estimate import estimate_delivery_window
+from app.common.geo import haversine_km
 from app.catalog import repository as catalog_repository
 from app.catalog.models import ProductStatus
+from app.core.database import AsyncSessionLocal
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import InvalidTokenError, TokenType, create_delivery_token, decode_token
 from app.couriers import repository as courier_repository
@@ -17,7 +21,7 @@ from app.couriers.models import CourierStatus
 from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders.models import DeliveryType, Order, OrderStatus, SubOrder
-from app.orders.schemas import CheckoutRequest, CourierAssignRequest, SubOrderStatusUpdate
+from app.orders.schemas import CheckoutRequest, CourierAssignRequest, DispatchRequest, SubOrderStatusUpdate
 from app.payments import repository as payments_repository
 from app.payments import service as payments_service
 from app.payments.models import PaymentStatus
@@ -26,6 +30,17 @@ from app.pickup_points import repository as pickup_points_repository
 from app.users import repository as user_repository
 from app.users.models import User, UserRole
 from app.vendors import repository as vendor_repository
+
+logger = logging.getLogger(__name__)
+
+# Délai laissé à chaque livreur candidat pour répondre à une offre avant de
+# passer au suivant (voir start_dispatch/_run_dispatch). En mémoire du
+# process, pas persisté — même choix que ws_manager (mono-instance, cf.
+# plan) : un redémarrage de l'API pendant une recherche perd le minuteur, la
+# sous-commande reste juste sans livreur (le vendeur peut relancer ou
+# assigner manuellement).
+OFFER_TIMEOUT_SECONDS = 45
+_dispatch_events: dict[uuid.UUID, asyncio.Event] = {}
 
 # Transitions autorisées, pilotées par le vendeur (accepter, préparer, expédier, livrer)
 # ou par annulation (avant expédition uniquement). SHIPPED n'a pas d'entrée
@@ -269,6 +284,15 @@ async def _attach_courier_info(db: AsyncSession, sub_order: SubOrder) -> SubOrde
     return sub_order
 
 
+async def _attach_dispatch_offer_info(db: AsyncSession, sub_order: SubOrder) -> SubOrder:
+    sub_order.dispatch_offered_courier_name = None
+    if sub_order.dispatch_offered_courier_id is not None:
+        courier = await courier_repository.get_by_id(db, sub_order.dispatch_offered_courier_id)
+        if courier is not None:
+            sub_order.dispatch_offered_courier_name = courier.full_name or courier.phone
+    return sub_order
+
+
 async def _attach_pickup_point_contacts(db: AsyncSession, target, pickup_point_id: uuid.UUID | None) -> None:
     # Live lookup, deliberately not frozen: a pickup point can have several
     # managers, and who's currently staffing it can change after the order
@@ -289,6 +313,7 @@ async def list_my_sub_orders(db: AsyncSession, user: User) -> list[SubOrder]:
     for so in sub_orders:
         _attach_delivery_address(so)
         await _attach_courier_info(db, so)
+        await _attach_dispatch_offer_info(db, so)
         await _attach_pickup_point_contacts(db, so, so.order.pickup_point_id)
     return sub_orders
 
@@ -313,11 +338,19 @@ async def assign_courier(
             raise ConflictError("Ce livreur n'est pas disponible.")
 
     sub_order.courier_id = data.courier_id
+    # Assignation manuelle : prime sur un dispatch automatique en cours (voir
+    # start_dispatch) — on vide son état et on réveille sa tâche de fond
+    # tout de suite plutôt que d'attendre qu'elle constate le courier_id posé
+    # à son prochain réveil (jusqu'à OFFER_TIMEOUT_SECONDS plus tard).
+    sub_order.dispatch_offered_courier_id = None
+    sub_order.dispatch_queue = []
     await db.commit()
+    _wake_dispatch(sub_order_id)
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
+    await _attach_dispatch_offer_info(db, updated)
     return await _attach_courier_info(db, updated)
 
 
@@ -489,3 +522,179 @@ async def confirm_delivery_by_token(db: AsyncSession, user: User, token: str) ->
     next_status = next(iter(next_statuses))
 
     return await update_sub_order_status(db, user, sub_order_id, SubOrderStatusUpdate(status=next_status))
+
+
+def _wake_dispatch(sub_order_id: uuid.UUID) -> None:
+    event = _dispatch_events.get(sub_order_id)
+    if event is not None:
+        event.set()
+
+
+async def start_dispatch(db: AsyncSession, user: User, sub_order_id: uuid.UUID, data: DispatchRequest) -> SubOrder:
+    """Offre la livraison au livreur en ligne le plus proche de la boutique,
+    puis au suivant par distance croissante s'il refuse ou ne répond pas
+    dans OFFER_TIMEOUT_SECONDS (voir _run_dispatch) — jamais une diffusion à
+    tous où le premier à répondre l'emporterait, même s'il est plus loin
+    qu'un autre candidat encore en train de regarder son téléphone."""
+    sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+    if sub_order is None:
+        raise NotFoundError("Sous-commande introuvable.")
+
+    vendor = await vendor_repository.get_by_id(db, sub_order.vendor_id)
+    if vendor is None or vendor.user_id != user.id:
+        raise ForbiddenError("Cette sous-commande ne fait pas partie de votre boutique.")
+    if sub_order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED):
+        raise ConflictError("Cette sous-commande est déjà finalisée.")
+    if sub_order.courier_id is not None:
+        raise ConflictError("Un livreur est déjà assigné à cette sous-commande.")
+    if vendor.latitude is None or vendor.longitude is None:
+        raise ConflictError("Configurez la position de votre boutique avant de rechercher un livreur.")
+
+    candidates = await courier_repository.list_online_candidates(db, data.vehicle_type)
+    if not candidates:
+        raise ConflictError("Aucun livreur disponible pour le moment.")
+
+    ranked = sorted(
+        candidates,
+        key=lambda c: haversine_km(vendor.latitude, vendor.longitude, c.latitude, c.longitude),
+    )
+    queue = [c.id for c in ranked[1:]]
+    first = ranked[0]
+
+    sub_order.dispatch_offered_courier_id = first.id
+    sub_order.dispatch_queue = queue
+    await db.commit()
+
+    await notifications_service.notify_delivery_request(
+        db,
+        courier_user_id=first.user_id,
+        sub_order_id=sub_order.id,
+        shop_name=sub_order.shop_name,
+        amount=sub_order.amount,
+        distance_km=haversine_km(vendor.latitude, vendor.longitude, first.latitude, first.longitude),
+    )
+
+    _dispatch_events[sub_order.id] = asyncio.Event()
+    asyncio.create_task(_run_dispatch(sub_order.id, vendor.latitude, vendor.longitude))
+
+    updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    _attach_delivery_address(updated)
+    await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
+    await _attach_dispatch_offer_info(db, updated)
+    return await _attach_courier_info(db, updated)
+
+
+async def _offer_next(db: AsyncSession, sub_order: SubOrder, vendor_lat: float, vendor_lng: float) -> bool:
+    """Dépile le prochain candidat VALIDE (encore en ligne) de la file et lui
+    envoie l'offre. Renvoie False si la file s'épuise sans trouver personne —
+    un candidat passé hors ligne entre le classement initial et son tour est
+    juste sauté, sans lui faire consommer un cycle d'attente complet."""
+    queue = list(sub_order.dispatch_queue)
+    while queue:
+        next_id = queue.pop(0)
+        courier = await courier_repository.get_by_id(db, next_id)
+        sub_order.dispatch_queue = queue
+        if courier is None or not courier.is_online or courier.latitude is None or courier.longitude is None:
+            continue
+
+        sub_order.dispatch_offered_courier_id = courier.id
+        await db.commit()
+        await notifications_service.notify_delivery_request(
+            db,
+            courier_user_id=courier.user_id,
+            sub_order_id=sub_order.id,
+            shop_name=sub_order.shop_name,
+            amount=sub_order.amount,
+            distance_km=haversine_km(vendor_lat, vendor_lng, courier.latitude, courier.longitude),
+        )
+        return True
+
+    sub_order.dispatch_offered_courier_id = None
+    sub_order.dispatch_queue = []
+    await db.commit()
+    return False
+
+
+async def _run_dispatch(sub_order_id: uuid.UUID, vendor_lat: float, vendor_lng: float) -> None:
+    """Tâche de fond démarrée par start_dispatch — attend soit un signal
+    (accept_delivery/decline_delivery/assign_courier réveillent l'Event),
+    soit l'expiration du délai, puis avance à l'offre suivante. Tourne hors
+    du cycle requête/réponse : chaque itération ouvre sa propre session DB
+    plutôt que de garder une connexion du pool bloquée pendant l'attente."""
+    event = _dispatch_events.get(sub_order_id)
+    if event is None:
+        return
+    try:
+        while True:
+            try:
+                await asyncio.wait_for(event.wait(), timeout=OFFER_TIMEOUT_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+            event.clear()
+
+            async with AsyncSessionLocal() as db:
+                sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+                if sub_order is None or sub_order.courier_id is not None:
+                    return  # accepté (ou assigné manuellement) entre-temps
+
+                found = await _offer_next(db, sub_order, vendor_lat, vendor_lng)
+                if not found:
+                    vendor = await vendor_repository.get_by_id(db, sub_order.vendor_id)
+                    if vendor is not None:
+                        await notifications_service.notify_delivery_no_courier_found(
+                            db, vendor_user_id=vendor.user_id, sub_order_id=sub_order.id
+                        )
+                    return
+    except Exception:  # noqa: BLE001 - tâche de fond : logguer plutôt que perdre l'erreur silencieusement
+        logger.exception("Erreur dans la tâche de dispatch pour la sous-commande %s", sub_order_id)
+    finally:
+        _dispatch_events.pop(sub_order_id, None)
+
+
+async def accept_delivery(db: AsyncSession, user: User, sub_order_id: uuid.UUID) -> SubOrder:
+    courier = await courier_repository.get_by_user_id(db, user.id)
+    if courier is None:
+        raise NotFoundError("Vous n'avez pas de profil livreur.")
+
+    sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+    if sub_order is None:
+        raise NotFoundError("Sous-commande introuvable.")
+    if sub_order.courier_id is not None:
+        raise ConflictError("Cette livraison a déjà été prise.")
+    if sub_order.dispatch_offered_courier_id != courier.id:
+        raise ForbiddenError("Cette offre ne vous est plus destinée.")
+
+    sub_order.courier_id = courier.id
+    sub_order.dispatch_offered_courier_id = None
+    sub_order.dispatch_queue = []
+    await db.commit()
+    _wake_dispatch(sub_order_id)
+
+    vendor = await vendor_repository.get_by_id(db, sub_order.vendor_id)
+    if vendor is not None:
+        await notifications_service.notify_delivery_request_accepted(
+            db, vendor_user_id=vendor.user_id, sub_order_id=sub_order.id, courier_name=courier.full_name or courier.phone
+        )
+
+    updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    _attach_delivery_address(updated)
+    await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
+    return await _attach_courier_info(db, updated)
+
+
+async def decline_delivery(db: AsyncSession, user: User, sub_order_id: uuid.UUID) -> None:
+    courier = await courier_repository.get_by_user_id(db, user.id)
+    if courier is None:
+        raise NotFoundError("Vous n'avez pas de profil livreur.")
+
+    sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+    if sub_order is None:
+        raise NotFoundError("Sous-commande introuvable.")
+    if sub_order.dispatch_offered_courier_id != courier.id:
+        raise ForbiddenError("Cette offre ne vous est plus destinée.")
+
+    # N'avance pas la file nous-mêmes : on ne fait que réveiller _run_dispatch
+    # (déjà responsable de "qui est le prochain"), pour garder un seul
+    # endroit qui décide de la progression, identique au cas d'expiration du
+    # délai.
+    _wake_dispatch(sub_order_id)

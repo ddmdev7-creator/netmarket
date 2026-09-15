@@ -183,7 +183,7 @@ function onLightboxScroll() {
 }
 
 .gallery__dot--active {
-  background: var(--color-accent);
+  background: var(--color-primary);
   width: 16px;
   border-radius: 3px;
 }

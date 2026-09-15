@@ -123,7 +123,7 @@ const tiles = computed(() => {
 
     <div v-if="dashboard?.low_stock_products?.length">
       <div class="d-flex align-center ga-2 mb-2">
-        <PhWarningCircle :size="16" color="var(--color-accent)" />
+        <PhWarningCircle :size="16" color="var(--color-primary)" />
         <span style="font-size: 13px; font-weight: 600">Stock faible</span>
       </div>
       <NuxtLink

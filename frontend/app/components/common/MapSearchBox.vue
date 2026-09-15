@@ -110,7 +110,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(18, 18, 20, 0.88);
+  /* var() plutôt qu'un rgba(...) fixe : ce composant flotte au-dessus de la
+     carte dans les deux thèmes, il doit donc suivre --color-neutral-900
+     (blanc en clair, quasi-noir en sombre) comme le reste de l'UI plutôt que
+     de rester figé en sombre. */
+  background: var(--color-neutral-900);
   backdrop-filter: blur(6px);
   border: 1px solid var(--color-divider-strong);
   border-radius: var(--radius-lg);
@@ -138,7 +142,7 @@ onBeforeUnmount(() => {
 }
 
 .map-search__spinner {
-  color: var(--color-accent);
+  color: var(--color-primary);
   flex-shrink: 0;
   animation: map-search-spin 0.8s linear infinite;
 }
@@ -154,7 +158,7 @@ onBeforeUnmount(() => {
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  background: rgba(24, 24, 27, 0.97);
+  background: var(--color-neutral-900);
   border: 1px solid var(--color-divider-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);

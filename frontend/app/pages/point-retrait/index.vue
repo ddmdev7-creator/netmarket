@@ -162,7 +162,7 @@ function formatDate(iso: string) {
   font-weight: 700;
   font-size: 13.5px;
   letter-spacing: 0.01em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
 }
 
 .section-title {
@@ -170,7 +170,7 @@ function formatDate(iso: string) {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
   opacity: 0.85;
 }
 </style>

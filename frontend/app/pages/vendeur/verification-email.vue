@@ -60,7 +60,7 @@ async function resend() {
     </div>
 
     <div class="px-4 pt-4 d-flex flex-column align-center text-center">
-      <PhEnvelopeSimple :size="40" weight="light" color="var(--color-accent)" class="mb-3" />
+      <PhEnvelopeSimple :size="40" weight="light" color="var(--color-primary)" class="mb-3" />
       <p class="text-muted mb-6" style="font-size: 13px; max-width: 300px">
         Un code à 5 chiffres a été envoyé à <strong>{{ auth.user?.email }}</strong
         >. Saisis-le ci-dessous pour accéder à ton espace vendeur.

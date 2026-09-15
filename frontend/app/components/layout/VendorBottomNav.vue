@@ -53,6 +53,6 @@ const navItems = [
 }
 
 .bottom-nav__item--active {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 </style>

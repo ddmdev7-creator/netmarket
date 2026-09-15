@@ -1,7 +1,72 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
 :root {
-  /* Tokens bruts, alignés sur le vocabulaire des maquettes (template_web_pwa.html) */
+  /*
+   * Tokens sémantiques partagés par les deux thèmes (voir bloc
+   * [data-theme='dark'] plus bas pour la variante sombre). Le numéro d'un
+   * token neutre/accent code son RÔLE (900/800 = tons "surface", proches du
+   * fond ; 300/200 = tons "texte fort") et non une luminosité absolue — les
+   * composants ne référencent jamais de hex en dur, donc les deux thèmes
+   * peuvent réassigner librement ces valeurs sans toucher au reste du code.
+   *
+   * "Daylight" (défaut) : charte primary/gris/blanc façon Ozon. Bascule vers
+   * "nocturne" via useAppTheme() (app/composables/useAppTheme.ts), qui pose
+   * l'attribut data-theme="dark" sur <html> — voir aussi app/theme/*.ts pour
+   * le pendant Vuetify (surfaces de composants Vuetify eux-mêmes).
+   */
+  --color-bg: #f3f4f6;
+  --color-neutral-900: #ffffff;
+  --color-neutral-800: #f7f8f9;
+  --color-neutral-700: #ececef;
+  --color-neutral-600: #d7d9de;
+  --color-neutral-500: #9a9ca5;
+  --color-neutral-400: #6e7079;
+  --color-neutral-300: #35363b;
+  --color-neutral-200: #14151a;
+
+  /* Bleu "marketplace" — couleur de marque principale : boutons, liens,
+     icônes actives, badges de statut. Réservé volontairement à un usage
+     ÉTROIT : le rendu produit (prix, étoiles de notation) reste en orange
+     ci-dessous, comme sur les fiches produit façon Ozon (bleu partout,
+     orange seulement pour ce qui doit accrocher l'œil sur le prix/la note). */
+  --color-primary: #0a66f5;
+  --color-primary-darken-1: #0850c4;
+  --color-primary-100: #d9e6ff;
+  /* Comme les tokens neutres : ce ton doit rester lisible en texte/icône
+     directement sur --color-bg, donc plus foncé que --color-primary pur
+     (qui, lui, sert de fond de bouton avec du texte blanc dessus). */
+  --color-primary-300: #0850c4;
+  --color-primary-700: #0850c4;
+  --color-primary-800: #0a2f73;
+
+  /* Orange — strictement réservé au prix et à la note (étoiles) sur les
+     fiches produit ; tout le reste de l'UI utilise --color-primary. */
+  --color-accent: #e0822e;
+
+  --color-divider: rgba(20, 21, 26, 0.08);
+  --color-divider-strong: rgba(20, 21, 26, 0.14);
+
+  --font-heading: 'Manrope', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  /* Ombres "papier" classiques : sur fond clair, une ombre portée douce se
+     lit très bien seule (contrairement au fond quasi noir du thème sombre,
+     qui a besoin d'un liseré clair en renfort — voir plus bas). */
+  --shadow-sm: 0 1px 2px rgba(20, 21, 26, 0.06), 0 1px 1px rgba(20, 21, 26, 0.04);
+  --shadow-md: 0 2px 6px rgba(20, 21, 26, 0.06), 0 10px 24px rgba(20, 21, 26, 0.08);
+  --shadow-lg: 0 8px 20px rgba(20, 21, 26, 0.08), 0 24px 48px rgba(20, 21, 26, 0.1);
+  --shadow-glow-primary: 0 6px 20px rgba(10, 102, 245, 0.32);
+  /* Pour les barres ancrées en bas d'écran (nav, checkout) : l'ombre monte
+     vers le contenu plutôt que de descendre, pour bien les détacher de ce
+     qui défile derrière elles. */
+  --shadow-dock: 0 -2px 14px rgba(20, 21, 26, 0.08);
+}
+
+:root[data-theme='dark'] {
   --color-bg: #121214;
   /* Aligné sur colors.surface / surface-bright du thème Vuetify (nocturne.ts)
      — nettement plus clair que --color-bg pour que les cartes se détachent
@@ -15,21 +80,12 @@
   --color-neutral-300: #b4b4bd;
   --color-neutral-200: #d8d8de;
 
-  --color-accent: #e0a458;
-  --color-accent-100: #fbebd3;
-  --color-accent-300: #f0c98a;
-  --color-accent-700: #8a6023;
-  --color-accent-800: #3d2e12;
+  /* Plus clair que la variante jour : doit rester lisible en texte/icône sur
+     un fond quasi noir. */
+  --color-primary-300: #7fb0ff;
 
   --color-divider: rgba(255, 255, 255, 0.08);
   --color-divider-strong: rgba(255, 255, 255, 0.16);
-
-  --font-heading: 'Manrope', 'Inter', system-ui, sans-serif;
-  --font-body: 'Inter', system-ui, sans-serif;
-
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
 
   /* Ombres calibrées pour fond quasi noir : un rgba(0,0,0,…) seul reste
      invisible ici (contrairement à un fond clair) — on combine une ombre
@@ -39,10 +95,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.045);
   --shadow-lg: 0 6px 20px rgba(0, 0, 0, 0.45), 0 24px 56px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --shadow-glow-accent: 0 6px 24px rgba(224, 164, 88, 0.22);
-  /* Pour les barres ancrées en bas d'écran (nav, checkout) : l'ombre monte
-     vers le contenu plutôt que de descendre, pour bien les détacher de ce
-     qui défile derrière elles. */
+  --shadow-glow-primary: 0 6px 24px rgba(10, 102, 245, 0.24);
   --shadow-dock: 0 -4px 16px rgba(0, 0, 0, 0.35);
 }
 
@@ -84,7 +137,7 @@ body {
 /* Léger halo derrière les boutons d'action principale — évite l'effet
    "plat" d'un simple aplat de couleur sur fond sombre. */
 .v-btn.bg-primary {
-  box-shadow: var(--shadow-glow-accent), var(--shadow-sm);
+  box-shadow: var(--shadow-glow-primary), var(--shadow-sm);
 }
 
 /* viewport-fit=cover (nuxt.config app.head) lets content draw under the
@@ -109,16 +162,13 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Contient l'app sur un gabarit mobile centré, même en aperçu desktop --
-   cible principale : réseaux mobiles lents en Guinée. Le dégradé radial en
-   haut d'écran remplace un noir uniforme par une ambiance discrète — une
-   seule déclaration globale, aucun poids réseau supplémentaire. */
+   cible principale : réseaux mobiles lents en Guinée. Fond plat (pas de
+   teinte de couleur) pour un rendu sobre et professionnel. */
 .app-shell {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
   background-color: var(--color-bg);
-  background-image: radial-gradient(ellipse 100% 260px at 50% 0%, rgba(224, 164, 88, 0.05), transparent);
-  background-repeat: no-repeat;
 }
 
 /* Barre d'action collante en bas d'écran (fiche produit, panier, checkout). */
@@ -160,16 +210,16 @@ h1, h2, h3, h4, h5, h6,
   cursor: not-allowed;
 }
 
-/* Labels de champ : ton chaud plutôt que gris neutre pur — se détache mieux
-   du texte de contenu et rappelle la couleur d'accent sans être aussi
-   saturé, tout en restant sobre sur les longs formulaires. */
+/* Labels de champ : ton primary plutôt que gris neutre pur — se détache
+   mieux du texte de contenu, tout en restant sobre sur les longs
+   formulaires. */
 .field-label {
   display: block;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
   opacity: 0.85;
   margin-bottom: 6px;
 }
@@ -180,34 +230,35 @@ h1, h2, h3, h4, h5, h6,
 .section-title {
   font-size: 12.5px;
   font-weight: 700;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
   margin-bottom: 10px;
 }
 
 /* Habillage des contrôles MapLibre (zoom, attribution, popup) — par défaut
-   blancs/clairs, ce qui jure sur nos cartes en thème sombre. Global plutôt
-   que dupliqué dans chaque composant carte (MapPicker, PickupPointsMap...)
-   car MapLibre injecte ces éléments hors du DOM scoped de chaque composant. */
-.maplibregl-ctrl-group {
+   blancs/clairs, ce qui convient déjà au thème clair par défaut ; on ne
+   redéfinit donc ce qui suit que sous le thème sombre. Global plutôt que
+   dupliqué dans chaque composant carte (MapPicker, PickupPointsMap...) car
+   MapLibre injecte ces éléments hors du DOM scoped de chaque composant. */
+:root[data-theme='dark'] .maplibregl-ctrl-group {
   background: rgba(24, 24, 27, 0.92) !important;
   border-radius: var(--radius-sm) !important;
   box-shadow: var(--shadow-sm) !important;
   overflow: hidden;
 }
 
-.maplibregl-ctrl-group button {
+:root[data-theme='dark'] .maplibregl-ctrl-group button {
   background: transparent !important;
 }
 
-.maplibregl-ctrl-group button:hover {
+:root[data-theme='dark'] .maplibregl-ctrl-group button:hover {
   background: var(--color-neutral-800) !important;
 }
 
-.maplibregl-ctrl-icon {
+:root[data-theme='dark'] .maplibregl-ctrl-icon {
   filter: invert(1) brightness(1.6);
 }
 
-.maplibregl-ctrl-attrib {
+:root[data-theme='dark'] .maplibregl-ctrl-attrib {
   background: rgba(18, 18, 20, 0.7) !important;
   color: var(--color-neutral-400) !important;
   border-radius: var(--radius-sm) 0 0 0 !important;

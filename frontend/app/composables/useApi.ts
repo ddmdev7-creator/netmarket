@@ -49,7 +49,23 @@ export function useApi() {
     }
   }
 
-  return { apiFetch }
+  /**
+   * For endpoints that return raw bytes (courier verification documents —
+   * see app/couriers/router.py's GET /{courier_id}/documents/{key}, never
+   * public unlike product images). A plain `<img src>` can't authenticate
+   * itself (no cookie, the token lives in memory — see auth.accessToken
+   * above), so the caller fetches the blob here and builds an object URL.
+   * No 401-retry-on-refresh here unlike apiFetch: this is only used for a
+   * handful of images during an active admin review session, not worth the
+   * complexity for that edge case.
+   */
+  async function apiFetchBlob(path: string): Promise<Blob> {
+    const headers = new Headers()
+    if (auth.accessToken) headers.set('Authorization', `Bearer ${auth.accessToken}`)
+    return await $fetch<Blob>(path, { baseURL: apiBase, headers, responseType: 'blob' })
+  }
+
+  return { apiFetch, apiFetchBlob }
 }
 
 /** Extracts the French error message the backend puts in {"detail": "..."}. */

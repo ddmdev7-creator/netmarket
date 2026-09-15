@@ -74,16 +74,16 @@ const currentRank = computed(() => rank.value[props.status])
 }
 .timeline__step.done .timeline__dot,
 .timeline__step.current .timeline__dot {
-  background: var(--color-accent);
+  background: var(--color-primary);
 }
 .timeline__step.done .timeline__line {
-  background: var(--color-accent-700);
+  background: var(--color-primary-700);
 }
 .timeline__label {
   font-size: 13px;
   padding-bottom: 16px;
 }
 .timeline__step.current .timeline__label {
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 </style>

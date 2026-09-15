@@ -20,6 +20,11 @@ from app.core.database import Base
 class NotificationType(StrEnum):
     ORDER_RECEIVED = "order_received"
     ORDER_STATUS_CHANGED = "order_status_changed"
+    COURIER_VERIFICATION_APPROVED = "courier_verification_approved"
+    COURIER_VERIFICATION_REJECTED = "courier_verification_rejected"
+    DELIVERY_REQUEST = "delivery_request"
+    DELIVERY_REQUEST_ACCEPTED = "delivery_request_accepted"
+    DELIVERY_NO_COURIER_FOUND = "delivery_no_courier_found"
 
 
 class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -41,5 +46,11 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # mais on ne veut pas d'un FK bloquant si ça change un jour).
     order_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"), nullable=True
+    )
+    # Pour DELIVERY_REQUEST (et ses suites) : cible une sous-commande
+    # précise, pas juste sa commande parente (un Order peut avoir plusieurs
+    # sous-commandes, une par vendeur) — voir app/orders/service.py::start_dispatch.
+    sub_order_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("sub_orders.id", ondelete="CASCADE"), nullable=True
     )
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

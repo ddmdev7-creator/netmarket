@@ -16,6 +16,7 @@ from app.orders.schemas import (
     CourierAssignRequest,
     CourierSubOrderRead,
     DeliveryConfirmRequest,
+    DispatchRequest,
     OrderRead,
     PickupPointManagerSubOrderRead,
     SubOrderStatusUpdate,
@@ -114,6 +115,46 @@ async def assign_courier(
     db: AsyncSession = Depends(get_db),
 ) -> VendorSubOrderRead:
     return await service.assign_courier(db, current_user, sub_order_id, payload)
+
+
+@router.post(
+    "/sub-orders/{sub_order_id}/dispatch",
+    response_model=VendorSubOrderRead,
+    dependencies=[Depends(require_role(UserRole.VENDOR))],
+)
+async def start_dispatch(
+    sub_order_id: uuid.UUID,
+    payload: DispatchRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VendorSubOrderRead:
+    return await service.start_dispatch(db, current_user, sub_order_id, payload)
+
+
+@router.post(
+    "/sub-orders/{sub_order_id}/accept-delivery",
+    response_model=VendorSubOrderRead,
+    dependencies=[Depends(require_role(UserRole.COURIER))],
+)
+async def accept_delivery(
+    sub_order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VendorSubOrderRead:
+    return await service.accept_delivery(db, current_user, sub_order_id)
+
+
+@router.post(
+    "/sub-orders/{sub_order_id}/decline-delivery",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(UserRole.COURIER))],
+)
+async def decline_delivery(
+    sub_order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await service.decline_delivery(db, current_user, sub_order_id)
 
 
 @router.get("/{order_id}", response_model=OrderRead)

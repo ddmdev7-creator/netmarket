@@ -57,13 +57,13 @@ async function logout() {
     </div>
 
     <NuxtLink to="/profil/modifier" class="list-item">
-      <PhPencilSimple :size="18" color="var(--color-accent)" />
+      <PhPencilSimple :size="18" color="var(--color-primary)" />
       <span>Modifier mon profil</span>
       <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
     </NuxtLink>
 
     <NuxtLink to="/profil/adresses" class="list-item">
-      <PhMapPin :size="18" color="var(--color-accent)" />
+      <PhMapPin :size="18" color="var(--color-primary)" />
       <span>Mes adresses</span>
       <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
     </NuxtLink>
@@ -135,8 +135,8 @@ async function logout() {
 
     <v-divider class="my-2" />
 
-    <button class="list-item" style="color: var(--color-accent-300); width: 100%; text-align: left" @click="logout">
-      <PhSignOut :size="18" color="var(--color-accent-300)" />
+    <button class="list-item" style="color: var(--color-primary-300); width: 100%; text-align: left" @click="logout">
+      <PhSignOut :size="18" color="var(--color-primary-300)" />
       <span>Se déconnecter</span>
     </button>
   </div>
@@ -147,8 +147,8 @@ async function logout() {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--color-accent-800);
-  color: var(--color-accent-100);
+  background: var(--color-primary-800);
+  color: var(--color-primary-100);
   display: flex;
   align-items: center;
   justify-content: center;

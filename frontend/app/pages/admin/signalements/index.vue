@@ -75,7 +75,7 @@ function formatDate(iso: string) {
               :key="n"
               :size="12"
               :weight="r.review_rating && n <= r.review_rating ? 'fill' : 'regular'"
-              color="var(--color-accent)"
+              color="var(--color-primary)"
             />
           </div>
           <span class="text-muted">{{ r.review_comment ?? 'Avis supprimé' }}</span>

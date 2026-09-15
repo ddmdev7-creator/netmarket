@@ -65,12 +65,14 @@ def _compress(content: bytes) -> bytes:
     return buffer.getvalue()
 
 
-def upload_image(content: bytes) -> str:
+def upload_image(content: bytes, *, prefix: str = "") -> str:
     """Compresses then uploads one image, returns its object key (not a URL —
-    see module docstring)."""
+    see module docstring). `prefix` namespaces the key within the same bucket
+    (e.g. "courier-docs/") for content that isn't served through the public
+    product-image route — see app/couriers/router.py."""
     _ensure_bucket()
     compressed = _compress(content)
-    key = f"{uuid.uuid4()}.jpg"
+    key = f"{prefix}{uuid.uuid4()}.jpg"
     _client.put_object(Bucket=settings.storage_bucket, Key=key, Body=compressed, ContentType="image/jpeg")
     return key
 

@@ -45,7 +45,7 @@ function pct(value: number) {
 }
 
 .bar-row:focus-visible {
-  outline: 1px solid var(--color-accent);
+  outline: 1px solid var(--color-primary);
   outline-offset: 2px;
 }
 

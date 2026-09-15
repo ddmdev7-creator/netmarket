@@ -10,7 +10,7 @@ const commissionPct = computed(() => (total.value > 0 ? (props.commission / tota
   <div class="composition">
     <div class="composition__legend">
       <span class="legend-item">
-        <span class="legend-item__dot" style="background: var(--color-accent)" />
+        <span class="legend-item__dot" style="background: var(--color-primary)" />
         Revenu net · {{ formatGnf(net) }}
       </span>
       <span class="legend-item">
@@ -20,7 +20,7 @@ const commissionPct = computed(() => (total.value > 0 ? (props.commission / tota
     </div>
 
     <div v-if="total > 0" class="composition__bar" role="img" :aria-label="`Revenu net ${formatGnf(net)}, commission ${formatGnf(commission)}`">
-      <div class="composition__segment" :style="{ width: netPct + '%', background: 'var(--color-accent)' }" />
+      <div class="composition__segment" :style="{ width: netPct + '%', background: 'var(--color-primary)' }" />
       <div class="composition__segment" :style="{ width: commissionPct + '%', background: 'var(--color-neutral-500)' }" />
     </div>
     <div v-else class="composition__bar composition__bar--empty" />

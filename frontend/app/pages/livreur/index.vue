@@ -1,17 +1,58 @@
 <script setup lang="ts">
 import { PhQrCode } from '@phosphor-icons/vue'
-import type { CourierSubOrderRead } from '~/types/api'
+import type { CourierDetailRead, CourierSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'courier', layout: 'livreur' })
 
 const { apiFetch } = useApi()
 const toast = useToastStore()
+const { locating, locate } = useGeolocation()
 
 const { data: deliveries, pending, refresh } = await useAsyncData(
   'courier-deliveries',
   () => apiFetch<CourierSubOrderRead[]>('/orders/courier-deliveries'),
   { default: () => [], getCachedData: () => undefined },
 )
+
+const { data: myCourier } = await useAsyncData(
+  'courier-me-availability',
+  () => apiFetch<CourierDetailRead>('/couriers/me'),
+  { getCachedData: () => undefined },
+)
+const isOnline = ref(false)
+const togglingAvailability = ref(false)
+watch(myCourier, (c) => { if (c) isOnline.value = c.is_online }, { immediate: true })
+
+async function toggleAvailability(value: boolean) {
+  togglingAvailability.value = true
+  try {
+    let position: { latitude: number; longitude: number } | null = null
+    if (value) {
+      try {
+        position = await locate()
+      } catch (e) {
+        // Erreur de géolocalisation (message déjà en français, voir
+        // useGeolocation) — distincte d'une erreur API, pas de fallback
+        // générique à appliquer ici.
+        toast.error(e instanceof Error ? e.message : 'Impossible de récupérer ta position.')
+        isOnline.value = false
+        return
+      }
+    }
+
+    const updated = await apiFetch<CourierDetailRead>('/couriers/me/availability', {
+      method: 'PATCH',
+      body: value ? { is_online: true, latitude: position!.latitude, longitude: position!.longitude } : { is_online: false },
+    })
+    isOnline.value = updated.is_online
+    if (value) toast.success('Tu es maintenant disponible pour recevoir des livraisons.')
+  } catch (e) {
+    isOnline.value = !value // repli visuel : l'appel a échoué, le switch ne doit pas rester sur la valeur non confirmée
+    toast.error(apiErrorMessage(e, 'Impossible de mettre à jour ta disponibilité.'))
+  } finally {
+    togglingAvailability.value = false
+  }
+}
 
 const updatingId = ref<string | null>(null)
 
@@ -55,7 +96,21 @@ function formatDate(iso: string) {
 
 <template>
   <div class="app-shell pa-4" style="padding-bottom: 76px">
-    <h1 class="text-h6 mb-3">Mes livraisons</h1>
+    <div class="d-flex justify-space-between align-center mb-3">
+      <h1 class="text-h6 mb-0">Mes livraisons</h1>
+      <div class="d-flex align-center ga-2">
+        <span class="text-muted" style="font-size: 12.5px">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
+        <v-switch
+          :model-value="isOnline"
+          color="primary"
+          density="compact"
+          hide-details
+          :loading="togglingAvailability || locating"
+          :disabled="togglingAvailability || locating"
+          @update:model-value="toggleAvailability"
+        />
+      </div>
+    </div>
 
     <CommonEmptyState v-if="!pending && deliveries.length === 0" message="Aucune livraison assignée pour le moment." />
 
@@ -121,6 +176,6 @@ function formatDate(iso: string) {
   font-weight: 700;
   font-size: 13.5px;
   letter-spacing: 0.01em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
 }
 </style>

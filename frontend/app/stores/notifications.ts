@@ -10,6 +10,14 @@ import type { NotificationList, NotificationRead } from '~/types/api'
 export const useNotificationStore = defineStore('notifications', () => {
   const items = ref<NotificationRead[]>([])
   const unreadCount = ref(0)
+  // Offre de livraison en cours (dispatch séquentiel par distance — voir
+  // app/orders/service.py::start_dispatch côté backend) : une modale dédiée
+  // (LayoutDeliveryRequestModal) l'affiche plutôt que le toast générique,
+  // pour l'urgence façon VTC. Une seule à la fois — un livreur peut en
+  // théorie être candidat sur deux sous-commandes en même temps, la plus
+  // récente écrase juste l'affichage, cohérent avec le reste du design
+  // volontairement simple de cette fonctionnalité.
+  const pendingDeliveryRequest = ref<NotificationRead | null>(null)
   let socket: WebSocket | null = null
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let reconnectDelay = 1000
@@ -28,7 +36,15 @@ export const useNotificationStore = defineStore('notifications', () => {
   function handleIncoming(notification: NotificationRead) {
     items.value = [notification, ...items.value].slice(0, 50)
     unreadCount.value += 1
-    useToastStore().info(notification.title)
+    if (notification.type === 'delivery_request') {
+      pendingDeliveryRequest.value = notification
+    } else {
+      useToastStore().info(notification.title)
+    }
+  }
+
+  function clearDeliveryRequest() {
+    pendingDeliveryRequest.value = null
   }
 
   async function markRead(id: string) {
@@ -101,7 +117,18 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
     items.value = []
     unreadCount.value = 0
+    pendingDeliveryRequest.value = null
   }
 
-  return { items, unreadCount, fetchInitial, markRead, markAllRead, connect, disconnect }
+  return {
+    items,
+    unreadCount,
+    pendingDeliveryRequest,
+    fetchInitial,
+    markRead,
+    markAllRead,
+    clearDeliveryRequest,
+    connect,
+    disconnect,
+  }
 })

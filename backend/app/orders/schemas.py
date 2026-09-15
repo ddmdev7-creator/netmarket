@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.couriers.models import VehicleType
 from app.orders.models import DeliveryType, OrderStatus, PaymentMethod
 from app.payments.models import PaymentStatus
 
@@ -38,6 +39,13 @@ class DeliveryConfirmRequest(BaseModel):
 class CourierAssignRequest(BaseModel):
     # None désassigne — le vendeur peut toujours livrer lui-même.
     courier_id: uuid.UUID | None = None
+
+
+class DispatchRequest(BaseModel):
+    # Filtre optionnel — voir service.start_dispatch, qui ne retient que les
+    # livreurs en ligne de ce type d'engin (moto/taxi/voiture) avant de trier
+    # par distance.
+    vehicle_type: VehicleType | None = None
 
 
 class PickupPointContactRead(BaseModel):
@@ -108,6 +116,11 @@ class VendorSubOrderRead(SubOrderBase):
     courier_id: uuid.UUID | None = None
     courier_name: str | None = None
     courier_phone: str | None = None
+    # Dispatch en cours (voir app/orders/models.py::SubOrder.dispatch_offered_courier_id) —
+    # None dès qu'un livreur a accepté (courier_id posé) ou que la recherche
+    # s'est arrêtée sans succès.
+    dispatch_offered_courier_id: uuid.UUID | None = None
+    dispatch_offered_courier_name: str | None = None
 
 
 class CourierSubOrderRead(BaseModel):

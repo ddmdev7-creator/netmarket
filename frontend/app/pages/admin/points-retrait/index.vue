@@ -203,7 +203,7 @@ async function removeManager(managerId: string) {
       <p class="text-muted mb-2" style="font-size: 11.5px">Ou touche la carte pour placer le point toi-même.</p>
       <CommonMapPicker v-model:latitude="form.latitude" v-model:longitude="form.longitude" class="mb-2" />
       <div v-if="form.latitude !== null" class="d-flex align-center ga-1 text-muted mb-3" style="font-size: 11.5px">
-        <PhCheckCircle :size="14" weight="fill" color="var(--color-accent)" />
+        <PhCheckCircle :size="14" weight="fill" color="var(--color-primary)" />
         <span>{{ form.latitude.toFixed(4) }}, {{ form.longitude!.toFixed(4) }}</span>
       </div>
 

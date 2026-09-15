@@ -32,7 +32,7 @@ const props = withDefaults(
 <template>
   <div>
     <div class="d-flex ga-2 mb-1" style="font-size: 12.5px">
-      <PhMapPin :size="15" class="mt-1 flex-shrink-0" color="var(--color-accent)" />
+      <PhMapPin :size="15" class="mt-1 flex-shrink-0" color="var(--color-primary)" />
       <span class="text-muted">{{ props.zone || props.address }}</span>
     </div>
     <div v-if="props.instructions" class="text-muted mb-1" style="font-size: 11.5px; padding-left: 23px">

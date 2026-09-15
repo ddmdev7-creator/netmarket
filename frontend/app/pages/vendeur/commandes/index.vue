@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { PhMotorcycle } from '@phosphor-icons/vue'
-import type { CourierRead, OrderStatus, VendorSubOrderRead } from '~/types/api'
+import { PhMagnifyingGlass, PhMotorcycle } from '@phosphor-icons/vue'
+import type { CourierRead, OrderStatus, VehicleType, VendorSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
@@ -55,6 +55,57 @@ async function assignCourier(subOrder: VendorSubOrderRead) {
     assigningId.value = null
   }
 }
+
+// Recherche par proximité (voir POST /orders/sub-orders/{id}/dispatch) —
+// remplace le choix manuel comme chemin principal ; celui-ci reste
+// disponible en repli (showManualAssign) au cas où la recherche automatique
+// ne trouve personne, la boutique n'a pas encore de position, etc.
+const vehicleFilterOptions = [
+  { title: "N'importe quel engin", value: null },
+  { title: 'Moto', value: 'moto' },
+  { title: 'Taxi', value: 'taxi' },
+  { title: 'Voiture', value: 'voiture' },
+]
+const dispatchVehicleFilter = ref<Record<string, VehicleType | null>>({})
+const dispatchingId = ref<string | null>(null)
+const showManualAssign = ref<Record<string, boolean>>({})
+
+function vehicleFilterFor(subOrder: VendorSubOrderRead) {
+  if (!(subOrder.id in dispatchVehicleFilter.value)) {
+    dispatchVehicleFilter.value[subOrder.id] = null
+  }
+  return dispatchVehicleFilter.value[subOrder.id]
+}
+
+async function startDispatch(subOrder: VendorSubOrderRead) {
+  dispatchingId.value = subOrder.id
+  try {
+    await apiFetch<VendorSubOrderRead>(`/orders/sub-orders/${subOrder.id}/dispatch`, {
+      method: 'POST',
+      body: { vehicle_type: dispatchVehicleFilter.value[subOrder.id] ?? undefined },
+    })
+    await refresh()
+    toast.success('Recherche lancée — le livreur le plus proche a été notifié.')
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'Impossible de lancer la recherche.'))
+  } finally {
+    dispatchingId.value = null
+  }
+}
+
+// Rafraîchit dès que le dispatch aboutit (livreur trouvé) ou échoue (aucun
+// livreur) — ces deux notifications arrivent en push pendant que la page est
+// ouverte (voir app/notifications/service.py::notify_delivery_request_accepted
+// et notify_delivery_no_courier_found côté backend).
+const notifications = useNotificationStore()
+watch(
+  () => notifications.items[0],
+  (latest) => {
+    if (latest && (latest.type === 'delivery_request_accepted' || latest.type === 'delivery_no_courier_found')) {
+      refresh()
+    }
+  },
+)
 
 const STATUS_FILTERS: { value: OrderStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'Toutes' },
@@ -249,34 +300,66 @@ function formatDate(iso: string) {
 
       <div v-if="!['delivered', 'cancelled'].includes(so.status)" class="courier-assign mb-3">
         <div class="d-flex align-center ga-1 mb-1">
-          <PhMotorcycle :size="15" color="var(--color-accent)" />
+          <PhMotorcycle :size="15" color="var(--color-primary)" />
           <span class="field-label mb-0">Livreur</span>
         </div>
-        <div class="d-flex ga-2">
-          <v-select
-            :model-value="courierSelectionFor(so)"
-            :items="courierOptions"
-            placeholder="Non assigné"
-            density="compact"
-            variant="outlined"
-            hide-details
-            clearable
-            class="flex-grow-1"
-            @update:model-value="(v) => (courierSelection[so.id] = v)"
-          />
-          <v-btn
-            size="small"
-            variant="tonal"
-            :loading="assigningId === so.id"
-            :disabled="courierSelectionFor(so) === (so.courier_id ?? null)"
-            @click="assignCourier(so)"
-          >
-            OK
-          </v-btn>
-        </div>
-        <div v-if="so.courier_name" class="text-muted mt-1" style="font-size: 11.5px">
+
+        <!-- Déjà assigné (recherche réussie ou choix manuel) — rien d'autre à faire. -->
+        <div v-if="so.courier_name" class="text-muted" style="font-size: 12.5px">
           Assigné à {{ so.courier_name }} · {{ so.courier_phone }}
         </div>
+
+        <!-- Recherche en cours : offre envoyée à un livreur, en attente de sa réponse. -->
+        <div v-else-if="so.dispatch_offered_courier_id" class="d-flex align-center ga-2" style="font-size: 12.5px">
+          <v-progress-circular indeterminate size="16" width="2" color="primary" />
+          <span class="text-muted">En attente de réponse de {{ so.dispatch_offered_courier_name }}…</span>
+        </div>
+
+        <!-- Rien en cours : recherche automatique par proximité, choix manuel en repli. -->
+        <template v-else>
+          <div class="d-flex ga-2 mb-1">
+            <v-select
+              :model-value="vehicleFilterFor(so)"
+              :items="vehicleFilterOptions"
+              density="compact"
+              variant="outlined"
+              hide-details
+              class="flex-grow-1"
+              @update:model-value="(v) => (dispatchVehicleFilter[so.id] = v)"
+            />
+            <v-btn size="small" color="primary" :loading="dispatchingId === so.id" @click="startDispatch(so)">
+              <PhMagnifyingGlass :size="14" class="mr-1" />
+              Chercher un livreur
+            </v-btn>
+          </div>
+
+          <button type="button" class="manual-assign-toggle" @click="showManualAssign[so.id] = !showManualAssign[so.id]">
+            {{ showManualAssign[so.id] ? 'Masquer le choix manuel' : 'Ou choisir manuellement' }}
+          </button>
+
+          <div v-if="showManualAssign[so.id]" class="d-flex ga-2 mt-2">
+            <v-select
+              :model-value="courierSelectionFor(so)"
+              :items="courierOptions"
+              placeholder="Non assigné"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              class="flex-grow-1"
+              @update:model-value="(v) => (courierSelection[so.id] = v)"
+            />
+            <v-btn
+              size="small"
+              variant="tonal"
+              :loading="assigningId === so.id"
+              :disabled="courierSelectionFor(so) === (so.courier_id ?? null)"
+              @click="assignCourier(so)"
+            >
+              OK
+            </v-btn>
+          </div>
+        </template>
       </div>
 
       <v-divider class="mb-2" />
@@ -314,14 +397,29 @@ function formatDate(iso: string) {
 </template>
 
 <style scoped>
+.manual-assign-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--color-primary-300);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+}
+
 .sub-order-card--highlight {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-primary);
   animation: highlight-fade 2.5s ease-out 1;
 }
 
 @keyframes highlight-fade {
   0% {
-    background: var(--color-accent-900, rgba(255, 255, 255, 0.06));
+    /* --color-accent-900 référencé ici auparavant n'a jamais existé comme
+       token — cette règle utilisait donc toujours son fallback blanc, déjà
+       peu visible et désormais invisible sur fond clair. */
+    background: rgba(10, 102, 245, 0.1);
   }
   100% {
     background: transparent;
@@ -356,9 +454,9 @@ function formatDate(iso: string) {
 }
 
 .status-filter--active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-800);
-  color: var(--color-accent-100);
+  border-color: var(--color-primary);
+  background: var(--color-primary-800);
+  color: var(--color-primary-100);
 }
 
 .status-filter__count {
@@ -377,13 +475,13 @@ function formatDate(iso: string) {
   font-weight: 700;
   font-size: 13.5px;
   letter-spacing: 0.01em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
 }
 
 .order-amount {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 15px;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
 }
 </style>

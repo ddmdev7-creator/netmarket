@@ -20,6 +20,10 @@ class VendorRegister(BaseModel):
 class VendorOwnerUpdate(BaseModel):
     shop_name: str | None = Field(default=None, min_length=2, max_length=150)
     zone: str | None = Field(default=None, max_length=150)
+    # Position de la boutique — voir app/orders/service.py::start_dispatch,
+    # qui en a besoin pour trier les livreurs candidats par distance.
+    latitude: float | None = None
+    longitude: float | None = None
     preparation_days: int | None = Field(
         default=None, ge=0, le=14, description="Délai de préparation habituel, en jours"
     )
@@ -38,6 +42,8 @@ class VendorRead(BaseModel):
     shop_name: str
     status: VendorStatus
     zone: str | None
+    latitude: float | None
+    longitude: float | None
     commission_rate: float
     preparation_days: int
 

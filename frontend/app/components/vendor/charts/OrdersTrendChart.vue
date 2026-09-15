@@ -163,14 +163,14 @@ const tooltipStyle = computed(() => {
 }
 
 .trend__area {
-  fill: var(--color-accent);
+  fill: var(--color-primary);
   opacity: 0.1;
   stroke: none;
 }
 
 .trend__line {
   fill: none;
-  stroke: var(--color-accent);
+  stroke: var(--color-primary);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   stroke-linejoin: round;
@@ -184,14 +184,18 @@ const tooltipStyle = computed(() => {
 }
 
 .trend__dot {
-  fill: var(--color-accent);
+  fill: var(--color-primary);
   stroke: var(--color-neutral-900);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 .trend__dot--active {
-  fill: var(--color-accent-100);
+  /* primary-100 est un ton très clair pensé pour du texte sur un fond foncé
+     (badges) — quasi invisible ici, posé directement sur la surface de la
+     carte (blanche en thème clair). primary-darken-1 reste visible dans les
+     deux thèmes. */
+  fill: var(--color-primary-darken-1);
 }
 
 .trend__axis-label {

@@ -32,6 +32,7 @@ const displayIdentity = computed(() => {
       <span class="top-bar__phone">{{ displayIdentity }}</span>
     </NuxtLink>
     <span class="top-bar__role">{{ roleLabel }}</span>
+    <LayoutThemeToggle />
     <NuxtLink to="/notifications" class="top-bar__bell" aria-label="Notifications">
       <PhBell :size="19" color="var(--color-neutral-300)" />
       <span v-if="notifications.unreadCount > 0" class="top-bar__badge">

@@ -90,7 +90,9 @@ async function addToCart() {
       <div v-else class="text-muted mb-3" style="font-size: 12px">Aucun avis pour l'instant</div>
 
       <div class="d-flex align-center ga-3 mb-4">
-        <span class="text-heading" style="font-size: 22px; font-weight: 600">{{ formatGnf(product.price) }}</span>
+        <span class="text-heading" style="font-size: 22px; font-weight: 600; color: var(--color-accent)">{{
+          formatGnf(product.price)
+        }}</span>
         <v-chip size="small" :color="product.stock > 0 ? 'success' : 'error'" variant="tonal">
           {{ product.stock > 0 ? 'En stock' : 'Épuisé' }}
         </v-chip>
@@ -117,7 +119,7 @@ async function addToCart() {
         class="d-flex ga-2 mt-4 align-center"
         style="font-size: 12.5px"
       >
-        <PhTruck :size="16" color="var(--color-accent)" />
+        <PhTruck :size="16" color="var(--color-primary)" />
         <span>
           Livraison estimée :
           <strong>{{ formatDeliveryEstimate(product.estimated_delivery_min, product.estimated_delivery_max) }}</strong>
@@ -149,7 +151,7 @@ async function addToCart() {
       <div v-if="justAdded" class="d-flex flex-column ga-2">
         <v-btn color="primary" block size="large" to="/panier">
           <PhShoppingCart :size="18" class="mr-1" />
-          Aller au panier — passer à la livraison
+          Aller au panier
         </v-btn>
         <v-btn variant="outlined" block @click="justAdded = false">Continuer mes achats</v-btn>
       </div>

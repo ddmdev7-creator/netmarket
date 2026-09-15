@@ -89,7 +89,10 @@ function formatDate(iso: string) {
 }
 
 .notification-row--unread {
-  background: var(--color-accent-900, rgba(255, 255, 255, 0.03));
+  /* Léger lavis teinté primary plutôt qu'un fallback blanc qui ne se voyait
+     déjà quasiment plus (--color-accent-900 référencé ici n'a jamais existé
+     comme token — cette règle utilisait donc toujours son fallback). */
+  background: rgba(10, 102, 245, 0.08);
 }
 
 .notification-row__title {
@@ -103,7 +106,7 @@ function formatDate(iso: string) {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: var(--color-accent);
+  background: var(--color-primary);
   margin-right: 6px;
 }
 </style>

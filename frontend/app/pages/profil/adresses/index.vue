@@ -129,7 +129,7 @@ async function deleteAddress() {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--color-accent-300);
+  color: var(--color-primary-300);
   opacity: 0.85;
 }
 </style>

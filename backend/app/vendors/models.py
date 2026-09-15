@@ -3,7 +3,7 @@
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Enum as SAEnum, Float, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +32,11 @@ class Vendor(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     # Zone textuelle (commune/quartier) plutôt qu'adresse formelle, cf. contraintes marché.
     zone: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Position de la boutique — pour trier les livreurs candidats par distance
+    # au moment du dispatch (app/orders/service.py::start_dispatch). Même
+    # convention nullable que Address/PickupPoint.
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     commission_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0, nullable=False)
     # Délai de préparation déclaré par le vendeur (en jours), utilisé pour
     # l'estimation de livraison affichée à l'acheteur — voir

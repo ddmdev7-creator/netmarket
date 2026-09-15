@@ -39,10 +39,17 @@ _STATUS_LABELS = {
 
 
 async def _persist_and_push(
-    db: AsyncSession, *, user_id: uuid.UUID, type_: NotificationType, title: str, body: str, order_id: uuid.UUID | None
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    type_: NotificationType,
+    title: str,
+    body: str,
+    order_id: uuid.UUID | None,
+    sub_order_id: uuid.UUID | None = None,
 ) -> Notification:
     notification = await repository.create(
-        db, user_id=user_id, type=type_, title=title, body=body, order_id=order_id
+        db, user_id=user_id, type=type_, title=title, body=body, order_id=order_id, sub_order_id=sub_order_id
     )
     await db.commit()
     await db.refresh(notification)
@@ -55,6 +62,7 @@ async def _persist_and_push(
                 "title": notification.title,
                 "body": notification.body,
                 "order_id": str(notification.order_id) if notification.order_id else None,
+                "sub_order_id": str(notification.sub_order_id) if notification.sub_order_id else None,
                 "read_at": None,
                 "created_at": notification.created_at.isoformat(),
             },
@@ -106,3 +114,75 @@ async def notify_sub_order_status_changed(db: AsyncSession, buyer: User, sub_ord
         )
     except (OSError, smtplib.SMTPException):
         logger.warning("Échec d'envoi de la notification de statut pour la sous-commande %s", sub_order.id)
+
+
+async def notify_courier_verification_approved(db: AsyncSession, *, courier_user_id: uuid.UUID) -> None:
+    await _persist_and_push(
+        db,
+        user_id=courier_user_id,
+        type_=NotificationType.COURIER_VERIFICATION_APPROVED,
+        title="Vérification approuvée",
+        body="Votre inscription en tant que livreur a été validée. Vous pouvez maintenant recevoir des livraisons.",
+        order_id=None,
+    )
+
+
+async def notify_courier_verification_rejected(db: AsyncSession, *, courier_user_id: uuid.UUID, admin_note: str) -> None:
+    await _persist_and_push(
+        db,
+        user_id=courier_user_id,
+        type_=NotificationType.COURIER_VERIFICATION_REJECTED,
+        title="Vérification refusée",
+        body=f"Votre inscription en tant que livreur a été refusée. Motif : {admin_note}",
+        order_id=None,
+    )
+
+
+async def notify_delivery_request(
+    db: AsyncSession,
+    *,
+    courier_user_id: uuid.UUID,
+    sub_order_id: uuid.UUID,
+    shop_name: str,
+    amount: int,
+    distance_km: float,
+) -> None:
+    formatted_amount = f"{amount:,}".replace(",", " ")
+    await _persist_and_push(
+        db,
+        user_id=courier_user_id,
+        type_=NotificationType.DELIVERY_REQUEST,
+        title="Nouvelle demande de livraison",
+        body=(
+            f"« {shop_name} » recherche un livreur — {formatted_amount} GNF, "
+            f"à environ {distance_km:.1f} km de vous."
+        ),
+        order_id=None,
+        sub_order_id=sub_order_id,
+    )
+
+
+async def notify_delivery_request_accepted(
+    db: AsyncSession, *, vendor_user_id: uuid.UUID, sub_order_id: uuid.UUID, courier_name: str
+) -> None:
+    await _persist_and_push(
+        db,
+        user_id=vendor_user_id,
+        type_=NotificationType.DELIVERY_REQUEST_ACCEPTED,
+        title="Livreur trouvé",
+        body=f"{courier_name} a accepté de livrer cette commande.",
+        order_id=None,
+        sub_order_id=sub_order_id,
+    )
+
+
+async def notify_delivery_no_courier_found(db: AsyncSession, *, vendor_user_id: uuid.UUID, sub_order_id: uuid.UUID) -> None:
+    await _persist_and_push(
+        db,
+        user_id=vendor_user_id,
+        type_=NotificationType.DELIVERY_NO_COURIER_FOUND,
+        title="Aucun livreur n'a répondu",
+        body="Aucun livreur disponible n'a accepté cette livraison — réessaie ou assigne un livreur manuellement.",
+        order_id=None,
+        sub_order_id=sub_order_id,
+    )

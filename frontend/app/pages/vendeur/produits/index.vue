@@ -187,9 +187,9 @@ const canPublish = computed(() => vendor.value?.status === 'approved')
 }
 
 .status-filter--active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-800);
-  color: var(--color-accent-100);
+  border-color: var(--color-primary);
+  background: var(--color-primary-800);
+  color: var(--color-primary-100);
 }
 
 .product-row {

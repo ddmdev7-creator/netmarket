@@ -1,3 +1,4 @@
+import { daylightTheme } from './app/theme/daylight'
 import { nocturneTheme } from './app/theme/nocturne'
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
@@ -18,12 +19,14 @@ export default defineNuxtConfig({
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no',
       meta: [
         { name: 'description', content: 'Marketplace e-commerce multi-vendeurs pour le marché guinéen' },
-        { name: 'theme-color', content: '#121214' },
+        // Valeur par défaut (thème clair "daylight") — mise à jour à l'exécution
+        // par useAppTheme() quand l'utilisateur bascule en mode sombre.
+        { name: 'theme-color', content: '#F3F4F6' },
         // iOS ignores the Web App Manifest's display mode — these are what actually
         // trigger standalone (no Safari chrome) when added to the home screen.
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
-        { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+        { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
         { name: 'apple-mobile-web-app-title', content: 'Marketplace' },
       ],
       link: [{ rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }],
@@ -49,8 +52,8 @@ export default defineNuxtConfig({
   vuetify: {
     vuetifyOptions: {
       theme: {
-        defaultTheme: 'nocturne',
-        themes: { nocturne: nocturneTheme },
+        defaultTheme: 'daylight',
+        themes: { daylight: daylightTheme, nocturne: nocturneTheme },
       },
       defaults: {
         VCard: { rounded: 'lg', elevation: 2 },
@@ -69,8 +72,8 @@ export default defineNuxtConfig({
       short_name: 'Marketplace',
       description: 'Marketplace e-commerce multi-vendeurs pour le marché guinéen',
       lang: 'fr',
-      theme_color: '#121214',
-      background_color: '#121214',
+      theme_color: '#F3F4F6',
+      background_color: '#F3F4F6',
       display: 'standalone',
       orientation: 'portrait',
       start_url: '/',

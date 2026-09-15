@@ -2,7 +2,7 @@
 /**
  * Interactive pin-drop map — tap or drag to set a lat/lng, or use the search
  * box to jump to a named place. Built on MapLibre GL (open-source Mapbox GL
- * fork) with CARTO's free raster basemap tiles (see mapStyle.ts — switched
+ * fork) with Esri's free raster basemap tiles (see mapStyle.ts — switched
  * from OpenFreeMap vector tiles after vector rendering silently produced a
  * blank map with maplibre-gl@6.4.0, with no errors firing; raster tiles use
  * a much simpler textured-quad pipeline and render reliably).
@@ -16,7 +16,9 @@ import type * as MapLibreGL from 'maplibre-gl'
 // Import CSS statiquement (sans effet sur `window`, donc sûr en SSR) — seul
 // le JS de la lib doit être chargé paresseusement, voir onMounted ci-dessous.
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, MAP_RASTER_STYLE } from '~/utils/mapStyle'
+import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, getMapRasterStyle } from '~/utils/mapStyle'
+
+const { theme } = useAppTheme()
 
 const props = withDefaults(
   defineProps<{
@@ -63,7 +65,7 @@ function placeMarker(lngLat: [number, number]) {
     marker.setLngLat(lngLat)
     return
   }
-  marker = new maplibregl.Marker({ draggable: true, color: 'var(--color-accent)' }).setLngLat(lngLat).addTo(map)
+  marker = new maplibregl.Marker({ draggable: true, color: 'var(--color-primary)' }).setLngLat(lngLat).addTo(map)
   marker.on('dragend', () => {
     const { lat, lng } = marker!.getLngLat()
     setPosition(lat, lng)
@@ -80,7 +82,7 @@ onMounted(async () => {
   try {
     map = new maplibregl.Map({
       container: mapContainer.value,
-      style: MAP_RASTER_STYLE,
+      style: getMapRasterStyle(theme.value),
       center,
       zoom: hasPosition ? props.zoom : MAP_DEFAULT_ZOOM,
       attributionControl: { compact: true },
@@ -147,6 +149,14 @@ watch(
     map.flyTo({ center: lngLat, zoom: Math.max(map.getZoom(), props.zoom) })
   },
 )
+
+// Bascule le fond de carte quand l'utilisateur change de thème — les
+// marqueurs (Marker MapLibre) sont de simples overlays DOM en dehors du
+// style, ils survivent donc à setStyle() sans qu'on ait besoin de les
+// recréer.
+watch(theme, (value) => {
+  map?.setStyle(getMapRasterStyle(value))
+})
 
 onBeforeUnmount(() => {
   map?.remove()

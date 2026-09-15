@@ -9,7 +9,7 @@ import uuid
 from datetime import date
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, Date, Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import ARRAY, CheckConstraint, Date, Enum as SAEnum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -131,6 +131,17 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # de cette fonctionnalité n'ont simplement rien à afficher.
     estimated_delivery_min: Mapped[date | None] = mapped_column(Date, nullable=True)
     estimated_delivery_max: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    # Dispatch en cours (voir app/orders/service.py::start_dispatch) : le
+    # livreur qui a l'offre active en ce moment, et la file des suivants par
+    # distance croissante à essayer s'il refuse/n'a pas répondu à temps.
+    # Les deux sont vidés dès qu'un livreur accepte (courier_id posé) ou que
+    # la file s'épuise sans succès — ils ne reflètent donc qu'un dispatch
+    # EN COURS, jamais un historique.
+    dispatch_offered_courier_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("couriers.id"), nullable=True
+    )
+    dispatch_queue: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)), default=list, nullable=False)
 
     order: Mapped["Order"] = relationship(back_populates="sub_orders")
     items: Mapped[list["OrderItem"]] = relationship(back_populates="sub_order", cascade="all, delete-orphan")

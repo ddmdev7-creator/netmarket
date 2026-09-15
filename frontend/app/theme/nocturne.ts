@@ -1,8 +1,9 @@
 /**
- * "Nocturne" dark theme — approximates the design system referenced by the
- * validated buyer-journey mockups (template_web_pwa.html), whose actual color
- * bundle wasn't available locally. Warm amber accent instead of a generic
- * SaaS blue; easy to retune by editing this file only.
+ * "Nocturne" dark theme — optional dark mode, toggled at runtime (see
+ * app/composables/useAppTheme.ts). "Daylight" (app/theme/daylight.ts) is now
+ * the default. Blue brand primary shared with daylight; orange
+ * (--color-accent in main.css) stays outside the Vuetify theme, reserved for
+ * product price/star ratings only.
  */
 import type { ThemeDefinition } from 'vuetify'
 
@@ -18,8 +19,8 @@ export const nocturneTheme: ThemeDefinition = {
     'surface-bright': '#2C2C33',
     'surface-variant': '#2C2C33',
     'on-surface-variant': '#B4B4BD',
-    primary: '#E0A458',
-    'primary-darken-1': '#C98A3D',
+    primary: '#0A66F5',
+    'primary-darken-1': '#0850C4',
     secondary: '#8F8F99',
     error: '#E5484D',
     info: '#4C9FE0',

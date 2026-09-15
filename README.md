@@ -200,13 +200,20 @@ admin (qui n'exigeait auparavant que la géolocalisation navigateur — l'admin
 devait donc être physiquement sur place pour créer un point).
 
 Basée sur **MapLibre GL JS** (fork open-source de Mapbox GL) avec des tuiles
-vectorielles **OpenFreeMap** (`https://tiles.openfreemap.org`, style
-`liberty`) — gratuit, sans clé API, pensé pour un usage en production
-(contrairement au serveur de tuiles public d'OSM, dont la politique
-d'usage interdit ce type d'usage en production). Toujours chargée
-dynamiquement (`import()` dans `onMounted`, jamais en import statique) :
-MapLibre touche `window`/WebGL au chargement, ce qui casserait le rendu
-serveur (SSR) de toute page utilisant ce composant sinon.
+raster **Esri "Light/Dark Gray Canvas"** (`services.arcgisonline.com`,
+`frontend/app/utils/mapStyle.ts`) — gratuit, sans clé API, pensé pour un
+usage en production (contrairement au serveur de tuiles public d'OSM, dont
+la politique d'usage interdit ce type d'usage en production). Deux variantes
+(claire/sombre) choisies selon le thème courant (`useAppTheme()`) et
+réappliquées à la volée au changement de thème, pour que le fond de carte
+reste assorti au reste de l'UI. Auparavant sur des tuiles vectorielles
+OpenFreeMap, abandonnées après un rendu silencieusement vide avec
+maplibre-gl@6.4.0, puis sur des tuiles raster CARTO, abandonnées à leur tour
+car CARTO impose désormais un compte + clé API pour un usage hors de CARTO
+Builder. Toujours chargée dynamiquement (`import()` dans `onMounted`, jamais
+en import statique) : MapLibre touche `window`/WebGL au chargement, ce qui
+casserait le rendu serveur (SSR) de toute page utilisant ce composant
+sinon.
 
 ## Adresses
 

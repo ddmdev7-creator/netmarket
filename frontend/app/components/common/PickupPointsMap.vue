@@ -9,11 +9,11 @@
  * sélectionnables sont ceux de la liste, gérée par l'admin).
  *
  * Mêmes contraintes SSR/WebGL que MapPicker.vue — voir ce fichier pour le
- * détail des gotchas (import paresseux, style raster CARTO).
+ * détail des gotchas (import paresseux, style raster Esri par thème).
  */
 import type * as MapLibreGL from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, MAP_RASTER_STYLE } from '~/utils/mapStyle'
+import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, getMapRasterStyle } from '~/utils/mapStyle'
 import type { PickupPointRead } from '~/types/api'
 
 const props = defineProps<{
@@ -22,6 +22,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+
+const { theme } = useAppTheme()
 
 const mapContainer = ref<HTMLDivElement | null>(null)
 const mapFailed = ref(false)
@@ -90,7 +92,7 @@ onMounted(async () => {
   try {
     map = new maplibregl.Map({
       container: mapContainer.value,
-      style: MAP_RASTER_STYLE,
+      style: getMapRasterStyle(theme.value),
       center: MAP_DEFAULT_CENTER,
       zoom: MAP_DEFAULT_ZOOM,
       attributionControl: { compact: true },
@@ -114,6 +116,13 @@ onMounted(async () => {
 // édition) doit ressortir visuellement sur la carte sans que l'acheteur
 // n'ait besoin de retaper dessus.
 watch(() => props.modelValue, refreshSelectedStyles)
+
+// Bascule le fond de carte au changement de thème — voir MapPicker.vue pour
+// le même mécanisme et pourquoi les marqueurs n'ont pas besoin d'être
+// recréés après setStyle().
+watch(theme, (value) => {
+  map?.setStyle(getMapRasterStyle(value))
+})
 
 onBeforeUnmount(() => {
   map?.remove()
@@ -237,8 +246,12 @@ onBeforeUnmount(() => {
 }
 
 .pp-sheet__choose {
-  background: var(--color-accent);
-  color: var(--color-accent-800);
+  background: var(--color-primary);
+  /* Blanc plutôt que primary-800 : --color-primary est un bleu moyennement
+     saturé (pas aussi clair que l'ancien orange), un texte foncé dessus
+     manquait de contraste — blanc est le pairing standard sur un bouton
+     bleu plein. */
+  color: #ffffff;
 }
 
 .pp-sheet__choose:hover {
@@ -265,8 +278,8 @@ onBeforeUnmount(() => {
   width: 26px;
   height: 26px;
   border-radius: 50% 50% 50% 0;
-  background: var(--color-accent);
-  border: 2px solid var(--color-accent-800);
+  background: var(--color-primary);
+  border: 2px solid var(--color-primary-800);
   transform: rotate(-45deg);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
@@ -278,7 +291,7 @@ onBeforeUnmount(() => {
 }
 
 .pp-marker--selected {
-  background: var(--color-accent-300);
-  box-shadow: 0 0 0 4px rgba(224, 164, 88, 0.28), var(--shadow-md);
+  background: var(--color-primary-300);
+  box-shadow: 0 0 0 4px rgba(10, 102, 245, 0.28), var(--shadow-md);
 }
 </style>

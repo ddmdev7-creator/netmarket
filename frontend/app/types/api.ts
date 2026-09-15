@@ -6,6 +6,8 @@
 export type UserRole = 'buyer' | 'vendor' | 'courier' | 'pickup_point_manager' | 'admin'
 export type CourierStatus = 'pending' | 'approved' | 'rejected' | 'suspended'
 export type VehicleType = 'moto' | 'taxi' | 'voiture'
+export type IdDocumentType = 'cni_biometrique' | 'passeport'
+export type CourierDocumentSlot = 'id_front' | 'id_back' | 'face' | 'vehicle'
 export type VendorStatus = 'pending' | 'approved' | 'rejected' | 'suspended'
 export type ProductStatus = 'active' | 'inactive'
 export type OrderStatus =
@@ -50,6 +52,8 @@ export interface VendorRead {
   shop_name: string
   status: VendorStatus
   zone: string | null
+  latitude: number | null
+  longitude: number | null
   commission_rate: number
   preparation_days: number
 }
@@ -129,13 +133,41 @@ export interface CourierRead {
   vehicle_type: VehicleType
   zone: string | null
   status: CourierStatus
+  is_online: boolean
   phone: string
   full_name: string | null
+}
+
+/** Vue complète (/couriers/me, /admin/couriers) — jamais l'annuaire public, voir CourierRead. */
+export interface CourierDetailRead extends CourierRead {
+  id_document_type: IdDocumentType | null
+  id_document_front_key: string | null
+  id_document_back_key: string | null
+  face_photo_key: string | null
+  vehicle_name: string | null
+  vehicle_plate_number: string | null
+  vehicle_photo_keys: string[]
+  admin_note: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
+export interface CourierAvailabilityUpdate {
+  is_online: boolean
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export interface CourierRegister {
   vehicle_type: VehicleType
   zone?: string | null
+  id_document_type: IdDocumentType
+  id_document_front_key: string
+  id_document_back_key?: string | null
+  face_photo_key: string
+  vehicle_name: string
+  vehicle_plate_number: string
+  vehicle_photo_keys: string[]
 }
 
 export interface CourierAdminCreate {
@@ -149,10 +181,15 @@ export interface CourierAdminCreate {
 
 export interface CourierAdminUpdate {
   status?: CourierStatus
+  admin_note?: string | null
 }
 
 export interface CourierAssignRequest {
   courier_id: string | null
+}
+
+export interface DispatchRequest {
+  vehicle_type?: VehicleType | null
 }
 
 /** One staff member of a pickup point, looked up live at read time (never frozen on the order — see backend PickupPointContactRead docstring). */
@@ -403,6 +440,8 @@ export interface VendorSubOrderRead extends SubOrderBase {
   courier_id: string | null
   courier_name: string | null
   courier_phone: string | null
+  dispatch_offered_courier_id: string | null
+  dispatch_offered_courier_name: string | null
 }
 
 export interface OrderRead {
@@ -452,7 +491,14 @@ export interface ApiError {
   errors?: unknown[]
 }
 
-export type NotificationType = 'order_received' | 'order_status_changed'
+export type NotificationType =
+  | 'order_received'
+  | 'order_status_changed'
+  | 'courier_verification_approved'
+  | 'courier_verification_rejected'
+  | 'delivery_request'
+  | 'delivery_request_accepted'
+  | 'delivery_no_courier_found'
 
 export interface NotificationRead {
   id: string
@@ -460,6 +506,7 @@ export interface NotificationRead {
   title: string
   body: string
   order_id: string | null
+  sub_order_id: string | null
   read_at: string | null
   created_at: string
 }

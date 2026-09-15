@@ -73,7 +73,7 @@ function goCheckout() {
     </div>
 
     <div v-if="hasItems" class="checkout-bar">
-      <v-btn color="primary" block size="large" @click="goCheckout">Passer à la livraison</v-btn>
+      <v-btn color="primary" block size="large" @click="goCheckout">Passer à la commande</v-btn>
     </div>
   </div>
 </template>

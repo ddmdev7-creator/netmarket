@@ -137,7 +137,7 @@ onBeforeUnmount(stopCamera)
   position: absolute;
   width: 68%;
   aspect-ratio: 1;
-  border: 3px solid var(--color-accent);
+  border: 3px solid var(--color-primary);
   border-radius: var(--radius-md);
   box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.45);
 }

@@ -36,7 +36,7 @@ function dismiss() {
 
 <template>
   <div v-if="show" class="ios-install-banner">
-    <PhShareFat :size="22" color="var(--color-accent)" />
+    <PhShareFat :size="22" color="var(--color-primary)" />
     <p>
       Installez l'app : appuyez sur <strong>Partager</strong> puis
       « <strong>Sur l'écran d'accueil</strong> »
