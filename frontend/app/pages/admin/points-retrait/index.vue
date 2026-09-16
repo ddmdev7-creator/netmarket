@@ -180,7 +180,7 @@ async function removeManager(managerId: string) {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="admin-shell">
     <div class="d-flex justify-space-between align-center mb-4">
       <h1 class="text-h6">Points de retrait</h1>
       <v-btn color="primary" size="small" @click="startCreate">

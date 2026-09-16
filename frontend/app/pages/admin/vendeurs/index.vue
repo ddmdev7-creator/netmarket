@@ -57,7 +57,7 @@ async function update(vendor: VendorRead, payload: VendorAdminUpdate) {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="admin-shell">
     <h1 class="text-h6 mb-4">Vendeurs</h1>
 
     <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-4 flex-wrap">

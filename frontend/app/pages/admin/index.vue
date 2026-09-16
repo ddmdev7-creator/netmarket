@@ -39,7 +39,7 @@ const statusLabels: Record<OrderStatus, string> = {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="admin-shell">
     <h1 class="text-h6 mb-4">Statistiques plateforme</h1>
 
     <div class="stat-grid mb-5">
@@ -85,6 +85,19 @@ const statusLabels: Record<OrderStatus, string> = {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+@media (min-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .stat-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
 }
 
 .stat-tile {

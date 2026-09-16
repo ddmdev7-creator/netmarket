@@ -171,6 +171,25 @@ h1, h2, h3, h4, h5, h6,
   background-color: var(--color-bg);
 }
 
+/* Contre-partie de .app-shell pour le back-office admin : celui-ci est
+   consulté depuis un ordinateur la plupart du temps (gestion de la
+   plateforme), donc pas de gabarit mobile centré ici — le contenu occupe
+   toute la largeur disponible à côté de la barre latérale (voir
+   layouts/admin.vue), avec un plafond raisonnable pour rester lisible sur
+   un très grand écran. */
+.admin-shell {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+@media (min-width: 960px) {
+  .admin-shell {
+    padding: 28px 32px;
+  }
+}
+
 /* Barre d'action collante en bas d'écran (fiche produit, panier, checkout). */
 .checkout-bar {
   position: fixed;

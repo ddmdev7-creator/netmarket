@@ -27,6 +27,7 @@ const displayIdentity = computed(() => {
 
 <template>
   <div v-if="auth.user" class="top-bar">
+    <slot name="leading" />
     <NuxtLink to="/profil" class="top-bar__identity">
       <PhUserCircle :size="18" color="var(--color-neutral-400)" />
       <span class="top-bar__phone">{{ displayIdentity }}</span>
