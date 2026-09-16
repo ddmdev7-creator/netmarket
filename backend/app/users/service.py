@@ -13,7 +13,7 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password, verify_password
 from app.users import repository
 from app.users.models import User, UserRole
-from app.users.schemas import UserUpdate
+from app.users.schemas import AdminPasswordReset, UserUpdate
 
 CODE_LENGTH = 5
 CODE_TTL_MINUTES = 15
@@ -119,4 +119,13 @@ async def admin_delete_user(db: AsyncSession, admin: User, target_user_id: uuid.
         raise ForbiddenError("Impossible de supprimer un compte administrateur via cette route.")
 
     await repository.purge_user(db, target)
+    await db.commit()
+
+
+async def admin_reset_password(db: AsyncSession, target_user_id: uuid.UUID, data: AdminPasswordReset) -> None:
+    target = await repository.get_by_id(db, target_user_id)
+    if target is None:
+        raise NotFoundError("Utilisateur introuvable.")
+
+    target.password_hash = hash_password(data.new_password)
     await db.commit()

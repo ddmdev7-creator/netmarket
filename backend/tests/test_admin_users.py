@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.addresses.models import Address
 from app.cart.models import CartItem
 from app.catalog.models import Product
+from app.core.security import verify_password
 from app.couriers.models import Courier
 from app.orders.models import Order, OrderItem, SubOrder
 from app.payments.models import Payment
@@ -202,3 +203,47 @@ async def test_deleting_a_pickup_point_manager_keeps_the_pickup_point(
     assert (
         await db_session.execute(select(PickupPointManager).where(PickupPointManager.id == manager.id))
     ).scalar_one_or_none() is None
+
+
+async def test_admin_can_reset_a_users_password(
+    client: AsyncClient, admin_user: User, buyer_user: User, db_session: AsyncSession
+) -> None:
+    response = await client.patch(
+        f"/admin/users/{buyer_user.id}/password",
+        json={"new_password": "NouveauMotDePasse1"},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(buyer_user)
+    assert verify_password("NouveauMotDePasse1", buyer_user.password_hash)
+
+
+async def test_reset_password_rejects_short_password(
+    client: AsyncClient, admin_user: User, buyer_user: User
+) -> None:
+    response = await client.patch(
+        f"/admin/users/{buyer_user.id}/password", json={"new_password": "short"}, headers=auth_headers(admin_user)
+    )
+
+    assert response.status_code == 422
+
+
+async def test_non_admin_cannot_reset_a_password(client: AsyncClient, buyer_user: User) -> None:
+    response = await client.patch(
+        f"/admin/users/{buyer_user.id}/password",
+        json={"new_password": "NouveauMotDePasse1"},
+        headers=auth_headers(buyer_user),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_reset_password_for_unknown_user_is_404(client: AsyncClient, admin_user: User) -> None:
+    response = await client.patch(
+        f"/admin/users/{uuid.uuid4()}/password",
+        json={"new_password": "NouveauMotDePasse1"},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 404

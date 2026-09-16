@@ -9,7 +9,7 @@ from app.common.schemas import Message
 from app.core.deps import get_current_user, get_db, require_role
 from app.users import service
 from app.users.models import User, UserRole
-from app.users.schemas import UserRead, UserUpdate, VerifyEmailRequest
+from app.users.schemas import AdminPasswordReset, UserRead, UserUpdate, VerifyEmailRequest
 
 router = APIRouter(prefix="/users", tags=["users"])
 admin_router = APIRouter(prefix="/admin/users", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))])
@@ -59,3 +59,13 @@ async def admin_delete_user(
 ) -> Message:
     await service.admin_delete_user(db, current_user, user_id)
     return Message(detail="Compte supprimé.")
+
+
+@admin_router.patch("/{user_id}/password", response_model=Message)
+async def admin_reset_password(
+    user_id: uuid.UUID,
+    payload: AdminPasswordReset,
+    db: AsyncSession = Depends(get_db),
+) -> Message:
+    await service.admin_reset_password(db, user_id, payload)
+    return Message(detail="Mot de passe réinitialisé.")

@@ -28,3 +28,7 @@ class UserUpdate(BaseModel):
 
 class VerifyEmailRequest(BaseModel):
     code: str = Field(pattern=r"^\d{4,5}$")
+
+
+class AdminPasswordReset(BaseModel):
+    new_password: str = Field(min_length=8)

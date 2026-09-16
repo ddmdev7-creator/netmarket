@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhTrash, PhUsers } from '@phosphor-icons/vue'
+import { PhKey, PhTrash, PhUsers } from '@phosphor-icons/vue'
 import type { UserRead, UserRole } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -59,6 +59,37 @@ async function deleteUser() {
     confirmDeleteId.value = null
   }
 }
+
+const resetPasswordId = ref<string | null>(null)
+const resetTarget = computed(() => users.value.find((u) => u.id === resetPasswordId.value) ?? null)
+const newPassword = ref('')
+const resetting = ref(false)
+
+function openResetPassword(userId: string) {
+  newPassword.value = ''
+  resetPasswordId.value = userId
+}
+
+async function resetPassword() {
+  if (!resetPasswordId.value) return
+  if (newPassword.value.length < 8) {
+    toast.error('Le mot de passe doit contenir au moins 8 caractères.')
+    return
+  }
+  resetting.value = true
+  try {
+    await apiFetch(`/admin/users/${resetPasswordId.value}/password`, {
+      method: 'PATCH',
+      body: { new_password: newPassword.value },
+    })
+    toast.success('Mot de passe réinitialisé.')
+    resetPasswordId.value = null
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'Impossible de réinitialiser ce mot de passe.'))
+  } finally {
+    resetting.value = false
+  }
+}
 </script>
 
 <template>
@@ -87,6 +118,9 @@ async function deleteUser() {
           <v-chip :color="roleMeta[user.role].color" size="small" variant="tonal">
             {{ roleMeta[user.role].label }}
           </v-chip>
+          <v-btn variant="text" size="small" icon @click="openResetPassword(user.id)">
+            <PhKey :size="16" />
+          </v-btn>
           <v-btn
             v-if="user.role !== 'admin' && user.id !== auth.user?.id"
             variant="text"
@@ -113,6 +147,29 @@ async function deleteUser() {
         <div class="d-flex ga-2">
           <v-btn variant="outlined" class="flex-grow-1" @click="confirmDeleteId = null">Annuler</v-btn>
           <v-btn color="error" class="flex-grow-1" :loading="deleting" @click="deleteUser">Supprimer</v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog :model-value="!!resetPasswordId" max-width="380" @update:model-value="(v) => !v && (resetPasswordId = null)">
+      <v-card class="pa-5">
+        <div class="text-subtitle-1 mb-2">Réinitialiser le mot de passe</div>
+        <p class="text-muted mb-3" style="font-size: 13px">
+          Nouveau mot de passe pour <strong>{{ resetTarget ? displayName(resetTarget) : '' }}</strong>
+          ({{ resetTarget?.phone }}) — à transmettre à la personne concernée.
+        </p>
+        <v-text-field
+          v-model="newPassword"
+          type="text"
+          placeholder="8 caractères minimum"
+          density="compact"
+          variant="outlined"
+          class="mb-3"
+          autofocus
+        />
+        <div class="d-flex ga-2">
+          <v-btn variant="outlined" class="flex-grow-1" @click="resetPasswordId = null">Annuler</v-btn>
+          <v-btn color="primary" class="flex-grow-1" :loading="resetting" @click="resetPassword">Réinitialiser</v-btn>
         </div>
       </v-card>
     </v-dialog>
