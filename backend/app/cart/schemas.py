@@ -19,6 +19,7 @@ class CartItemRead(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID
     product_name: str
+    product_image: str | None = None
     unit_price: int
     quantity: int
     subtotal: int

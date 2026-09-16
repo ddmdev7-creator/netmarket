@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { PhChartBar, PhFlag, PhMapPin, PhMotorcycle, PhPackage, PhSparkle, PhStorefront, PhTag } from '@phosphor-icons/vue'
+import { PhChartBar, PhFlag, PhMapPin, PhMotorcycle, PhPackage, PhSparkle, PhStorefront, PhTag, PhUsers } from '@phosphor-icons/vue'
 
 const navItems = [
   { to: '/admin', label: 'Statistiques', icon: PhChartBar },
+  { to: '/admin/utilisateurs', label: 'Utilisateurs', icon: PhUsers },
   { to: '/admin/vendeurs', label: 'Vendeurs', icon: PhStorefront },
   { to: '/admin/abonnements', label: 'Abonnements', icon: PhSparkle },
   { to: '/admin/livreurs', label: 'Livreurs', icon: PhMotorcycle },

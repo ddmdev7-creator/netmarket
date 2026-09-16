@@ -9,10 +9,10 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.email import send_email
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password, verify_password
 from app.users import repository
-from app.users.models import User
+from app.users.models import User, UserRole
 from app.users.schemas import UserUpdate
 
 CODE_LENGTH = 5
@@ -98,3 +98,25 @@ async def verify_email_code(db: AsyncSession, user: User, code: str) -> User:
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def admin_list_users(db: AsyncSession) -> list[User]:
+    return await repository.list_all(db)
+
+
+async def admin_delete_user(db: AsyncSession, admin: User, target_user_id: uuid.UUID) -> None:
+    if target_user_id == admin.id:
+        raise ForbiddenError("Vous ne pouvez pas supprimer votre propre compte.")
+
+    target = await repository.get_by_id(db, target_user_id)
+    if target is None:
+        raise NotFoundError("Utilisateur introuvable.")
+
+    # Un compte admin ne se supprime pas via cette route — garde-fou
+    # délibéré pour ne jamais se retrouver sans aucun accès admin après un
+    # nettoyage en masse (voir la demande "garder les admins" côté produit).
+    if target.role == UserRole.ADMIN:
+        raise ForbiddenError("Impossible de supprimer un compte administrateur via cette route.")
+
+    await repository.purge_user(db, target)
+    await db.commit()

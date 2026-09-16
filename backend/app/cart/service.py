@@ -58,6 +58,7 @@ async def get_cart(db: AsyncSession, user: User) -> CartRead:
             id=cart_item.id,
             product_id=product.id,
             product_name=product.name,
+            product_image=product.images[0] if product.images else None,
             unit_price=product.price,
             quantity=cart_item.quantity,
             subtotal=subtotal,

@@ -5,6 +5,7 @@ definePageMeta({ middleware: 'auth' })
 
 const cartStore = useCartStore()
 const router = useRouter()
+const apiBase = useApiBase()
 
 await useAsyncData('panier-cart', () => cartStore.fetchCart())
 
@@ -39,9 +40,15 @@ function goCheckout() {
           <div class="vendor-group__header">{{ group.shop_name }}</div>
 
           <div v-for="item in group.items" :key="item.id" class="cart-row">
-            <div class="cart-row__thumb">
-              <PhImage :size="20" weight="light" color="var(--color-neutral-500)" />
-            </div>
+            <NuxtLink :to="`/produits/${item.product_id}`" class="cart-row__thumb">
+              <img
+                v-if="item.product_image"
+                :src="resolveImageUrl(item.product_image, apiBase)"
+                :alt="item.product_name"
+                loading="lazy"
+              />
+              <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
+            </NuxtLink>
             <div class="flex-grow-1">
               <div style="font-size: 13px">{{ item.product_name }}</div>
               <div class="d-flex justify-space-between align-center mt-1">
@@ -115,6 +122,13 @@ function goCheckout() {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.cart-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .cart-row__remove {

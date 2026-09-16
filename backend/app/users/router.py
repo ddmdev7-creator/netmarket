@@ -1,15 +1,18 @@
-"""Routes for the authenticated user's own profile."""
+"""Routes for the authenticated user's own profile, plus admin account management."""
+
+import uuid
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Message
-from app.core.deps import get_current_user, get_db
+from app.core.deps import get_current_user, get_db, require_role
 from app.users import service
-from app.users.models import User
+from app.users.models import User, UserRole
 from app.users.schemas import UserRead, UserUpdate, VerifyEmailRequest
 
 router = APIRouter(prefix="/users", tags=["users"])
+admin_router = APIRouter(prefix="/admin/users", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))])
 
 
 @router.get("/me", response_model=UserRead)
@@ -41,3 +44,18 @@ async def verify_email(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     return await service.verify_email_code(db, current_user, payload.code)
+
+
+@admin_router.get("", response_model=list[UserRead])
+async def admin_list_users(db: AsyncSession = Depends(get_db)) -> list[User]:
+    return await service.admin_list_users(db)
+
+
+@admin_router.delete("/{user_id}", response_model=Message)
+async def admin_delete_user(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Message:
+    await service.admin_delete_user(db, current_user, user_id)
+    return Message(detail="Compte supprimé.")

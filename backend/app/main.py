@@ -23,6 +23,7 @@ from app.reviews.router import router as reviews_router
 from app.subscriptions.router import admin_router as subscriptions_admin_router
 from app.subscriptions.router import router as subscriptions_router
 from app.uploads.router import router as uploads_router
+from app.users.router import admin_router as users_admin_router
 from app.users.router import router as users_router
 from app.vendors.router import admin_router as vendors_admin_router
 from app.vendors.router import router as vendors_router
@@ -42,6 +43,7 @@ register_exception_handlers(app)
 app.include_router(auth_router)
 app.include_router(addresses_router)
 app.include_router(users_router)
+app.include_router(users_admin_router)
 app.include_router(catalog_router)
 app.include_router(vendors_router)
 app.include_router(vendors_admin_router)
