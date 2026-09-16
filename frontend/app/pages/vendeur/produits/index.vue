@@ -78,7 +78,7 @@ const canPublish = computed(() => vendor.value?.status === 'approved')
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Mes produits</h1>
 
     <v-alert v-if="vendor && !canPublish" type="warning" variant="tonal" density="compact" class="mb-4">

@@ -242,7 +242,7 @@ async function createCourier() {
 </script>
 
 <template>
-  <div class="admin-shell">
+  <div class="dashboard-shell">
     <div class="d-flex justify-space-between align-center mb-4">
       <h1 class="text-h6 mb-0">Livreurs</h1>
       <v-btn size="small" color="primary" variant="tonal" @click="createOpen = true">

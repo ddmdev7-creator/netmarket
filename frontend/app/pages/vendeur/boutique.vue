@@ -83,7 +83,8 @@ async function submit() {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="dashboard-shell">
+   <div class="form-panel">
     <h1 class="text-h6 mb-4">Réglages de la boutique</h1>
 
     <template v-if="vendor">
@@ -145,6 +146,7 @@ async function submit() {
       <PhArrowLeft :size="18" color="var(--color-neutral-400)" />
       <span>Retour à l'espace acheteur</span>
     </NuxtLink>
+   </div>
   </div>
 </template>
 

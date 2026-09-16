@@ -171,13 +171,14 @@ h1, h2, h3, h4, h5, h6,
   background-color: var(--color-bg);
 }
 
-/* Contre-partie de .app-shell pour le back-office admin : celui-ci est
-   consulté depuis un ordinateur la plupart du temps (gestion de la
-   plateforme), donc pas de gabarit mobile centré ici — le contenu occupe
-   toute la largeur disponible à côté de la barre latérale (voir
-   layouts/admin.vue), avec un plafond raisonnable pour rester lisible sur
+/* Contre-partie de .app-shell pour les back-offices (admin, vendeur) :
+   ceux-ci gèrent beaucoup de contenu (produits, commandes, statistiques...)
+   et sont consultés depuis un ordinateur la plupart du temps, donc pas de
+   gabarit mobile centré ici — le contenu occupe toute la largeur
+   disponible à côté de la barre latérale (voir layouts/admin.vue et
+   layouts/vendeur.vue), avec un plafond raisonnable pour rester lisible sur
    un très grand écran. */
-.admin-shell {
+.dashboard-shell {
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
@@ -185,9 +186,18 @@ h1, h2, h3, h4, h5, h6,
 }
 
 @media (min-width: 960px) {
-  .admin-shell {
+  .dashboard-shell {
     padding: 28px 32px;
   }
+}
+
+/* Pour les pages de réglages/formulaire dans un .dashboard-shell (boutique,
+   abonnement) : sans ça, un champ de texte ou un bouton "block" s'étirerait
+   sur toute la largeur du panneau (jusqu'à 1400px), ce qui reste illisible
+   pour un formulaire même dans une vraie interface web. */
+.form-panel {
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 /* Barre d'action collante en bas d'écran (fiche produit, panier, checkout). */

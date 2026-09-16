@@ -39,7 +39,7 @@ const statusLabels: Record<OrderStatus, string> = {
 </script>
 
 <template>
-  <div class="admin-shell">
+  <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Statistiques plateforme</h1>
 
     <div class="stat-grid mb-5">

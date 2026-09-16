@@ -230,7 +230,7 @@ function formatDate(iso: string) {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="dashboard-shell">
     <h1 class="text-h6 mb-3">Commandes à traiter</h1>
 
     <v-text-field

@@ -52,7 +52,7 @@ function formatDate(value: string) {
 </script>
 
 <template>
-  <div class="admin-shell">
+  <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Abonnements vendeurs</h1>
 
     <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-4 flex-wrap">

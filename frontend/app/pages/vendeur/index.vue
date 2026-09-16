@@ -46,7 +46,7 @@ const tiles = computed(() => {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Tableau de bord</h1>
 
     <template v-if="vendor">

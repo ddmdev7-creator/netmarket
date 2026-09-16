@@ -53,7 +53,8 @@ function formatDate(value: string) {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <div class="dashboard-shell">
+   <div class="form-panel">
     <h1 class="text-h6 mb-4">Abonnement premium</h1>
 
     <v-card v-if="subscription" class="pa-3 mb-4" variant="flat">
@@ -106,6 +107,7 @@ function formatDate(value: string) {
       <PhArrowLeft :size="18" color="var(--color-neutral-400)" />
       <span>Retour aux réglages de la boutique</span>
     </NuxtLink>
+   </div>
   </div>
 </template>
 

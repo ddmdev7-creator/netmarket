@@ -62,7 +62,7 @@ async function deleteUser() {
 </script>
 
 <template>
-  <div class="admin-shell">
+  <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Utilisateurs ({{ users.length }})</h1>
 
     <v-btn-toggle v-model="filter" mandatory density="comfortable" divided class="mb-4 flex-wrap">
