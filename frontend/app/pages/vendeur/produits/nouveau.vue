@@ -91,19 +91,25 @@ async function submit() {
 </script>
 
 <template>
-  <div class="app-shell app-shell--wide pa-0" style="padding-bottom: 32px">
-    <div class="d-flex align-center pa-2 ga-2">
+  <div class="dashboard-shell">
+    <div class="d-flex align-center ga-2 mb-4">
       <v-btn icon variant="text" @click="router.back()">
         <PhArrowLeft :size="20" />
       </v-btn>
-      <h1 class="text-h6">Nouveau produit</h1>
-      <LayoutHomeLink to="/vendeur" />
+      <h1 class="text-h6 mb-0">Nouveau produit</h1>
     </div>
 
-    <div class="px-4">
-      <VendorProductForm v-model="form" :categories="categories" />
+    <VendorProductForm v-model="form" :categories="categories" />
 
-      <v-btn color="primary" block size="large" :loading="submitting" @click="submit">Publier le produit</v-btn>
-    </div>
+    <v-btn color="primary" size="large" class="mt-4 submit-btn" :loading="submitting" @click="submit">
+      Publier le produit
+    </v-btn>
   </div>
 </template>
+
+<style scoped>
+.submit-btn {
+  width: 100%;
+  max-width: 320px;
+}
+</style>

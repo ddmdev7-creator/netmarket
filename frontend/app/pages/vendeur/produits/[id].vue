@@ -179,18 +179,16 @@ async function deleteProduct() {
   <div v-if="loadError" class="pa-6">
     <CommonEmptyState message="Produit introuvable." />
   </div>
-  <div v-else class="app-shell app-shell--wide pa-0" style="padding-bottom: 32px">
-    <div class="d-flex align-center pa-2 ga-2">
-      <v-btn icon variant="text" @click="router.back()">
-        <PhArrowLeft :size="20" />
-      </v-btn>
-      <h1 class="text-h6">Modifier le produit</h1>
-      <LayoutHomeLink to="/vendeur" />
-    </div>
-
-    <div v-if="product" class="px-4">
-      <div class="d-flex align-center justify-space-between mb-4">
-        <span style="font-size: 13px">{{ product.status === 'active' ? 'Produit actif (visible)' : 'Produit inactif (masqué)' }}</span>
+  <div v-else class="dashboard-shell">
+    <div class="d-flex align-center justify-space-between ga-2 mb-4 flex-wrap">
+      <div class="d-flex align-center ga-2">
+        <v-btn icon variant="text" @click="router.back()">
+          <PhArrowLeft :size="20" />
+        </v-btn>
+        <h1 class="text-h6 mb-0">Modifier le produit</h1>
+      </div>
+      <div v-if="product" class="d-flex align-center ga-2">
+        <span class="text-muted" style="font-size: 13px">{{ product.status === 'active' ? 'Actif' : 'Inactif' }}</span>
         <v-switch
           :model-value="product.status === 'active'"
           color="primary"
@@ -200,18 +198,19 @@ async function deleteProduct() {
           @update:model-value="toggleStatus"
         />
       </div>
+    </div>
 
+    <template v-if="product">
       <VendorProductForm v-model="form" :categories="categories" />
 
-      <v-btn color="primary" block size="large" class="mb-3" :loading="submitting" @click="submit">
-        Enregistrer les modifications
-      </v-btn>
-
-      <v-btn variant="outlined" color="error" block @click="confirmDelete = true">
-        <PhTrash :size="16" class="mr-1" />
-        Supprimer le produit
-      </v-btn>
-    </div>
+      <div class="d-flex ga-2 mt-4 flex-wrap">
+        <v-btn color="primary" size="large" :loading="submitting" @click="submit">Enregistrer les modifications</v-btn>
+        <v-btn variant="outlined" color="error" size="large" @click="confirmDelete = true">
+          <PhTrash :size="16" class="mr-1" />
+          Supprimer le produit
+        </v-btn>
+      </div>
+    </template>
 
     <v-dialog v-model="confirmDelete" max-width="340">
       <v-card class="pa-5">
