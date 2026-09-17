@@ -147,7 +147,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
     <v-window v-model="tab">
       <v-window-item value="info">
-        <div class="panel-card panel-card--narrow">
+        <div class="panel-card">
           <div class="panel-card__header">
             <span class="panel-card__title">Informations générales</span>
           </div>
@@ -179,7 +179,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
             </div>
 
             <label class="field-label">Description (optionnel)</label>
-            <v-textarea v-model="model.description" rows="4" variant="outlined" class="mb-3" />
+            <v-textarea v-model="model.description" rows="4" variant="outlined" class="mb-3 description-field" />
 
             <div class="form-grid">
               <div>
@@ -391,7 +391,11 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 }
 
 /* Catégorie/Nom puis Prix/Stock : une colonne sur mobile (comportement
-   inchangé), deux dès qu'il y a la place. */
+   inchangé), deux dès qu'il y a la place. Le champ lui-même reste plafonné
+   (voir .form-grid > div) même quand .panel-card occupe toute la largeur du
+   conteneur (Informations générales notamment) — sinon un champ "Prix"
+   étiré sur 600px de large serait aussi absurde que la carte trop étroite
+   qu'on corrige ici. */
 .form-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -402,6 +406,16 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   .form-grid {
     grid-template-columns: 1fr 1fr;
   }
+
+  .form-grid > div {
+    max-width: 420px;
+  }
+}
+
+/* Un texte long reste plus lisible sur une largeur de paragraphe que sur
+   toute la largeur de .panel-card. */
+.description-field {
+  max-width: 720px;
 }
 
 /* auto-fit + minmax(min(420px, 100%), 1fr) plutôt que des colonnes fixes
@@ -429,10 +443,6 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-}
-
-.panel-card--narrow {
-  max-width: 720px;
 }
 
 .panel-card__header {
