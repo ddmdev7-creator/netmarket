@@ -33,8 +33,88 @@ const quantity = ref(1)
 const adding = ref(false)
 const justAdded = ref(false)
 
+// Sélecteur de variante : un groupe par nom d'attribut distinct (ex.
+// "Couleur", "Taille"), valeurs distinctes de ce groupe dans l'ordre où
+// elles apparaissent sur les variantes — pas une grille cartésienne
+// couleur×taille, seulement les combinaisons qui existent réellement comme
+// variantes. Vide (et tout ce sélecteur inutilisé) pour un produit sans
+// variante, comportement strictement inchangé dans ce cas.
+const selected = reactive<Record<string, string>>({})
+
+const hasVariants = computed(() => (product.value?.variants.length ?? 0) > 0)
+
+const attributeGroups = computed(() => {
+  if (!product.value) return []
+  const order: string[] = []
+  const values = new Map<string, string[]>()
+  for (const variant of product.value.variants) {
+    for (const attr of variant.attributes) {
+      if (!values.has(attr.name)) {
+        values.set(attr.name, [])
+        order.push(attr.name)
+      }
+      const list = values.get(attr.name)!
+      if (!list.includes(attr.value)) list.push(attr.value)
+    }
+  }
+  return order.map((name) => ({ name, values: values.get(name)! }))
+})
+
+const activeVariant = computed(() => {
+  if (!product.value || !hasVariants.value) return null
+  const groups = attributeGroups.value
+  if (Object.keys(selected).length !== groups.length) return null
+  return (
+    product.value.variants.find(
+      (v) => v.attributes.length === groups.length && v.attributes.every((a) => selected[a.name] === a.value),
+    ) ?? null
+  )
+})
+
+// Sélection complète (une valeur par attribut) mais qui ne correspond à
+// aucune variante existante — les variantes sont une liste explicite, pas
+// toutes les combinaisons couleur×taille possibles.
+const selectionIncomplete = computed(
+  () => hasVariants.value && Object.keys(selected).length === attributeGroups.value.length && !activeVariant.value,
+)
+
+const effectiveStock = computed(() => {
+  if (!product.value) return 0
+  return hasVariants.value ? (activeVariant.value?.stock ?? 0) : product.value.stock
+})
+
+const effectivePrice = computed(() => {
+  if (!product.value) return 0
+  return activeVariant.value?.price ?? product.value.price
+})
+
+const effectiveImages = computed(() => {
+  if (!product.value) return []
+  return activeVariant.value?.images?.length ? activeVariant.value.images : product.value.images
+})
+
+const stockLabel = computed(() => {
+  if (hasVariants.value && !activeVariant.value) return 'Choisissez une variante'
+  return effectiveStock.value > 0 ? 'En stock' : 'Épuisé'
+})
+const stockChipColor = computed(() => {
+  if (hasVariants.value && !activeVariant.value) return undefined
+  return effectiveStock.value > 0 ? 'success' : 'error'
+})
+
+const addDisabled = computed(() => {
+  if (!product.value) return true
+  return hasVariants.value ? !activeVariant.value || activeVariant.value.stock === 0 : product.value.stock === 0
+})
+
+function selectAttribute(name: string, value: string) {
+  selected[name] = value
+  quantity.value = 1
+  justAdded.value = false
+}
+
 function incr() {
-  if (product.value && quantity.value < product.value.stock) quantity.value++
+  if (quantity.value < effectiveStock.value) quantity.value++
   justAdded.value = false
 }
 function decr() {
@@ -49,7 +129,7 @@ async function addToCart() {
   }
   adding.value = true
   try {
-    await cartStore.addItem(productId, quantity.value)
+    await cartStore.addItem(productId, quantity.value, activeVariant.value?.id ?? null)
     toast.success('Ajouté au panier.')
     justAdded.value = true
   } catch (e) {
@@ -74,7 +154,7 @@ async function addToCart() {
 
     <div class="px-4 product-detail">
       <div class="product-detail__media">
-        <ProductImageGallery :images="product.images" :alt="product.name" />
+        <ProductImageGallery :images="effectiveImages" :alt="product.name" />
       </div>
 
       <div class="product-detail__info">
@@ -94,11 +174,31 @@ async function addToCart() {
 
         <div class="d-flex align-center ga-3 mb-4">
           <span class="text-heading" style="font-size: 22px; font-weight: 600; color: var(--color-accent)">{{
-            formatGnf(product.price)
+            formatGnf(effectivePrice)
           }}</span>
-          <v-chip size="small" :color="product.stock > 0 ? 'success' : 'error'" variant="tonal">
-            {{ product.stock > 0 ? 'En stock' : 'Épuisé' }}
+          <v-chip size="small" :color="stockChipColor" variant="tonal">
+            {{ stockLabel }}
           </v-chip>
+        </div>
+
+        <div v-if="hasVariants" class="mb-4">
+          <div v-for="group in attributeGroups" :key="group.name" class="mb-3">
+            <div class="text-muted mb-1 text-meta">{{ group.name }}</div>
+            <div class="d-flex flex-wrap ga-2">
+              <v-chip
+                v-for="value in group.values"
+                :key="value"
+                :variant="selected[group.name] === value ? 'flat' : 'outlined'"
+                :color="selected[group.name] === value ? 'primary' : undefined"
+                @click="selectAttribute(group.name, value)"
+              >
+                {{ value }}
+              </v-chip>
+            </div>
+          </div>
+          <p v-if="selectionIncomplete" class="mb-0 text-meta" style="color: var(--color-error)">
+            Cette combinaison n'est pas disponible.
+          </p>
         </div>
 
         <div class="mb-4">
@@ -106,7 +206,7 @@ async function addToCart() {
           <div class="qty-selector">
             <button type="button" :disabled="quantity <= 1" @click="decr">−</button>
             <span>{{ quantity }}</span>
-            <button type="button" :disabled="quantity >= product.stock" @click="incr">+</button>
+            <button type="button" :disabled="quantity >= effectiveStock" @click="incr">+</button>
           </div>
         </div>
 
@@ -164,10 +264,10 @@ async function addToCart() {
         block
         size="large"
         :loading="adding"
-        :disabled="product.stock === 0"
+        :disabled="addDisabled"
         @click="addToCart"
       >
-        Ajouter au panier — {{ formatGnf(product.price * quantity) }}
+        Ajouter au panier — {{ formatGnf(effectivePrice * quantity) }}
       </v-btn>
     </div>
   </div>

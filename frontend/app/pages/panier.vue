@@ -57,6 +57,7 @@ function goCheckout() {
             </NuxtLink>
             <div class="flex-grow-1">
               <div class="text-meta">{{ item.product_name }}</div>
+              <div v-if="item.variant_label" class="text-muted text-fine">{{ item.variant_label }}</div>
               <div class="d-flex justify-space-between align-center mt-1">
                 <div class="qty-selector">
                   <button type="button" @click="updateQty(item.id, item.quantity - 1)">−</button>

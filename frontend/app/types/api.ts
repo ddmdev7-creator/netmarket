@@ -287,6 +287,45 @@ export interface CategoryCreate {
   parent_id?: string | null
 }
 
+export interface ProductVariantAttributeRead {
+  name: string
+  value: string
+}
+
+export interface ProductVariantRead {
+  id: string
+  product_id: string
+  sku: string | null
+  /** Absolute override — null means "same price as the product". */
+  price: number | null
+  stock: number
+  /** Absolute override — null means "same photos as the product". */
+  images: string[] | null
+  attributes: ProductVariantAttributeRead[]
+}
+
+export interface ProductVariantAttributeCreate {
+  name: string
+  value: string
+}
+
+export interface ProductVariantCreate {
+  sku?: string | null
+  price?: number | null
+  stock?: number
+  images?: string[] | null
+  attributes: ProductVariantAttributeCreate[]
+}
+
+export interface ProductVariantUpdate {
+  sku?: string | null
+  price?: number | null
+  stock?: number
+  images?: string[] | null
+  /** Provided = wholesale replace of the attribute set. */
+  attributes?: ProductVariantAttributeCreate[] | null
+}
+
 export interface ProductRead {
   id: string
   vendor_id: string
@@ -303,6 +342,8 @@ export interface ProductRead {
   /** Generic estimate — buyer's zone unknown on the catalog. See app/catalog/service.py::_attach_delivery_estimate. */
   estimated_delivery_min: string | null
   estimated_delivery_max: string | null
+  /** Empty when the product has no variants (stock/price stay at the product level). */
+  variants: ProductVariantRead[]
 }
 
 export interface ReviewRead {
@@ -382,6 +423,9 @@ export interface Page<T> {
 export interface CartItemRead {
   id: string
   product_id: string
+  variant_id: string | null
+  /** e.g. "Couleur : Rouge, Taille : M" — read live from the variant, never frozen (the cart always reflects the current catalog). */
+  variant_label: string | null
   product_name: string
   product_image: string | null
   unit_price: number
@@ -404,6 +448,9 @@ export interface CartRead {
 export interface OrderItemRead {
   id: string
   product_id: string
+  /** Frozen at checkout — stays correct even if the variant is edited/deleted afterward. */
+  variant_id: string | null
+  variant_label: string | null
   product_name: string
   quantity: number
   unit_price: number

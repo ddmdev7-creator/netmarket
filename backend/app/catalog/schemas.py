@@ -53,6 +53,49 @@ class ProductUpdate(BaseModel):
     status: ProductStatus | None = None
 
 
+class ProductVariantAttributeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    value: str = Field(min_length=1, max_length=100)
+
+
+class ProductVariantAttributeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    value: str
+
+
+class ProductVariantCreate(BaseModel):
+    sku: str | None = Field(default=None, max_length=64)
+    price: int | None = Field(default=None, ge=0, description="Surcharge du prix produit — vide = même prix")
+    stock: int = Field(default=0, ge=0)
+    images: list[str] | None = None
+    # Au moins 1 paire : une variante doit être distinguable (ex: Couleur=Rouge).
+    attributes: list[ProductVariantAttributeCreate] = Field(min_length=1)
+
+
+class ProductVariantUpdate(BaseModel):
+    sku: str | None = None
+    price: int | None = Field(default=None, ge=0)
+    stock: int | None = Field(default=None, ge=0)
+    images: list[str] | None = None
+    # Fourni = remplace entièrement le jeu d'attributs existant (pas de diff
+    # pair par pair, plus simple côté service — voir catalog/service.py).
+    attributes: list[ProductVariantAttributeCreate] | None = Field(default=None, min_length=1)
+
+
+class ProductVariantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    product_id: uuid.UUID
+    sku: str | None
+    price: int | None
+    stock: int
+    images: list[str] | None
+    attributes: list[ProductVariantAttributeRead]
+
+
 class ProductRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -73,6 +116,10 @@ class ProductRead(BaseModel):
     # qu'une fois la commande passée, une fois la zone de livraison connue.
     estimated_delivery_min: date | None = None
     estimated_delivery_max: date | None = None
+    # Peuplé automatiquement via la relation SQLAlchemy Product.variants
+    # (contrairement à average_rating/estimated_delivery_*, pas besoin du
+    # pattern d'attribut transitoire — voir catalog/repository.py).
+    variants: list[ProductVariantRead] = Field(default_factory=list)
 
 
 @dataclass

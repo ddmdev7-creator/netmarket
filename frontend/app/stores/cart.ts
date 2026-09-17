@@ -19,11 +19,11 @@ export const useCartStore = defineStore('cart', () => {
     }
   }
 
-  async function addItem(productId: string, quantity = 1) {
+  async function addItem(productId: string, quantity = 1, variantId: string | null = null) {
     const { apiFetch } = useApi()
     cart.value = await apiFetch<CartRead>('/cart/items', {
       method: 'POST',
-      body: { product_id: productId, quantity },
+      body: { product_id: productId, variant_id: variantId, quantity },
     })
   }
 

@@ -63,6 +63,8 @@ class OrderItemRead(BaseModel):
 
     id: uuid.UUID
     product_id: uuid.UUID
+    variant_id: uuid.UUID | None = None
+    variant_label: str | None = None
     product_name: str
     quantity: int
     unit_price: int

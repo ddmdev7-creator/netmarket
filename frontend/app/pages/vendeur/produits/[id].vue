@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhArrowLeft, PhTrash } from '@phosphor-icons/vue'
-import type { CategoryRead, ProductRead } from '~/types/api'
-import type { ProductFormValues } from '~/components/vendor/ProductForm.vue'
+import type { CategoryRead, ProductRead, ProductVariantRead } from '~/types/api'
+import type { ProductFormValues, VariantFormRow } from '~/components/vendor/ProductForm.vue'
 
 definePageMeta({ middleware: 'vendor', layout: 'blank' })
 
@@ -18,7 +18,27 @@ const { data: product, error: loadError } = await useAsyncData(`vendor-product-$
   apiFetch<ProductRead>(`/products/${productId}`),
 )
 
-const form = ref<ProductFormValues>({ category_id: null, name: '', description: '', price: null, stock: 0, images: [''] })
+function toVariantRow(v: ProductVariantRead): VariantFormRow {
+  return {
+    _key: v.id,
+    id: v.id,
+    sku: v.sku ?? '',
+    price: v.price,
+    stock: v.stock,
+    images: v.images ? [...v.images] : [],
+    attributes: v.attributes.map((a) => ({ name: a.name, value: a.value })),
+  }
+}
+
+const form = ref<ProductFormValues>({
+  category_id: null,
+  name: '',
+  description: '',
+  price: null,
+  stock: 0,
+  images: [''],
+  variants: [],
+})
 watch(
   product,
   (p) => {
@@ -30,6 +50,7 @@ watch(
       price: p.price,
       stock: p.stock,
       images: p.images.length ? [...p.images] : [''],
+      variants: p.variants.map(toVariantRow),
     }
   },
   { immediate: true },
@@ -37,24 +58,78 @@ watch(
 
 const submitting = ref(false)
 
+function normalizedAttributes(row: VariantFormRow) {
+  return row.attributes
+    .map((a) => ({ name: a.name.trim(), value: a.value.trim() }))
+    .filter((a) => a.name && a.value)
+}
+
+async function saveVariants() {
+  for (const row of form.value.variants) {
+    try {
+      if (row.id && row.deleted) {
+        await apiFetch(`/products/${productId}/variants/${row.id}`, { method: 'DELETE' })
+      } else if (!row.id && !row.deleted) {
+        await apiFetch(`/products/${productId}/variants`, {
+          method: 'POST',
+          body: {
+            sku: row.sku.trim() || null,
+            price: row.price,
+            stock: row.stock,
+            images: row.images.length ? row.images : null,
+            attributes: normalizedAttributes(row),
+          },
+        })
+      } else if (row.id && !row.deleted) {
+        await apiFetch(`/products/${productId}/variants/${row.id}`, {
+          method: 'PATCH',
+          body: {
+            sku: row.sku.trim() || null,
+            price: row.price,
+            stock: row.stock,
+            images: row.images.length ? row.images : null,
+            attributes: normalizedAttributes(row),
+          },
+        })
+      }
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Impossible d'enregistrer une variante."))
+    }
+  }
+}
+
 async function submit() {
   if (!form.value.category_id || form.value.name.trim().length < 1 || form.value.price === null || form.value.price < 0) {
     toast.error('Vérifie la catégorie, le nom et le prix.')
     return
   }
+  const activeVariants = form.value.variants.filter((v) => !v.deleted)
+  if (activeVariants.some((row) => normalizedAttributes(row).length === 0)) {
+    toast.error('Chaque variante doit avoir au moins un attribut (ex: Couleur → Rouge).')
+    return
+  }
+
   submitting.value = true
   try {
-    product.value = await apiFetch<ProductRead>(`/products/${productId}`, {
-      method: 'PATCH',
-      body: {
-        category_id: form.value.category_id,
-        name: form.value.name.trim(),
-        description: form.value.description.trim() || null,
-        price: form.value.price,
-        stock: form.value.stock ?? 0,
-        images: form.value.images.map((url) => url.trim()).filter(Boolean),
-      },
-    })
+    // Les variantes d'abord : si le produit avait déjà des variantes (ou en
+    // gagne/perd dans ce même enregistrement), le PATCH du produit qui suit
+    // doit voir l'état final pour décider s'il peut envoyer "stock" sans se
+    // heurter au 409 de catalog/service.py::update_product (stock calculé
+    // automatiquement dès qu'il existe au moins une variante).
+    await saveVariants()
+
+    const body: Record<string, unknown> = {
+      category_id: form.value.category_id,
+      name: form.value.name.trim(),
+      description: form.value.description.trim() || null,
+      price: form.value.price,
+      images: form.value.images.map((url) => url.trim()).filter(Boolean),
+    }
+    if (activeVariants.length === 0) body.stock = form.value.stock ?? 0
+
+    product.value = await apiFetch<ProductRead>(`/products/${productId}`, { method: 'PATCH', body })
+    form.value.variants = product.value.variants.map(toVariantRow)
+
     toast.success('Produit mis à jour.')
   } catch (e) {
     toast.error(apiErrorMessage(e, 'Impossible de sauvegarder ce produit.'))

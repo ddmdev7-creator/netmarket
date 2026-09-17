@@ -78,7 +78,10 @@ function formatDate(iso: string) {
         </div>
         <div class="text-muted mb-2" style="font-size: 12px">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
         <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1" style="font-size: 13px">
-          <span>{{ item.product_name }} × {{ item.quantity }}</span>
+          <span
+            >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
+            {{ item.quantity }}</span
+          >
         </div>
         <OrderDeliveryDetails
           class="mt-2 mb-1"
@@ -121,7 +124,10 @@ function formatDate(iso: string) {
         </div>
         <div class="text-muted mb-2" style="font-size: 12px">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
         <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1" style="font-size: 13px">
-          <span>{{ item.product_name }} × {{ item.quantity }}</span>
+          <span
+            >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
+            {{ item.quantity }}</span
+          >
         </div>
         <OrderDeliveryDetails
           class="mt-2 mb-1"

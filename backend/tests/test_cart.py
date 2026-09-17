@@ -1,5 +1,7 @@
 """Tests for the cart: add/update/remove, vendor grouping, ownership."""
 
+import uuid
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,3 +91,125 @@ async def test_cart_groups_multiple_vendors(
     )
 
     assert len(response.json()["vendors"]) == 2
+
+
+# --- Cart with product variants ---
+
+
+async def test_add_item_with_variant_id_sets_variant_label_and_price_override(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, buyer_user: User, product: Product
+) -> None:
+    variant = (
+        await client.post(
+            f"/products/{product.id}/variants",
+            json={"attributes": [{"name": "Couleur", "value": "Rouge"}], "price": 600000, "stock": 5},
+            headers=auth_headers(vendor_user),
+        )
+    ).json()
+    # Product.variants a été chargée (vide) par l'appel ci-dessus, dans la
+    # même session de test partagée entre requêtes — sans ce rafraîchissement
+    # ciblé, elle resterait figée à vide (une vraie requête HTTP séparée en
+    # production n'a pas ce souci, chaque requête ouvrant sa propre session).
+    # expire_all() serait trop large ici : ça périmerait aussi vendor_user
+    # etc., dont l'accès synchrone ensuite (hors contexte async) ferait
+    # planter SQLAlchemy.
+    await db_session.refresh(product, attribute_names=["variants"])
+
+    response = await client.post(
+        "/cart/items",
+        json={"product_id": str(product.id), "variant_id": variant["id"], "quantity": 2},
+        headers=auth_headers(buyer_user),
+    )
+
+    assert response.status_code == 201
+    item = response.json()["vendors"][0]["items"][0]
+    assert item["variant_label"] == "Couleur : Rouge"
+    assert item["unit_price"] == 600000
+    assert item["subtotal"] == 1200000
+
+
+async def test_add_same_variant_twice_increments_quantity(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, buyer_user: User, product: Product
+) -> None:
+    variant = (
+        await client.post(
+            f"/products/{product.id}/variants",
+            json={"attributes": [{"name": "Taille", "value": "M"}], "stock": 5},
+            headers=auth_headers(vendor_user),
+        )
+    ).json()
+    await db_session.refresh(product, attribute_names=["variants"])  # voir le commentaire équivalent plus haut
+    headers = auth_headers(buyer_user)
+
+    await client.post(
+        "/cart/items",
+        json={"product_id": str(product.id), "variant_id": variant["id"], "quantity": 1},
+        headers=headers,
+    )
+    response = await client.post(
+        "/cart/items",
+        json={"product_id": str(product.id), "variant_id": variant["id"], "quantity": 2},
+        headers=headers,
+    )
+
+    assert response.json()["vendors"][0]["items"][0]["quantity"] == 3
+
+
+async def test_add_different_variants_of_same_product_creates_separate_rows(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, buyer_user: User, product: Product
+) -> None:
+    headers_vendor = auth_headers(vendor_user)
+    v1 = (
+        await client.post(
+            f"/products/{product.id}/variants",
+            json={"attributes": [{"name": "Taille", "value": "S"}], "stock": 5},
+            headers=headers_vendor,
+        )
+    ).json()
+    v2 = (
+        await client.post(
+            f"/products/{product.id}/variants",
+            json={"attributes": [{"name": "Taille", "value": "L"}], "stock": 5},
+            headers=headers_vendor,
+        )
+    ).json()
+    await db_session.refresh(product, attribute_names=["variants"])  # voir le commentaire équivalent plus haut
+
+    headers = auth_headers(buyer_user)
+    await client.post(
+        "/cart/items", json={"product_id": str(product.id), "variant_id": v1["id"], "quantity": 1}, headers=headers
+    )
+    response = await client.post(
+        "/cart/items", json={"product_id": str(product.id), "variant_id": v2["id"], "quantity": 1}, headers=headers
+    )
+
+    assert len(response.json()["vendors"][0]["items"]) == 2
+
+
+async def test_add_item_without_variant_id_on_product_with_variants_is_rejected(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, buyer_user: User, product: Product
+) -> None:
+    await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "S"}], "stock": 5},
+        headers=auth_headers(vendor_user),
+    )
+    await db_session.refresh(product, attribute_names=["variants"])  # voir le commentaire équivalent plus haut
+
+    response = await client.post(
+        "/cart/items", json={"product_id": str(product.id), "quantity": 1}, headers=auth_headers(buyer_user)
+    )
+
+    assert response.status_code == 409
+
+
+async def test_add_item_with_variant_id_on_product_without_variants_is_rejected(
+    client: AsyncClient, buyer_user: User, product: Product
+) -> None:
+    response = await client.post(
+        "/cart/items",
+        json={"product_id": str(product.id), "variant_id": str(uuid.uuid4()), "quantity": 1},
+        headers=auth_headers(buyer_user),
+    )
+
+    assert response.status_code == 409

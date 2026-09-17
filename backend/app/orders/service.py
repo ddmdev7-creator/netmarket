@@ -90,6 +90,11 @@ def _commission_amount(amount: int, commission_rate: Decimal) -> int:
     return int((Decimal(amount) * commission_rate / Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
 
 
+def _line_unit_price(product, variant) -> int:
+    # Surcharge de prix par variante (optionnelle) ; sinon le prix du produit.
+    return variant.price if (variant is not None and variant.price is not None) else product.price
+
+
 def _attach_payment_status(order: Order, payment_status: PaymentStatus | None) -> Order:
     # Same transient-attribute pattern as delivery_token below: payment_status
     # isn't an Order column, it lives on the separate Payment row (app/payments/).
@@ -120,21 +125,25 @@ def _attach_delivery_tokens(order: Order) -> Order:
 
 
 async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> Order:
-    rows = await cart_repository.list_items_with_product_and_vendor(db, user.id)
+    rows = await cart_repository.list_items_with_product_variant_and_vendor(db, user.id)
     if not rows:
         raise ConflictError("Votre panier est vide.")
 
-    for cart_item, product, _vendor in rows:
+    for cart_item, product, variant, _vendor in rows:
         if product.status != ProductStatus.ACTIVE:
             raise ConflictError(f"Le produit « {product.name} » n'est plus disponible.")
-        if product.stock < cart_item.quantity:
-            raise ConflictError(f"Stock insuffisant pour « {product.name} » (disponible : {product.stock}).")
+        available = variant.stock if variant is not None else product.stock
+        if available < cart_item.quantity:
+            label = f" ({variant.label()})" if variant is not None else ""
+            raise ConflictError(f"Stock insuffisant pour « {product.name}{label} » (disponible : {available}).")
 
     by_vendor: dict[uuid.UUID, list[tuple]] = {}
     for row in rows:
-        by_vendor.setdefault(row[2].id, []).append(row)
+        by_vendor.setdefault(row[3].id, []).append(row)
 
-    grand_total = sum(product.price * cart_item.quantity for cart_item, product, _ in rows)
+    grand_total = sum(
+        _line_unit_price(product, variant) * cart_item.quantity for cart_item, product, variant, _ in rows
+    )
 
     pickup_point_id = None
     if data.delivery_type == DeliveryType.PICKUP_POINT:
@@ -170,8 +179,11 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
     vendor_notifications: list[tuple[uuid.UUID, str, int, int]] = []
 
     for vendor_items in by_vendor.values():
-        vendor = vendor_items[0][2]
-        amount = sum(product.price * cart_item.quantity for cart_item, product, _ in vendor_items)
+        vendor = vendor_items[0][3]
+        amount = sum(
+            _line_unit_price(product, variant) * cart_item.quantity
+            for cart_item, product, variant, _ in vendor_items
+        )
         commission = _commission_amount(amount, Decimal(str(vendor.commission_rate)))
         # Figée au checkout — voir le commentaire sur SubOrder.estimated_delivery_min
         # dans app/orders/models.py pour pourquoi ce n'est pas recalculé à la volée.
@@ -193,15 +205,19 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
             estimated_delivery_max=estimate.max_date,
         )
 
-        for cart_item, product, _ in vendor_items:
+        for cart_item, product, variant, _ in vendor_items:
             await repository.create_order_item(
                 db,
                 sub_order_id=sub_order.id,
                 product_id=product.id,
                 product_name=product.name,
                 quantity=cart_item.quantity,
-                unit_price=product.price,
+                unit_price=_line_unit_price(product, variant),
+                variant_id=variant.id if variant is not None else None,
+                variant_label=variant.label() if variant is not None else None,
             )
+            if variant is not None:
+                variant.stock -= cart_item.quantity
             product.stock -= cart_item.quantity
 
         vendor_notifications.append((vendor.user_id, vendor.shop_name, len(vendor_items), amount))
@@ -250,6 +266,13 @@ async def cancel_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Ord
             product = await catalog_repository.get_product_by_id(db, item.product_id)
             if product is not None:
                 product.stock += item.quantity
+            # item.variant_id peut déjà être None si la variante a été
+            # supprimée depuis (ON DELETE SET NULL) — dans ce cas seul le
+            # stock produit ci-dessus est restauré, comportement attendu.
+            if item.variant_id is not None:
+                variant = await catalog_repository.get_variant_by_id(db, item.variant_id)
+                if variant is not None:
+                    variant.stock += item.quantity
 
     order.status = OrderStatus.CANCELLED
     await payments_service.mark_cancelled(db, order.id)
@@ -467,6 +490,10 @@ async def update_sub_order_status(
             product = await catalog_repository.get_product_by_id(db, item.product_id)
             if product is not None:
                 product.stock += item.quantity
+            if item.variant_id is not None:
+                variant = await catalog_repository.get_variant_by_id(db, item.variant_id)
+                if variant is not None:
+                    variant.stock += item.quantity
 
     sub_order.status = data.status
     await db.flush()

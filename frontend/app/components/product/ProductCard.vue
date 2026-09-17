@@ -56,7 +56,7 @@ async function quickAdd(event: MouseEvent) {
         <span v-else-if="isLowStock" class="product-card__stock-tag product-card__stock-tag--low">Derniers exemplaires</span>
 
         <button
-          v-if="!isOutOfStock"
+          v-if="!isOutOfStock && product.variants.length === 0"
           type="button"
           class="product-card__quick-add"
           :class="{ 'product-card__quick-add--done': justAdded }"

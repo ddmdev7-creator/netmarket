@@ -13,6 +13,9 @@ from app.catalog.schemas import (
     ProductFilters,
     ProductRead,
     ProductUpdate,
+    ProductVariantCreate,
+    ProductVariantRead,
+    ProductVariantUpdate,
     my_product_filters,
     product_filters,
 )
@@ -124,3 +127,52 @@ async def delete_product(
 ) -> Message:
     await service.delete_product(db, current_user, product_id)
     return Message(detail="Produit supprimé.")
+
+
+# --- Product variants (imbriquées sous le produit, pas de GET dédié — toujours
+# lues via GET /products/{id}) ---
+
+
+@router.post(
+    "/products/{product_id}/variants",
+    response_model=ProductVariantRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role(UserRole.VENDOR, UserRole.ADMIN))],
+)
+async def create_variant(
+    product_id: uuid.UUID,
+    payload: ProductVariantCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProductVariantRead:
+    return await service.create_variant(db, current_user, product_id, payload)
+
+
+@router.patch(
+    "/products/{product_id}/variants/{variant_id}",
+    response_model=ProductVariantRead,
+    dependencies=[Depends(require_role(UserRole.VENDOR, UserRole.ADMIN))],
+)
+async def update_variant(
+    product_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    payload: ProductVariantUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ProductVariantRead:
+    return await service.update_variant(db, current_user, product_id, variant_id, payload)
+
+
+@router.delete(
+    "/products/{product_id}/variants/{variant_id}",
+    response_model=Message,
+    dependencies=[Depends(require_role(UserRole.VENDOR, UserRole.ADMIN))],
+)
+async def delete_variant(
+    product_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Message:
+    await service.delete_variant(db, current_user, product_id, variant_id)
+    return Message(detail="Variante supprimée.")

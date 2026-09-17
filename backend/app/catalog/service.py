@@ -6,10 +6,17 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import repository
-from app.catalog.models import Category, Product
-from app.catalog.schemas import CategoryCreate, ProductCreate, ProductFilters, ProductUpdate
+from app.catalog.models import Category, Product, ProductVariant, ProductVariantAttribute
+from app.catalog.schemas import (
+    CategoryCreate,
+    ProductCreate,
+    ProductFilters,
+    ProductUpdate,
+    ProductVariantCreate,
+    ProductVariantUpdate,
+)
 from app.common.delivery_estimate import estimate_delivery_window
-from app.core.exceptions import ForbiddenError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.pagination import PageParams
 from app.reviews import repository as reviews_repository
 from app.users.models import User, UserRole
@@ -140,6 +147,9 @@ async def update_product(db: AsyncSession, user: User, product_id: uuid.UUID, da
     if data.category_id is not None and await repository.get_category_by_id(db, data.category_id) is None:
         raise NotFoundError("Catégorie introuvable.")
 
+    if data.stock is not None and product.variants:
+        raise ConflictError("Le stock de ce produit est calculé automatiquement à partir de ses variantes.")
+
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
 
@@ -151,4 +161,79 @@ async def delete_product(db: AsyncSession, user: User, product_id: uuid.UUID) ->
     product = await get_product(db, product_id)
     await _check_product_owner(db, product, user)
     await repository.delete_product(db, product)
+    await db.commit()
+
+
+# --- Product variants ---
+
+
+async def _sync_product_stock_from_variants(db: AsyncSession, product_id: uuid.UUID) -> None:
+    """Maintient Product.stock = somme du stock de ses variantes, dès qu'il en
+    a au moins une (voir le commentaire sur ProductVariant dans
+    catalog/models.py). Cas limite assumé : supprimer la dernière variante
+    remet le stock à 0 (somme sur ensemble vide) — le vendeur doit alors
+    ressaisir un stock de base via PATCH /products/{id} s'il repasse en mode
+    "sans variante"."""
+    total = await repository.sum_variant_stock(db, product_id)
+    product = await repository.get_product_by_id(db, product_id)
+    if product is not None:
+        product.stock = total
+
+
+async def _get_owned_variant(
+    db: AsyncSession, user: User, product_id: uuid.UUID, variant_id: uuid.UUID
+) -> tuple[Product, ProductVariant]:
+    product = await get_product(db, product_id)
+    await _check_product_owner(db, product, user)
+    variant = await repository.get_variant_by_id(db, variant_id)
+    if variant is None or variant.product_id != product.id:
+        raise NotFoundError("Variante introuvable.")
+    return product, variant
+
+
+async def create_variant(
+    db: AsyncSession, user: User, product_id: uuid.UUID, data: ProductVariantCreate
+) -> ProductVariant:
+    product = await get_product(db, product_id)
+    await _check_product_owner(db, product, user)
+
+    variant = await repository.create_variant(
+        db,
+        product_id=product.id,
+        sku=data.sku,
+        price=data.price,
+        stock=data.stock,
+        images=data.images,
+        attributes=[(a.name, a.value) for a in data.attributes],
+    )
+    await _sync_product_stock_from_variants(db, product.id)
+    await db.commit()
+    return await repository.get_variant_by_id(db, variant.id)
+
+
+async def update_variant(
+    db: AsyncSession, user: User, product_id: uuid.UUID, variant_id: uuid.UUID, data: ProductVariantUpdate
+) -> ProductVariant:
+    product, variant = await _get_owned_variant(db, user, product_id, variant_id)
+
+    updates = data.model_dump(exclude_unset=True, exclude={"attributes"})
+    for field, value in updates.items():
+        setattr(variant, field, value)
+    if data.attributes is not None:
+        # Remplacement complet plutôt qu'un diff pair par pair — plus simple
+        # et cohérent avec cascade="all, delete-orphan" sur la relation.
+        variant.attributes = [ProductVariantAttribute(name=a.name, value=a.value) for a in data.attributes]
+
+    if "stock" in updates:
+        await _sync_product_stock_from_variants(db, product.id)
+
+    await db.commit()
+    return await repository.get_variant_by_id(db, variant.id)
+
+
+async def delete_variant(db: AsyncSession, user: User, product_id: uuid.UUID, variant_id: uuid.UUID) -> None:
+    product, variant = await _get_owned_variant(db, user, product_id, variant_id)
+    await repository.delete_variant(db, variant)
+    await db.flush()
+    await _sync_product_stock_from_variants(db, product.id)
     await db.commit()

@@ -4,8 +4,9 @@ import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.catalog.models import Category, Product, ProductStatus
+from app.catalog.models import Category, Product, ProductStatus, ProductVariant, ProductVariantAttribute
 from app.catalog.schemas import ProductFilters, ProductSort
 from app.core.pagination import PageParams
 from app.vendors.models import Vendor
@@ -52,6 +53,7 @@ async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID) -> Product 
     stmt = (
         select(Product, Vendor.shop_name, Vendor.zone, Vendor.preparation_days)
         .join(Vendor, Product.vendor_id == Vendor.id)
+        .options(selectinload(Product.variants).selectinload(ProductVariant.attributes))
         .where(Product.id == product_id)
     )
     row = (await db.execute(stmt)).first()
@@ -103,6 +105,7 @@ async def list_products(
     paged_stmt = (
         stmt.join(Vendor, Product.vendor_id == Vendor.id)
         .add_columns(Vendor.shop_name, Vendor.zone, Vendor.preparation_days)
+        .options(selectinload(Product.variants).selectinload(ProductVariant.attributes))
         .order_by(order_by)
         .offset(params.offset)
         .limit(params.page_size)
@@ -139,3 +142,41 @@ async def list_low_stock_products(db: AsyncSession, vendor_id: uuid.UUID, thresh
         .order_by(Product.stock)
     )
     return list((await db.execute(stmt)).scalars().all())
+
+
+# --- Product variants ---
+
+
+async def create_variant(
+    db: AsyncSession,
+    *,
+    product_id: uuid.UUID,
+    sku: str | None,
+    price: int | None,
+    stock: int,
+    images: list[str] | None,
+    attributes: list[tuple[str, str]],
+) -> ProductVariant:
+    variant = ProductVariant(product_id=product_id, sku=sku, price=price, stock=stock, images=images)
+    variant.attributes = [ProductVariantAttribute(name=name, value=value) for name, value in attributes]
+    db.add(variant)
+    await db.flush()
+    return variant
+
+
+async def get_variant_by_id(db: AsyncSession, variant_id: uuid.UUID) -> ProductVariant | None:
+    stmt = (
+        select(ProductVariant)
+        .options(selectinload(ProductVariant.attributes))
+        .where(ProductVariant.id == variant_id)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def delete_variant(db: AsyncSession, variant: ProductVariant) -> None:
+    await db.delete(variant)
+
+
+async def sum_variant_stock(db: AsyncSession, product_id: uuid.UUID) -> int:
+    stmt = select(func.coalesce(func.sum(ProductVariant.stock), 0)).where(ProductVariant.product_id == product_id)
+    return (await db.execute(stmt)).scalar_one()

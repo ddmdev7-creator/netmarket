@@ -273,7 +273,10 @@ function formatDate(iso: string) {
       <div class="text-muted mb-3" style="font-size: 12px">{{ formatDate(so.created_at) }}</div>
 
       <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1" style="font-size: 13px">
-        <span>{{ item.product_name }} × {{ item.quantity }}</span>
+        <span
+          >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
+          {{ item.quantity }}</span
+        >
         <span>{{ formatGnf(item.unit_price * item.quantity) }}</span>
       </div>
 

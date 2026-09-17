@@ -161,5 +161,14 @@ class OrderItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     # Prix unitaire figé au moment de la commande (le prix produit peut changer ensuite).
     unit_price: Mapped[int] = mapped_column(Integer, nullable=False)
+    # SET NULL (pas CASCADE, contrairement à cart_items.variant_id) : une
+    # commande passée doit rester consultable même après suppression de la
+    # variante achetée — d'où variant_label ci-dessous, figé comme
+    # product_name/unit_price, seule source d'affichage une fois variant_id
+    # devenu None.
+    variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="SET NULL"), nullable=True
+    )
+    variant_label: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     sub_order: Mapped["SubOrder"] = relationship(back_populates="items")

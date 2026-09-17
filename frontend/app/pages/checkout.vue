@@ -271,7 +271,10 @@ function continueShopping() {
         <div v-for="group in cart.vendors" :key="group.vendor_id" class="mb-3">
           <div class="recap-shop-label mb-1">{{ group.shop_name }}</div>
           <div v-for="item in group.items" :key="item.id" class="d-flex justify-space-between text-meta">
-            <span>{{ item.product_name }} × {{ item.quantity }}</span>
+            <span
+              >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
+              {{ item.quantity }}</span
+            >
             <span>{{ formatGnf(item.subtotal) }}</span>
           </div>
         </div>

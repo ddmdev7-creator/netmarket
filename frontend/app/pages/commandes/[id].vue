@@ -80,7 +80,10 @@ function shortId(id: string) {
           <strong>{{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}</strong>
         </p>
         <div v-for="item in sub.items" :key="item.id" class="d-flex justify-space-between mt-1 text-meta">
-          <span>{{ item.product_name }} × {{ item.quantity }}</span>
+          <span
+            >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
+            {{ item.quantity }}</span
+          >
           <span class="amount">{{ formatGnf(item.unit_price * item.quantity) }}</span>
         </div>
 

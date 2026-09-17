@@ -3,9 +3,11 @@
 from datetime import date, timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.models import Category, Product
+from app.orders.models import OrderItem
 from app.users.models import User
 from app.vendors.models import Vendor
 from tests.conftest import auth_headers, make_vendor
@@ -17,6 +19,44 @@ async def _add_to_cart(client: AsyncClient, user: User, product: Product, quanti
     response = await client.post(
         "/cart/items",
         json={"product_id": str(product.id), "quantity": quantity},
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 201
+
+
+async def _create_variant(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    vendor_user: User,
+    product: Product,
+    *,
+    stock: int,
+    name: str = "Taille",
+    value: str = "M",
+) -> dict:
+    response = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": name, "value": value}], "stock": stock},
+        headers=auth_headers(vendor_user),
+    )
+    assert response.status_code == 201
+    # Product.variants a été chargée (vide) par cet appel, dans la même
+    # session de test partagée entre requêtes — sans ce rafraîchissement
+    # ciblé, elle resterait figée à vide pour le reste du test (une vraie
+    # requête HTTP séparée en production n'a pas ce souci, chaque requête
+    # ouvrant sa propre session). expire_all() serait trop large ici : ça
+    # périmerait aussi vendor_user etc., dont l'accès synchrone ensuite (hors
+    # contexte async) ferait planter SQLAlchemy.
+    await db_session.refresh(product, attribute_names=["variants"])
+    return response.json()
+
+
+async def _add_variant_to_cart(
+    client: AsyncClient, user: User, product: Product, variant_id: str, quantity: int = 1
+) -> None:
+    response = await client.post(
+        "/cart/items",
+        json={"product_id": str(product.id), "variant_id": variant_id, "quantity": quantity},
         headers=auth_headers(user),
     )
     assert response.status_code == 201
@@ -291,3 +331,97 @@ async def test_buyer_cannot_cancel_after_vendor_confirms(
     response = await client.post(f"/orders/{order['id']}/cancel", headers=auth_headers(buyer_user))
 
     assert response.status_code == 409
+
+
+# --- Checkout / cancellation with product variants ---
+
+
+async def test_checkout_decrements_variant_stock_and_product_total(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor_user: User, product: Product
+) -> None:
+    variant = await _create_variant(client, db_session, vendor_user, product, stock=5)
+    await _add_variant_to_cart(client, buyer_user, product, variant["id"], quantity=2)
+
+    response = await client.post("/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user))
+
+    assert response.status_code == 201
+    item = response.json()["sub_orders"][0]["items"][0]
+    assert item["variant_id"] == variant["id"]
+    assert item["variant_label"] == "Taille : M"
+
+    await db_session.refresh(product)
+    assert product.stock == 3
+
+    product_response = await client.get(f"/products/{product.id}")
+    updated_variant = next(v for v in product_response.json()["variants"] if v["id"] == variant["id"])
+    assert updated_variant["stock"] == 3
+
+
+async def test_checkout_insufficient_variant_stock_fails_and_does_not_mutate_stock(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor_user: User, product: Product
+) -> None:
+    variant = await _create_variant(client, db_session, vendor_user, product, stock=2)
+    await _add_variant_to_cart(client, buyer_user, product, variant["id"], quantity=3)
+
+    response = await client.post("/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user))
+
+    assert response.status_code == 409
+    await db_session.refresh(product)
+    assert product.stock == 2
+
+    product_response = await client.get(f"/products/{product.id}")
+    unchanged_variant = next(v for v in product_response.json()["variants"] if v["id"] == variant["id"])
+    assert unchanged_variant["stock"] == 2
+
+
+async def test_buyer_can_cancel_pending_order_and_variant_stock_is_restored(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor_user: User, product: Product
+) -> None:
+    variant = await _create_variant(client, db_session, vendor_user, product, stock=5)
+    await _add_variant_to_cart(client, buyer_user, product, variant["id"], quantity=3)
+    checkout_response = await client.post(
+        "/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user)
+    )
+    order_id = checkout_response.json()["id"]
+
+    response = await client.post(f"/orders/{order_id}/cancel", headers=auth_headers(buyer_user))
+
+    assert response.status_code == 200
+    await db_session.refresh(product)
+    assert product.stock == 5
+
+    product_response = await client.get(f"/products/{product.id}")
+    restored_variant = next(v for v in product_response.json()["variants"] if v["id"] == variant["id"])
+    assert restored_variant["stock"] == 5
+
+
+async def test_order_item_freezes_variant_label_after_variant_deleted(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor_user: User, product: Product
+) -> None:
+    variant = await _create_variant(client, db_session, vendor_user, product, stock=5)
+    await _add_variant_to_cart(client, buyer_user, product, variant["id"], quantity=1)
+    checkout_response = await client.post(
+        "/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user)
+    )
+    order_id = checkout_response.json()["id"]
+
+    delete_response = await client.delete(
+        f"/products/{product.id}/variants/{variant['id']}", headers=auth_headers(vendor_user)
+    )
+    assert delete_response.status_code == 200
+
+    # La suppression déclenche un ON DELETE SET NULL côté Postgres, invisible
+    # à l'identity map SQLAlchemy tant qu'on ne force pas un rechargement —
+    # un vrai processus web n'a pas ce problème (nouvelle session par
+    # requête), mais ce test partage une session entre chaque appel client.
+    # populate_existing force la ligne OrderItem déjà en mémoire à se
+    # resynchroniser sur l'état actuel de la base (variant_id = NULL).
+    item_id = checkout_response.json()["sub_orders"][0]["items"][0]["id"]
+    await db_session.execute(
+        select(OrderItem).where(OrderItem.id == item_id).execution_options(populate_existing=True)
+    )
+
+    order_response = await client.get(f"/orders/{order_id}", headers=auth_headers(buyer_user))
+    item = order_response.json()["sub_orders"][0]["items"][0]
+    assert item["variant_label"] == "Taille : M"
+    assert item["variant_id"] is None

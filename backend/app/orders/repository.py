@@ -88,6 +88,8 @@ async def create_order_item(
     product_name: str,
     quantity: int,
     unit_price: int,
+    variant_id: uuid.UUID | None = None,
+    variant_label: str | None = None,
 ) -> OrderItem:
     item = OrderItem(
         sub_order_id=sub_order_id,
@@ -95,6 +97,8 @@ async def create_order_item(
         product_name=product_name,
         quantity=quantity,
         unit_price=unit_price,
+        variant_id=variant_id,
+        variant_label=variant_label,
     )
     db.add(item)
     await db.flush()

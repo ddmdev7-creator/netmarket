@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.catalog.models import Category
+from app.catalog.models import Category, Product
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor, VendorStatus
 from tests.conftest import auth_headers, make_user
@@ -220,3 +220,136 @@ async def test_admin_can_delete_any_product(
 
     assert response.status_code == 200
     assert (await client.get(f"/products/{product_id}")).status_code == 404
+
+
+# --- Product variants ---
+
+
+async def test_vendor_can_create_variant_with_generic_attributes(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, product: Product
+) -> None:
+    response = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Couleur", "value": "Rouge"}, {"name": "Taille", "value": "M"}], "stock": 3},
+        headers=auth_headers(vendor_user),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["stock"] == 3
+    assert {(a["name"], a["value"]) for a in body["attributes"]} == {("Couleur", "Rouge"), ("Taille", "M")}
+
+    # La collection Product.variants a été chargée (vide) par ce même appel
+    # POST plus haut, dans la même session de test partagée entre requêtes —
+    # sans ce rafraîchissement ciblé, elle resterait figée à vide pour le
+    # reste du test (une vraie requête HTTP séparée en production n'a pas ce
+    # souci, chaque requête ouvrant sa propre session). expire_all() serait
+    # trop large ici : ça périmerait aussi vendor_user etc., dont l'accès
+    # synchrone ensuite (hors contexte async) ferait planter SQLAlchemy.
+    await db_session.refresh(product, attribute_names=["variants"])
+
+    get_response = await client.get(f"/products/{product.id}")
+    assert len(get_response.json()["variants"]) == 1
+
+
+async def test_create_variant_requires_at_least_one_attribute(
+    client: AsyncClient, vendor_user: User, product: Product
+) -> None:
+    response = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [], "stock": 3},
+        headers=auth_headers(vendor_user),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_vendor_cannot_create_variant_for_another_vendors_product(
+    client: AsyncClient, db_session: AsyncSession, product: Product
+) -> None:
+    other_user = await make_user(db_session, phone="+224620009998", role=UserRole.VENDOR)
+    other_vendor = Vendor(user_id=other_user.id, shop_name="Autre Boutique 2", status=VendorStatus.APPROVED)
+    db_session.add(other_vendor)
+    await db_session.flush()
+
+    response = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Couleur", "value": "Bleu"}]},
+        headers=auth_headers(other_user),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_creating_variants_updates_product_stock_denormalized_total(
+    client: AsyncClient, vendor_user: User, product: Product
+) -> None:
+    headers = auth_headers(vendor_user)
+    await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "S"}], "stock": 3},
+        headers=headers,
+    )
+    await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "M"}], "stock": 5},
+        headers=headers,
+    )
+
+    response = await client.get(f"/products/{product.id}")
+
+    assert response.json()["stock"] == 8
+
+
+async def test_update_variant_stock_adjusts_product_stock(
+    client: AsyncClient, vendor_user: User, product: Product
+) -> None:
+    headers = auth_headers(vendor_user)
+    created = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "S"}], "stock": 3},
+        headers=headers,
+    )
+    variant_id = created.json()["id"]
+
+    await client.patch(f"/products/{product.id}/variants/{variant_id}", json={"stock": 9}, headers=headers)
+    response = await client.get(f"/products/{product.id}")
+
+    assert response.json()["stock"] == 9
+
+
+async def test_delete_variant_recomputes_product_stock(
+    client: AsyncClient, vendor_user: User, product: Product
+) -> None:
+    headers = auth_headers(vendor_user)
+    first = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "S"}], "stock": 3},
+        headers=headers,
+    )
+    await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "M"}], "stock": 5},
+        headers=headers,
+    )
+
+    await client.delete(f"/products/{product.id}/variants/{first.json()['id']}", headers=headers)
+    response = await client.get(f"/products/{product.id}")
+
+    assert response.json()["stock"] == 5
+
+
+async def test_updating_product_stock_directly_is_rejected_once_variants_exist(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, product: Product
+) -> None:
+    headers = auth_headers(vendor_user)
+    await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Taille", "value": "S"}], "stock": 3},
+        headers=headers,
+    )
+    await db_session.refresh(product, attribute_names=["variants"])  # voir le commentaire équivalent plus haut
+
+    response = await client.patch(f"/products/{product.id}", json={"stock": 999}, headers=headers)
+
+    assert response.status_code == 409
