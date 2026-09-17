@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhX } from '@phosphor-icons/vue'
+import { PhCaretLeft, PhCaretRight, PhImage, PhX } from '@phosphor-icons/vue'
 
 const props = defineProps<{ images: string[]; alt: string }>()
 
@@ -17,6 +17,13 @@ function onScroll() {
 
 function scrollTo(index: number) {
   scrollerEl.value?.scrollTo({ left: index * scrollerEl.value.clientWidth, behavior: 'smooth' })
+}
+
+function prev() {
+  if (activeIndex.value > 0) scrollTo(activeIndex.value - 1)
+}
+function next() {
+  if (activeIndex.value < resolvedImages.value.length - 1) scrollTo(activeIndex.value + 1)
 }
 
 // Visionneuse plein écran : même liste d'images, image de départ = celle
@@ -41,6 +48,16 @@ function onLightboxScroll() {
   if (!el || el.clientWidth === 0) return
   lightboxIndex.value = Math.round(el.scrollLeft / el.clientWidth)
 }
+
+function lightboxScrollTo(index: number) {
+  lightboxScrollerEl.value?.scrollTo({ left: index * lightboxScrollerEl.value.clientWidth, behavior: 'smooth' })
+}
+function lightboxPrev() {
+  if (lightboxIndex.value > 0) lightboxScrollTo(lightboxIndex.value - 1)
+}
+function lightboxNext() {
+  if (lightboxIndex.value < resolvedImages.value.length - 1) lightboxScrollTo(lightboxIndex.value + 1)
+}
 </script>
 
 <template>
@@ -63,17 +80,38 @@ function onLightboxScroll() {
           <img :src="src" :alt="`${alt} — photo ${i + 1}`" class="gallery__image" />
         </button>
       </div>
-      <div v-if="images.length > 1" class="gallery__dots">
+      <template v-if="images.length > 1">
         <button
-          v-for="(src, i) in images"
-          :key="src + i"
           type="button"
-          class="gallery__dot"
-          :class="{ 'gallery__dot--active': i === activeIndex }"
-          :aria-label="`Photo ${i + 1}`"
-          @click="scrollTo(i)"
-        />
-      </div>
+          class="gallery__nav gallery__nav--prev"
+          aria-label="Photo précédente"
+          :disabled="activeIndex === 0"
+          @click="prev"
+        >
+          <PhCaretLeft :size="16" weight="bold" />
+        </button>
+        <button
+          type="button"
+          class="gallery__nav gallery__nav--next"
+          aria-label="Photo suivante"
+          :disabled="activeIndex === resolvedImages.length - 1"
+          @click="next"
+        >
+          <PhCaretRight :size="16" weight="bold" />
+        </button>
+
+        <div class="gallery__dots">
+          <button
+            v-for="(src, i) in images"
+            :key="src + i"
+            type="button"
+            class="gallery__dot"
+            :class="{ 'gallery__dot--active': i === activeIndex }"
+            :aria-label="`Photo ${i + 1}`"
+            @click="scrollTo(i)"
+          />
+        </div>
+      </template>
     </template>
   </div>
 
@@ -83,6 +121,27 @@ function onLightboxScroll() {
         <PhX :size="20" />
       </button>
       <div v-if="images.length > 1" class="lightbox__counter">{{ lightboxIndex + 1 }} / {{ images.length }}</div>
+
+      <template v-if="images.length > 1">
+        <button
+          type="button"
+          class="lightbox__nav lightbox__nav--prev"
+          aria-label="Photo précédente"
+          :disabled="lightboxIndex === 0"
+          @click="lightboxPrev"
+        >
+          <PhCaretLeft :size="22" weight="bold" />
+        </button>
+        <button
+          type="button"
+          class="lightbox__nav lightbox__nav--next"
+          aria-label="Photo suivante"
+          :disabled="lightboxIndex === resolvedImages.length - 1"
+          @click="lightboxNext"
+        >
+          <PhCaretRight :size="22" weight="bold" />
+        </button>
+      </template>
 
       <div ref="lightboxScrollerEl" class="lightbox__scroller" @scroll="onLightboxScroll">
         <div v-for="(src, i) in resolvedImages" :key="src + i" class="lightbox__slide">
@@ -164,6 +223,45 @@ function onLightboxScroll() {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+/* Flèches précédent/suivant, centrées verticalement sur les bords gauche/
+   droit — le pattern carrousel classique, en complément des points en bas
+   (voir .gallery__dots) et du swipe déjà possible sur .gallery__scroller. */
+.gallery__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.gallery__nav:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.gallery__nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.gallery__nav--prev {
+  left: 10px;
+}
+
+.gallery__nav--next {
+  right: 10px;
 }
 
 .gallery__dots {
@@ -269,5 +367,41 @@ function onLightboxScroll() {
   background: rgba(255, 255, 255, 0.12);
   padding: 3px 10px;
   border-radius: 999px;
+}
+
+.lightbox__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.lightbox__nav:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.lightbox__nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.lightbox__nav--prev {
+  left: 12px;
+}
+
+.lightbox__nav--next {
+  right: 12px;
 }
 </style>

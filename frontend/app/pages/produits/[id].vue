@@ -60,6 +60,29 @@ const attributeGroups = computed(() => {
   return order.map((name) => ({ name, values: values.get(name)! }))
 })
 
+// Variantes encore possibles compte tenu de la sélection (même partielle) —
+// sert à la fois à filtrer les valeurs proposées (on ne laisse jamais
+// construire une combinaison qui n'existe pas) et à prévisualiser une image
+// dès qu'un seul attribut est choisi, sans attendre que la combinaison soit
+// complète.
+function variantsMatchingSelection(partial: Record<string, string>) {
+  if (!product.value) return []
+  const entries = Object.entries(partial)
+  return product.value.variants.filter((v) =>
+    entries.every(([name, value]) => v.attributes.some((a) => a.name === name && a.value === value)),
+  )
+}
+
+const possibleVariants = computed(() => (hasVariants.value ? variantsMatchingSelection(selected) : []))
+
+// Une valeur reste proposable si, en l'ajoutant à la sélection actuelle des
+// AUTRES attributs, au moins une variante correspond encore — évite de
+// pouvoir construire un choix qui ne mène à aucune variante (ex. Rouge
+// n'existe qu'en M/L : XS devient grisé dès que Rouge est choisi).
+function isValueAvailable(groupName: string, value: string): boolean {
+  return variantsMatchingSelection({ ...selected, [groupName]: value }).length > 0
+}
+
 const activeVariant = computed(() => {
   if (!product.value || !hasVariants.value) return null
   const groups = attributeGroups.value
@@ -72,11 +95,25 @@ const activeVariant = computed(() => {
 })
 
 // Sélection complète (une valeur par attribut) mais qui ne correspond à
-// aucune variante existante — les variantes sont une liste explicite, pas
-// toutes les combinaisons couleur×taille possibles.
+// aucune variante existante — ne devrait plus guère arriver maintenant que
+// les valeurs impossibles sont grisées au fur et à mesure (voir
+// isValueAvailable), gardé comme filet de sécurité.
 const selectionIncomplete = computed(
   () => hasVariants.value && Object.keys(selected).length === attributeGroups.value.length && !activeVariant.value,
 )
+
+// Pour la galerie uniquement : dès qu'un attribut est choisi (même sans
+// combinaison complète), montre la photo de la première variante encore
+// possible qui en a une — ex. choisir "Noir" affiche tout de suite une
+// variante noire, avant même d'avoir choisi la taille. Le prix/stock reste
+// lui piloté par activeVariant (correspondance exacte) : ils ne doivent
+// jamais laisser croire qu'une variante précise est sélectionnée avant que
+// ce soit vraiment le cas.
+const previewVariant = computed(() => {
+  if (!hasVariants.value || Object.keys(selected).length === 0) return null
+  if (activeVariant.value) return activeVariant.value
+  return possibleVariants.value.find((v) => v.images && v.images.length > 0) ?? possibleVariants.value[0] ?? null
+})
 
 const effectiveStock = computed(() => {
   if (!product.value) return 0
@@ -90,7 +127,7 @@ const effectivePrice = computed(() => {
 
 const effectiveImages = computed(() => {
   if (!product.value) return []
-  return activeVariant.value?.images?.length ? activeVariant.value.images : product.value.images
+  return previewVariant.value?.images?.length ? previewVariant.value.images : product.value.images
 })
 
 const stockLabel = computed(() => {
@@ -182,21 +219,24 @@ async function addToCart() {
         </div>
 
         <div v-if="hasVariants" class="mb-4">
-          <div v-for="group in attributeGroups" :key="group.name" class="mb-3">
-            <div class="text-muted mb-1 text-meta">{{ group.name }}</div>
-            <div class="d-flex flex-wrap ga-2">
-              <v-chip
-                v-for="value in group.values"
-                :key="value"
-                :variant="selected[group.name] === value ? 'flat' : 'outlined'"
-                :color="selected[group.name] === value ? 'primary' : undefined"
-                @click="selectAttribute(group.name, value)"
-              >
-                {{ value }}
-              </v-chip>
+          <div class="attribute-groups">
+            <div v-for="group in attributeGroups" :key="group.name" class="attribute-group">
+              <div class="text-muted mb-1 text-meta">{{ group.name }}</div>
+              <div class="d-flex flex-wrap ga-2">
+                <v-chip
+                  v-for="value in group.values"
+                  :key="value"
+                  :variant="selected[group.name] === value ? 'flat' : 'outlined'"
+                  :color="selected[group.name] === value ? 'primary' : undefined"
+                  :disabled="selected[group.name] !== value && !isValueAvailable(group.name, value)"
+                  @click="selectAttribute(group.name, value)"
+                >
+                  {{ value }}
+                </v-chip>
+              </div>
             </div>
           </div>
-          <p v-if="selectionIncomplete" class="mb-0 text-meta" style="color: var(--color-error)">
+          <p v-if="selectionIncomplete" class="mt-3 mb-0 text-meta" style="color: var(--color-error)">
             Cette combinaison n'est pas disponible.
           </p>
         </div>
@@ -307,6 +347,21 @@ async function addToCart() {
 .description-content :deep(ol) {
   margin: 0 0 8px;
   padding-left: 20px;
+}
+
+/* Un groupe d'attributs (ex. "Couleur") par colonne dès qu'il y a la place
+   — empilés verticalement sur mobile (comportement inchangé), côte à côte
+   sur desktop plutôt que de scroller une longue liste de groupes. */
+.attribute-groups {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 480px) {
+  .attribute-groups {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
 }
 
 @media (min-width: 960px) {
