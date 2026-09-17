@@ -90,7 +90,7 @@ watch(page, () => refresh())
 </script>
 
 <template>
-  <div class="pa-4">
+  <div class="px-3 py-4">
     <div class="d-flex align-center ga-2 mb-3">
       <v-text-field
         v-model="search"
