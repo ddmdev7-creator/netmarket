@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhMapPin } from '@phosphor-icons/vue'
 import type { VendorRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
@@ -8,6 +8,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const { apiFetch } = useApi()
 const toast = useToastStore()
+const { locating, locate } = useGeolocation()
 
 // Already a vendor (or came back to this page after registering) — nothing
 // to do here, send them to whichever step is next.
@@ -18,7 +19,25 @@ if (auth.user?.role === 'vendor') {
 const shopName = ref('')
 const zone = ref('')
 const email = ref(auth.user?.email ?? '')
+const latitude = ref<number | null>(null)
+const longitude = ref<number | null>(null)
 const submitting = ref(false)
+
+const hasPosition = computed(() => latitude.value !== null && longitude.value !== null)
+const positionLabel = computed(() =>
+  hasPosition.value ? `${latitude.value!.toFixed(4)}, ${longitude.value!.toFixed(4)}` : '',
+)
+
+async function useCurrentPosition() {
+  try {
+    const position = await locate()
+    latitude.value = position.latitude
+    longitude.value = position.longitude
+    toast.success('Position enregistrée.')
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Impossible de récupérer ta position.')
+  }
+}
 
 async function submit() {
   if (shopName.value.trim().length < 2) {
@@ -33,7 +52,13 @@ async function submit() {
   try {
     await apiFetch<VendorRead>('/vendors/me', {
       method: 'POST',
-      body: { shop_name: shopName.value.trim(), zone: zone.value.trim() || undefined, email: email.value.trim() },
+      body: {
+        shop_name: shopName.value.trim(),
+        zone: zone.value.trim() || undefined,
+        email: email.value.trim(),
+        latitude: latitude.value,
+        longitude: longitude.value,
+      },
     })
     await auth.fetchMe()
     await router.push('/vendeur/verification-email')
@@ -71,7 +96,21 @@ async function submit() {
         <label class="field-label">Email</label>
         <v-text-field v-model="email" type="email" placeholder="ex: boutique@exemple.com" class="mb-2" />
 
-        <v-btn type="submit" color="primary" block size="large" :loading="submitting">Créer ma boutique</v-btn>
+        <label class="field-label">Position de la boutique (optionnel)</label>
+        <p class="text-muted mb-2" style="font-size: 11.5px">
+          Utilisée pour proposer la livraison au livreur disponible le plus proche. Modifiable plus tard.
+        </p>
+        <v-btn color="primary" variant="tonal" block :loading="locating" class="mb-2" @click="useCurrentPosition">
+          <PhMapPin :size="17" class="mr-1" />
+          {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
+        </v-btn>
+        <p class="text-muted mb-2" style="font-size: 11.5px">Ou touche la carte pour placer le repère toi-même.</p>
+        <CommonMapPicker v-model:latitude="latitude" v-model:longitude="longitude" class="mb-2" />
+        <div v-if="hasPosition" class="mb-4" style="font-size: 12px">
+          <span class="text-muted">{{ positionLabel }}</span>
+        </div>
+
+        <v-btn type="submit" color="primary" block size="large" class="mt-2" :loading="submitting">Créer ma boutique</v-btn>
       </v-form>
     </div>
   </div>

@@ -216,6 +216,6 @@ onBeforeUnmount(() => {
 .map-picker__error {
   margin-top: 6px;
   font-size: 11px;
-  color: var(--color-error, #e5484d);
+  color: var(--color-error);
 }
 </style>

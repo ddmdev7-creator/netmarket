@@ -7,7 +7,10 @@ const cartStore = useCartStore()
 const router = useRouter()
 const apiBase = useApiBase()
 
-await useAsyncData('panier-cart', () => cartStore.fetchCart())
+// pending matters here: cartStore.cart is null/undefined until this resolves,
+// which would otherwise read as "empty" (hasItems below) and flash the wrong
+// empty-state message during the initial fetch.
+const { pending } = await useAsyncData('panier-cart', () => cartStore.fetchCart())
 
 const itemCount = computed(() => cartStore.itemCount)
 const hasItems = computed(() => (cartStore.cart?.vendors.length ?? 0) > 0)
@@ -33,7 +36,10 @@ function goCheckout() {
     </div>
 
     <div class="px-4">
-      <CommonEmptyState v-if="!hasItems" message="Votre panier est vide." />
+      <div v-if="pending">
+        <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-two-line" class="mb-2" />
+      </div>
+      <CommonEmptyState v-else-if="!hasItems" message="Votre panier est vide." />
 
       <template v-else>
         <div v-for="group in cartStore.cart!.vendors" :key="group.vendor_id" class="vendor-group">
@@ -60,7 +66,7 @@ function goCheckout() {
                 <span style="font-size: 13px; font-weight: 600">{{ formatGnf(item.subtotal) }}</span>
               </div>
             </div>
-            <button class="cart-row__remove" @click="removeItem(item.id)">
+            <button class="cart-row__remove" aria-label="Retirer cet article" @click="removeItem(item.id)">
               <PhX :size="14" />
             </button>
           </div>
@@ -136,5 +142,9 @@ function goCheckout() {
   border: none;
   color: var(--color-neutral-600);
   align-self: flex-start;
+  /* Icon is 14px — padding brings the actual tap target to a proper mobile size. */
+  padding: 10px;
+  margin: -10px -10px 0 0;
+  cursor: pointer;
 }
 </style>

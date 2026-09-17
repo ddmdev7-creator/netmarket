@@ -15,15 +15,19 @@ class VendorRegister(BaseModel):
     # vendor — see app/vendors/service.py::register_vendor, which uses it to
     # send the verification code gating access to the vendor dashboard.
     email: EmailStr
+    # Position de la boutique, optionnelle dès la création — voir
+    # app/orders/service.py::start_dispatch, qui en a besoin pour trier les
+    # livreurs candidats par distance. Peut aussi être renseignée/mise à
+    # jour plus tard via VendorOwnerUpdate.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class VendorOwnerUpdate(BaseModel):
     shop_name: str | None = Field(default=None, min_length=2, max_length=150)
     zone: str | None = Field(default=None, max_length=150)
-    # Position de la boutique — voir app/orders/service.py::start_dispatch,
-    # qui en a besoin pour trier les livreurs candidats par distance.
-    latitude: float | None = None
-    longitude: float | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
     preparation_days: int | None = Field(
         default=None, ge=0, le=14, description="Délai de préparation habituel, en jours"
     )

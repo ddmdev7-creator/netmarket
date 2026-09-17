@@ -100,7 +100,7 @@ async function useCurrentPosition() {
     model.value.longitude = longitude
     toast.success('Position enregistrée.')
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Impossible de récupérer ta position.')
+    toast.error(e instanceof Error ? e.message : 'Impossible de récupérer votre position.')
   }
 }
 </script>
@@ -129,7 +129,7 @@ async function useCurrentPosition() {
         {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
       </v-btn>
 
-      <p class="text-muted mb-2" style="font-size: 11.5px">Ou touche la carte pour placer le repère toi-même.</p>
+      <p class="text-muted mb-2" style="font-size: 11.5px">Ou touchez la carte pour placer le repère vous-même.</p>
       <CommonMapPicker
         v-model:latitude="model.latitude"
         v-model:longitude="model.longitude"
@@ -137,7 +137,7 @@ async function useCurrentPosition() {
       />
 
       <div v-if="hasPosition" class="d-flex align-center ga-1 mb-3" style="font-size: 12px">
-        <PhCheckCircle :size="14" weight="fill" color="var(--color-success, #3da35d)" />
+        <PhCheckCircle :size="14" weight="fill" color="var(--color-success)" />
         <span class="text-muted">{{ positionLabel }}</span>
       </div>
       <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-3">
@@ -154,7 +154,7 @@ async function useCurrentPosition() {
       <template v-if="pickupPoints.length > 0">
         <label class="field-label">Choisir un point de retrait</label>
         <p class="text-muted mb-2" style="font-size: 11.5px">
-          Repère-toi sur la carte ou recherche un quartier, puis touche un point pour voir ses détails.
+          Repérez-vous sur la carte ou recherchez un quartier, puis touchez un point pour voir ses détails.
         </p>
         <CommonPickupPointsMap
           :points="pickupPoints"

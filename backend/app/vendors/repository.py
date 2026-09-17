@@ -18,8 +18,16 @@ async def get_by_user_id(db: AsyncSession, user_id: uuid.UUID) -> Vendor | None:
     return result.scalar_one_or_none()
 
 
-async def create(db: AsyncSession, *, user_id: uuid.UUID, shop_name: str, zone: str | None) -> Vendor:
-    vendor = Vendor(user_id=user_id, shop_name=shop_name, zone=zone)
+async def create(
+    db: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    shop_name: str,
+    zone: str | None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> Vendor:
+    vendor = Vendor(user_id=user_id, shop_name=shop_name, zone=zone, latitude=latitude, longitude=longitude)
     db.add(vendor)
     await db.flush()
     return vendor

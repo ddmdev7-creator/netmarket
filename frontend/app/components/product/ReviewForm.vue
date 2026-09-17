@@ -14,7 +14,7 @@ const submitting = ref(false)
 
 async function submit() {
   if (rating.value < 1) {
-    toast.error('Choisis une note.')
+    toast.error('Choisissez une note.')
     return
   }
   submitting.value = true
@@ -43,7 +43,7 @@ async function submit() {
       <div class="d-flex justify-center mb-3">
         <v-rating v-model="rating" color="var(--color-accent)" hover />
       </div>
-      <v-textarea v-model="comment" rows="3" placeholder="Ton avis (optionnel)" class="mb-3" />
+      <v-textarea v-model="comment" rows="3" placeholder="Votre avis (optionnel)" class="mb-3" />
       <div class="d-flex flex-column ga-2">
         <v-btn color="primary" block :loading="submitting" @click="submit">Publier</v-btn>
         <v-btn variant="text" block @click="open = false">Annuler</v-btn>

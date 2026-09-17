@@ -40,7 +40,7 @@ async function submit() {
     <v-card class="pa-4">
       <h2 class="text-h6 mb-3">Signaler</h2>
       <p class="text-muted mb-3" style="font-size: 12.5px">
-        Explique brièvement le problème — notre équipe va l'examiner.
+        Expliquez brièvement le problème — notre équipe va l'examiner.
       </p>
       <v-form @submit.prevent="submit">
         <v-textarea

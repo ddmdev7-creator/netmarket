@@ -23,6 +23,20 @@ async def test_register_vendor_promotes_role_and_is_pending(
     assert me.json()["role"] == "vendor"
 
 
+async def test_register_vendor_accepts_position(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User
+) -> None:
+    response = await client.post(
+        "/vendors/me",
+        json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", "latitude": 9.6412, "longitude": -13.5784},
+        headers=auth_headers(buyer_user),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["latitude"] == 9.6412
+    assert response.json()["longitude"] == -13.5784
+
+
 async def test_register_vendor_twice_fails(client: AsyncClient, buyer_user: User) -> None:
     headers = auth_headers(buyer_user)
     await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}, headers=headers)

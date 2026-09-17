@@ -69,7 +69,8 @@ function formatDate(iso: string) {
   background: none;
   border: none;
   color: var(--color-neutral-500);
-  padding: 2px;
+  padding: 10px;
+  margin: -10px;
   cursor: pointer;
 }
 </style>

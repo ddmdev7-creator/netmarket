@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhCaretRight, PhPlus, PhStar, PhTrash } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhCaretRight, PhPlus, PhStar, PhTrash, PhWarningCircle } from '@phosphor-icons/vue'
 import type { AddressRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
@@ -8,7 +8,7 @@ const router = useRouter()
 const { apiFetch } = useApi()
 const toast = useToastStore()
 
-const { data: addresses, pending, refresh } = await useAsyncData(
+const { data: addresses, pending, error, refresh } = await useAsyncData(
   'my-addresses',
   () => apiFetch<AddressRead[]>('/addresses'),
   { default: () => [], getCachedData: () => undefined },
@@ -63,7 +63,15 @@ async function deleteAddress() {
         Nouvelle adresse
       </v-btn>
 
-      <CommonEmptyState v-if="!pending && addresses.length === 0" message="Aucune adresse enregistrée pour l'instant." />
+      <div v-if="pending">
+        <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-two-line" class="mb-3" />
+      </div>
+      <CommonEmptyState
+        v-else-if="error"
+        :icon="PhWarningCircle"
+        message="Impossible de charger vos adresses. Réessayez plus tard."
+      />
+      <CommonEmptyState v-else-if="addresses.length === 0" message="Aucune adresse enregistrée pour l'instant." />
 
       <v-card v-for="a in addresses" :key="a.id" class="mb-3 pa-0">
         <NuxtLink :to="`/profil/adresses/${a.id}`" class="address-card-link">

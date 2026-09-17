@@ -147,7 +147,7 @@ watch(page, () => refresh())
       <v-card class="pa-4">
         <div class="text-subtitle-1 mb-4">Filtres</div>
 
-        <div class="text-muted mb-2" style="font-size: 12.5px">Prix (GNF)</div>
+        <div class="field-label">Prix (GNF)</div>
         <div class="d-flex ga-2 mb-4">
           <v-text-field v-model.number="minPrice" type="number" placeholder="Min" density="compact" hide-details />
           <v-text-field v-model.number="maxPrice" type="number" placeholder="Max" density="compact" hide-details />
@@ -155,7 +155,7 @@ watch(page, () => refresh())
 
         <v-switch v-model="inStockOnly" label="En stock uniquement" density="compact" hide-details class="mb-2" />
 
-        <div class="text-muted mb-2 mt-2" style="font-size: 12.5px">Trier par</div>
+        <div class="field-label mt-2">Trier par</div>
         <v-select
           v-model="sort"
           :items="SORT_OPTIONS"

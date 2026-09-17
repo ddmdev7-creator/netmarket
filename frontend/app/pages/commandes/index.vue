@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { PhWarningCircle } from '@phosphor-icons/vue'
 import type { OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
 const { apiFetch } = useApi()
 
-const { data: orders, pending } = await useAsyncData('my-orders', () => apiFetch<OrderRead[]>('/orders'), {
+const { data: orders, pending, error } = await useAsyncData('my-orders', () => apiFetch<OrderRead[]>('/orders'), {
   default: () => [],
 })
 
@@ -38,7 +39,15 @@ function formatDate(iso: string) {
       <v-btn value="done">Terminées</v-btn>
     </v-btn-toggle>
 
-    <CommonEmptyState v-if="!pending && visible.length === 0" message="Aucune commande ici pour le moment." />
+    <div v-if="pending">
+      <v-skeleton-loader v-for="n in 3" :key="n" type="list-item-two-line" class="mb-2" />
+    </div>
+    <CommonEmptyState
+      v-else-if="error"
+      :icon="PhWarningCircle"
+      message="Impossible de charger vos commandes. Réessayez plus tard."
+    />
+    <CommonEmptyState v-else-if="visible.length === 0" message="Aucune commande ici pour le moment." />
 
     <NuxtLink v-for="order in visible" :key="order.id" :to="`/commandes/${order.id}`" class="order-row">
       <div class="d-flex justify-space-between align-center">

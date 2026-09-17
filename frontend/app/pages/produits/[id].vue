@@ -175,7 +175,8 @@ async function addToCart() {
   background: none;
   border: none;
   color: var(--color-neutral-500);
-  padding: 4px;
+  padding: 10px;
+  margin: -10px;
   cursor: pointer;
 }
 </style>

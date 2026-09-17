@@ -46,7 +46,14 @@ async def register_vendor(db: AsyncSession, user: User, data: VendorRegister) ->
         # access to the dashboard is gated on this, see middleware/vendor.ts.
         user.email_verified = False
 
-    vendor = await repository.create(db, user_id=user.id, shop_name=data.shop_name, zone=data.zone)
+    vendor = await repository.create(
+        db,
+        user_id=user.id,
+        shop_name=data.shop_name,
+        zone=data.zone,
+        latitude=data.latitude,
+        longitude=data.longitude,
+    )
 
     # La boutique doit encore être validée par un administrateur, mais le
     # rôle change dès l'inscription pour donner accès au tableau de bord vendeur.

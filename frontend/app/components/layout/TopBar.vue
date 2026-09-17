@@ -106,7 +106,7 @@ const displayIdentity = computed(() => {
   height: 15px;
   padding: 0 3px;
   border-radius: 999px;
-  background: var(--color-error, #e5484d);
+  background: var(--color-error);
   color: #fff;
   font-size: 9.5px;
   font-weight: 700;

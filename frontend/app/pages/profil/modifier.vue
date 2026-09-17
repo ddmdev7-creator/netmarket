@@ -65,7 +65,7 @@ async function submit() {
       <v-text-field v-model="lastName" placeholder="Ex: Diallo" class="mb-2" />
 
       <label class="field-label">Email</label>
-      <v-text-field v-model="email" type="email" placeholder="ex: toi@exemple.com" class="mb-2" />
+      <v-text-field v-model="email" type="email" placeholder="ex: vous@exemple.com" class="mb-2" />
 
       <label class="field-label">Téléphone</label>
       <v-text-field :model-value="auth.user?.phone" disabled hint="Le téléphone ne peut pas être modifié." persistent-hint class="mb-4" />

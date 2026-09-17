@@ -170,20 +170,24 @@ function onLightboxScroll() {
 }
 
 .gallery__dot {
+  /* Visible dot stays 6px (background-clip: content-box keeps the padding
+     transparent) — the padding itself is what brings the actual tap target
+     up to a reasonable mobile size without changing how this looks. */
   width: 6px;
   height: 6px;
+  padding: 9px;
+  background-clip: content-box;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
+  background-color: rgba(255, 255, 255, 0.5);
   border: none;
-  padding: 0;
   cursor: pointer;
   transition:
-    background 0.15s ease,
+    background-color 0.15s ease,
     width 0.15s ease;
 }
 
 .gallery__dot--active {
-  background: var(--color-primary);
+  background-color: var(--color-primary);
   width: 16px;
   border-radius: 3px;
 }

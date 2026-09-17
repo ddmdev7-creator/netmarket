@@ -43,6 +43,13 @@
      fiches produit ; tout le reste de l'UI utilise --color-primary. */
   --color-accent: #e0822e;
 
+  /* Alignés sur les couleurs "success"/"error" des thèmes Vuetify
+     (theme/daylight.ts, theme/nocturne.ts — identiques dans les deux) pour
+     que le CSS brut (hors composants Vuetify) partage la même teinte au
+     lieu de réinventer son propre vert/rouge. */
+  --color-success: #3da35d;
+  --color-error: #e5484d;
+
   --color-divider: rgba(20, 21, 26, 0.08);
   --color-divider-strong: rgba(20, 21, 26, 0.14);
 

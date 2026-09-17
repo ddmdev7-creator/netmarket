@@ -188,7 +188,7 @@ async function quickAdd(event: MouseEvent) {
 }
 
 .product-card__quick-add--done {
-  background: #1fa855;
+  background: var(--color-success);
 }
 
 .product-card__quick-add-check {

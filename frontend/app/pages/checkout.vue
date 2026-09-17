@@ -291,7 +291,7 @@ function continueShopping() {
 
     <v-dialog :model-value="!!confirmedOrder" persistent max-width="340">
       <v-card v-if="confirmedOrder" class="pa-6 text-center">
-        <PhCheckCircle :size="44" weight="fill" color="#3da35d" style="margin: 0 auto" />
+        <PhCheckCircle :size="44" weight="fill" color="var(--color-success)" style="margin: 0 auto" />
         <div class="text-h6 mt-3">Commande confirmée</div>
         <div class="text-muted mt-2" style="font-size: 13px">
           Commande #{{ confirmedOrder.id.slice(0, 8).toUpperCase() }} · Paiement à la livraison<br />
