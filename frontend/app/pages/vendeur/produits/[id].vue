@@ -203,9 +203,13 @@ async function deleteProduct() {
     <template v-if="product">
       <VendorProductForm v-model="form" :categories="categories" />
 
-      <div class="d-flex ga-2 mt-4 flex-wrap">
-        <v-btn color="primary" size="large" :loading="submitting" @click="submit">Enregistrer les modifications</v-btn>
-        <v-btn variant="outlined" color="error" size="large" @click="confirmDelete = true">
+      <v-divider class="mt-5 mb-4" />
+
+      <div class="d-flex align-center justify-space-between ga-3 flex-wrap">
+        <v-btn color="primary" size="large" min-width="220" :loading="submitting" @click="submit">
+          Enregistrer les modifications
+        </v-btn>
+        <v-btn variant="text" color="error" @click="confirmDelete = true">
           <PhTrash :size="16" class="mr-1" />
           Supprimer le produit
         </v-btn>

@@ -101,15 +101,10 @@ async function submit() {
 
     <VendorProductForm v-model="form" :categories="categories" />
 
-    <v-btn color="primary" size="large" class="mt-4 submit-btn" :loading="submitting" @click="submit">
+    <v-divider class="mt-5 mb-4" />
+
+    <v-btn color="primary" size="large" min-width="220" :loading="submitting" @click="submit">
       Publier le produit
     </v-btn>
   </div>
 </template>
-
-<style scoped>
-.submit-btn {
-  width: 100%;
-  max-width: 320px;
-}
-</style>

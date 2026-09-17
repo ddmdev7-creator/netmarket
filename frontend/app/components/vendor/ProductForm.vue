@@ -147,85 +147,104 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
     <v-window v-model="tab">
       <v-window-item value="info">
-        <div class="form-panel">
-          <div class="form-grid">
-            <div>
-              <label class="field-label">Catégorie</label>
-              <v-select
-                v-model="model.category_id"
-                :items="categories"
-                item-title="name"
-                item-value="id"
-                placeholder="Choisir une catégorie"
-                variant="outlined"
-                density="comfortable"
-                class="mb-3"
-              />
-            </div>
-            <div>
-              <label class="field-label">Nom du produit</label>
-              <v-text-field
-                v-model="model.name"
-                placeholder="Ex: Riz parfumé 25kg"
-                variant="outlined"
-                density="comfortable"
-                class="mb-3"
-              />
-            </div>
+        <div class="panel-card panel-card--narrow">
+          <div class="panel-card__header">
+            <span class="panel-card__title">Informations générales</span>
           </div>
-
-          <label class="field-label">Description (optionnel)</label>
-          <v-textarea v-model="model.description" rows="4" variant="outlined" class="mb-3" />
-
-          <div class="form-grid">
-            <div>
-              <label class="field-label">Prix (GNF)</label>
-              <v-text-field
-                v-model.number="model.price"
-                type="number"
-                min="0"
-                variant="outlined"
-                density="comfortable"
-                class="mb-3"
-              />
+          <div class="panel-card__body">
+            <div class="form-grid">
+              <div>
+                <label class="field-label">Catégorie</label>
+                <v-select
+                  v-model="model.category_id"
+                  :items="categories"
+                  item-title="name"
+                  item-value="id"
+                  placeholder="Choisir une catégorie"
+                  variant="outlined"
+                  density="comfortable"
+                  class="mb-3"
+                />
+              </div>
+              <div>
+                <label class="field-label">Nom du produit</label>
+                <v-text-field
+                  v-model="model.name"
+                  placeholder="Ex: Riz parfumé 25kg"
+                  variant="outlined"
+                  density="comfortable"
+                  class="mb-3"
+                />
+              </div>
             </div>
-            <div>
-              <label class="field-label">Stock</label>
-              <v-text-field
-                v-model.number="model.stock"
-                type="number"
-                min="0"
-                variant="outlined"
-                density="comfortable"
-                :disabled="visibleVariants.length > 0"
-                :hint="visibleVariants.length > 0 ? 'Calculé automatiquement à partir des variantes.' : undefined"
-                :persistent-hint="visibleVariants.length > 0"
-                class="mb-3"
-              />
+
+            <label class="field-label">Description (optionnel)</label>
+            <v-textarea v-model="model.description" rows="4" variant="outlined" class="mb-3" />
+
+            <div class="form-grid">
+              <div>
+                <label class="field-label">Prix (GNF)</label>
+                <v-text-field
+                  v-model.number="model.price"
+                  type="number"
+                  min="0"
+                  variant="outlined"
+                  density="comfortable"
+                  class="mb-3"
+                />
+              </div>
+              <div>
+                <label class="field-label">Stock</label>
+                <v-text-field
+                  v-model.number="model.stock"
+                  type="number"
+                  min="0"
+                  variant="outlined"
+                  density="comfortable"
+                  :disabled="visibleVariants.length > 0"
+                  :hint="visibleVariants.length > 0 ? 'Calculé automatiquement à partir des variantes.' : undefined"
+                  :persistent-hint="visibleVariants.length > 0"
+                  class="mb-3"
+                />
+              </div>
             </div>
           </div>
         </div>
       </v-window-item>
 
       <v-window-item value="images">
-        <label class="field-label">Images — au moins 3 recommandées, la fiche produit affiche un carrousel</label>
-        <CommonImagePicker v-model="model.images">
-          <template #extra-actions>
-            <input
-              ref="enhanceFileInput"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              class="d-none"
-              @change="onEnhanceFilesSelected"
-            />
-            <v-btn variant="tonal" color="primary" size="small" class="mb-2" :loading="enhancing" @click="pickEnhanceFiles">
-              <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
-              <PhSparkle v-else :size="14" class="mr-1" />
-              Améliorer avec l'IA {{ isPremium ? '' : '(Premium)' }}
-            </v-btn>
-          </template>
-        </CommonImagePicker>
+        <div class="panel-card">
+          <div class="panel-card__header">
+            <span class="panel-card__title">Photos du produit</span>
+          </div>
+          <div class="panel-card__body">
+            <label class="field-label">Au moins 3 recommandées — la fiche produit affiche un carrousel</label>
+            <CommonImagePicker v-model="model.images">
+              <template #extra-actions>
+                <input
+                  ref="enhanceFileInput"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  class="d-none"
+                  @change="onEnhanceFilesSelected"
+                />
+                <v-btn
+                  variant="tonal"
+                  color="primary"
+                  size="small"
+                  class="mb-2"
+                  :loading="enhancing"
+                  @click="pickEnhanceFiles"
+                >
+                  <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
+                  <PhSparkle v-else :size="14" class="mr-1" />
+                  Améliorer avec l'IA {{ isPremium ? '' : '(Premium)' }}
+                </v-btn>
+              </template>
+            </CommonImagePicker>
+          </div>
+        </div>
       </v-window-item>
 
       <v-window-item value="variants">
@@ -240,15 +259,15 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
         />
 
         <div v-else class="variant-grid mb-4">
-          <v-card v-for="row in visibleVariants" :key="row._key" variant="flat" class="variant-card">
-            <div class="variant-card__header">
-              <span class="variant-card__title">{{ variantTitle(row) }}</span>
+          <div v-for="row in visibleVariants" :key="row._key" class="panel-card">
+            <div class="panel-card__header">
+              <span class="panel-card__title">{{ variantTitle(row) }}</span>
               <button type="button" class="icon-btn" aria-label="Supprimer cette variante" @click="removeVariant(row)">
                 <PhX :size="16" />
               </button>
             </div>
 
-            <div class="variant-card__body">
+            <div class="panel-card__body">
               <div class="attr-box">
                 <label class="field-label mb-2">Attributs</label>
                 <div v-for="(attr, ai) in row.attributes" :key="ai" class="d-flex ga-2 align-center mb-2">
@@ -326,7 +345,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
               <CommonImagePicker v-model="row.images" label="Photos de cette variante (optionnel)" />
             </div>
-          </v-card>
+          </div>
         </div>
 
         <v-btn variant="tonal" color="primary" @click="addVariant">
@@ -356,6 +375,21 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   background: var(--color-neutral-800);
 }
 
+/* Le bouton de suppression dans .panel-card__header est sur fond bleu
+   foncé (--color-primary-800) en permanence, dans les deux thèmes — un
+   survol clair plutôt que --color-neutral-800 (qui se fondrait dans ce
+   fond sombre au lieu de s'en détacher). */
+.panel-card__header .icon-btn {
+  color: var(--color-primary-100);
+  opacity: 0.75;
+}
+
+.panel-card__header .icon-btn:hover {
+  color: #fff;
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.14);
+}
+
 /* Catégorie/Nom puis Prix/Stock : une colonne sur mobile (comportement
    inchangé), deux dès qu'il y a la place. */
 .form-grid {
@@ -370,34 +404,38 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   }
 }
 
-/* Une carte de variante par ligne sur mobile, jusqu'à 3 sur un très grand
-   écran — le formulaire est affiché dans .dashboard-shell (1400px) côté
-   vendeur, cette grille est ce qui en profite le plus concrètement. */
+/* auto-fit + minmax(min(420px, 100%), 1fr) plutôt que des colonnes fixes
+   par media query : avec une seule variante, un grid-template-columns fixe
+   à "1fr 1fr" ne remplirait que la moitié du conteneur (la 2e colonne
+   resterait vide mais réservée) — auto-fit fait grandir la carte pour
+   occuper toute la largeur quand il n'y en a qu'une, et ne crée d'autres
+   colonnes que quand une 2e/3e carte tient vraiment à côté. min(420px,100%)
+   évite tout débordement sur mobile (sinon minmax(420px,...) imposerait
+   420px de large même sur un écran de téléphone plus étroit). */
 .variant-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
   gap: 16px;
+  align-items: start;
 }
 
-@media (min-width: 900px) {
-  .variant-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-@media (min-width: 1400px) {
-  .variant-grid {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
-}
-
-.variant-card {
+/* Carte blanche (fond de surface explicite plutôt que de compter sur le
+   variant Vuetify du dessous) avec un bandeau de titre coloré — même look
+   pour la fiche "Informations", "Photos" et chaque variante, plutôt que des
+   champs posés à nu sur le fond gris de la page. */
+.panel-card {
+  background: var(--color-neutral-900);
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
-.variant-card__header {
+.panel-card--narrow {
+  max-width: 720px;
+}
+
+.panel-card__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -405,14 +443,14 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   background: var(--color-primary-800);
 }
 
-.variant-card__title {
+.panel-card__title {
   font-weight: 700;
   font-size: 13.5px;
   color: var(--color-primary-100);
 }
 
-.variant-card__body {
-  padding: 16px;
+.panel-card__body {
+  padding: 20px;
 }
 
 /* Détache visuellement le bloc d'attributs (le cœur de "ce qui distingue
