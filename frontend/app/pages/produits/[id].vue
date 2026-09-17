@@ -350,18 +350,14 @@ async function addToCart() {
 }
 
 /* Un groupe d'attributs (ex. "Couleur") par colonne dès qu'il y a la place
-   — empilés verticalement sur mobile (comportement inchangé), côte à côte
-   sur desktop plutôt que de scroller une longue liste de groupes. */
+   — auto-fit plutôt qu'une media query : deux groupes courts (ex. "Couleur"
+   et "Taille") tiennent déjà côte à côte sur un écran de téléphone, pas la
+   peine d'attendre le format desktop pour ça. Ne repasse à une seule
+   colonne que si un groupe a trop de valeurs pour tenir sur 130px. */
 .attribute-groups {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
-@media (min-width: 480px) {
-  .attribute-groups {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  }
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px 16px;
 }
 
 @media (min-width: 960px) {

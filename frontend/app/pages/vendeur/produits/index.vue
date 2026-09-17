@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { PhImage, PhPlus } from '@phosphor-icons/vue'
+import { PhImage, PhPlus, PhTrash } from '@phosphor-icons/vue'
 import type { CategoryRead, Page, ProductRead, ProductStatus, StockLevel, VendorRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
 const { apiFetch } = useApi()
 const apiBase = useApiBase()
+const toast = useToastStore()
 const pageSize = 20
 
 // getCachedData: () => undefined — see app/pages/vendeur/index.vue for why:
@@ -75,6 +76,28 @@ function selectStock(value: StockLevel | 'all') {
 }
 
 const canPublish = computed(() => vendor.value?.status === 'approved')
+
+const confirmDeleteId = ref<string | null>(null)
+const deleting = ref(false)
+async function deleteProduct() {
+  if (!confirmDeleteId.value) return
+  deleting.value = true
+  try {
+    await apiFetch(`/products/${confirmDeleteId.value}`, { method: 'DELETE' })
+    toast.success('Produit supprimé.')
+    confirmDeleteId.value = null
+    await refresh()
+  } catch (e) {
+    toast.error(
+      apiErrorMessage(
+        e,
+        "Impossible de supprimer ce produit — il est probablement déjà référencé dans une commande. Tu peux le désactiver à la place.",
+      ),
+    )
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -152,9 +175,28 @@ const canPublish = computed(() => vendor.value?.status === 'approved')
       <v-chip :color="p.status === 'active' ? 'success' : 'default'" size="x-small" variant="tonal">
         {{ p.status === 'active' ? 'Actif' : 'Inactif' }}
       </v-chip>
+      <button
+        type="button"
+        class="product-row__delete"
+        aria-label="Supprimer ce produit"
+        @click.stop.prevent="confirmDeleteId = p.id"
+      >
+        <PhTrash :size="16" />
+      </button>
     </NuxtLink>
 
     <v-pagination v-if="pageCount > 1" v-model="page" :length="pageCount" density="compact" class="mt-4" />
+
+    <v-dialog :model-value="!!confirmDeleteId" max-width="340" @update:model-value="(v) => !v && (confirmDeleteId = null)">
+      <v-card class="pa-5">
+        <div class="text-subtitle-1 mb-2">Supprimer ce produit ?</div>
+        <p class="text-muted mb-4" style="font-size: 13px">Cette action est définitive.</p>
+        <div class="d-flex ga-2">
+          <v-btn variant="outlined" class="flex-grow-1" @click="confirmDeleteId = null">Annuler</v-btn>
+          <v-btn color="error" class="flex-grow-1" :loading="deleting" @click="deleteProduct">Supprimer</v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -218,5 +260,22 @@ const canPublish = computed(() => vendor.value?.status === 'approved')
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.product-row__delete {
+  background: none;
+  border: none;
+  color: var(--color-neutral-500);
+  flex-shrink: 0;
+  padding: 8px;
+  margin: -8px -4px -8px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.product-row__delete:hover {
+  color: var(--color-error);
+  background: var(--color-neutral-800);
 }
 </style>

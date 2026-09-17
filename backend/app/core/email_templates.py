@@ -75,7 +75,7 @@ def verification_code_email(code: str, ttl_minutes: int) -> tuple[str, str, str]
     subject = f"Votre code de vérification — {BRAND_NAME}"
     text = (
         f"Votre code de vérification est : {code}\n\n"
-        f"Il expire dans {ttl_minutes} minutes. Si tu n'es pas à l'origine de cette demande, ignore ce message."
+        f"Il expire dans {ttl_minutes} minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."
     )
     body_html = f"""\
 <h1 style="margin:0 0 12px; font-size:20px; color:{COLOR_TEXT};">Vérifiez votre adresse email</h1>
@@ -84,7 +84,7 @@ def verification_code_email(code: str, ttl_minutes: int) -> tuple[str, str, str]
 </p>
 {_code_block(code)}
 <p style="margin:0; font-size:14px; line-height:20px; color:{COLOR_MUTED};">
-  Ce code expire dans {ttl_minutes} minutes. Si tu n'es pas à l'origine de cette demande, ignore simplement ce message.
+  Ce code expire dans {ttl_minutes} minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez simplement ce message.
 </p>
 """
     return subject, text, _layout(preheader=f"Votre code : {code}", title=subject, body_html=body_html)
@@ -94,7 +94,7 @@ def password_reset_email(code: str, ttl_minutes: int) -> tuple[str, str, str]:
     subject = f"Réinitialisation de mot de passe — {BRAND_NAME}"
     text = (
         f"Votre code de réinitialisation est : {code}\n\n"
-        f"Il expire dans {ttl_minutes} minutes. Si tu n'es pas à l'origine de cette demande, ignore ce message."
+        f"Il expire dans {ttl_minutes} minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."
     )
     body_html = f"""\
 <h1 style="margin:0 0 12px; font-size:20px; color:{COLOR_TEXT};">Réinitialisation de mot de passe</h1>
@@ -103,7 +103,7 @@ def password_reset_email(code: str, ttl_minutes: int) -> tuple[str, str, str]:
 </p>
 {_code_block(code)}
 <p style="margin:0; font-size:14px; line-height:20px; color:{COLOR_MUTED};">
-  Ce code expire dans {ttl_minutes} minutes. Si tu n'es pas à l'origine de cette demande, ton mot de passe reste inchangé — ignore simplement ce message.
+  Ce code expire dans {ttl_minutes} minutes. Si vous n'êtes pas à l'origine de cette demande, votre mot de passe reste inchangé — ignorez simplement ce message.
 </p>
 """
     return subject, text, _layout(preheader=f"Votre code : {code}", title=subject, body_html=body_html)

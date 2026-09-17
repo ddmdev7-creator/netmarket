@@ -2,6 +2,7 @@
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 definePageMeta({ layout: 'blank' })
+useHead({ title: 'NdjouriMarket' })
 
 const auth = useAuthStore()
 const router = useRouter()

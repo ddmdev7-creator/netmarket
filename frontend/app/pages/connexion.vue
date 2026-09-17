@@ -2,6 +2,7 @@
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 definePageMeta({ layout: 'blank' })
+useHead({ title: 'NdjouriMarket' })
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -44,7 +45,7 @@ async function submit() {
         <v-text-field v-model="phone" label="Téléphone" placeholder="+224621234567" class="mb-2" />
         <v-text-field v-model="password" label="Mot de passe" type="password" class="mb-2" />
 
-        <div class="text-right mb-4">
+        <div class="text-center mb-4">
           <NuxtLink to="/mot-de-passe-oublie" class="text-primary text-meta">Mot de passe oublié ?</NuxtLink>
         </div>
 

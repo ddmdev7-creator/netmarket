@@ -271,9 +271,13 @@ function lightboxNext() {
   transform: translateX(-50%);
   display: flex;
   gap: 6px;
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.35);
+  /* Plus opaque qu'avant (0.35 → 0.6) : sur une photo produit à fond clair
+     (très courant en e-commerce), le fond semi-transparent laissait passer
+     trop de lumière et les points devenaient à peine visibles. */
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 .gallery__dot {
@@ -285,7 +289,8 @@ function lightboxNext() {
   padding: 9px;
   background-clip: content-box;
   border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.5);
+  /* 0.5 → 0.7 : même raison que le fond de .gallery__dots ci-dessus. */
+  background-color: rgba(255, 255, 255, 0.7);
   border: none;
   cursor: pointer;
   transition:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhLink, PhSpinner, PhUploadSimple, PhX } from '@phosphor-icons/vue'
+import { PhImage, PhLink, PhSpinner, PhStar, PhUploadSimple, PhX } from '@phosphor-icons/vue'
 
 // Bloc upload/grille/URL manuelle factorisé depuis ProductForm.vue — utilisé
 // à la fois pour les images du produit (avec le bouton "Améliorer avec l'IA"
@@ -43,6 +43,16 @@ function removeImage(index: number) {
   images.value.splice(index, 1)
 }
 
+// La 1ère image du tableau est la convention déjà utilisée partout où une
+// seule photo est affichée (carte produit, miniature panier, liste vendeur
+// — toutes lisent images[0]) : "définir comme couverture" ne fait que la
+// faire passer en tête, aucun champ dédié côté API n'est nécessaire.
+function setCover(index: number) {
+  if (index <= 0 || index >= images.value.length) return
+  const [cover] = images.value.splice(index, 1)
+  images.value.unshift(cover)
+}
+
 // Repli manuel (image déjà hébergée ailleurs) — l'upload direct ci-dessus reste le chemin normal.
 const manualUrl = ref('')
 function addManualUrl() {
@@ -59,7 +69,21 @@ function addManualUrl() {
     <div v-if="images.length" class="image-grid mb-2">
       <div v-for="(url, i) in images" :key="url + i" class="image-grid__item">
         <img :src="resolveImageUrl(url, apiBase)" :alt="`Image ${i + 1}`" />
-        <button type="button" class="image-grid__remove" @click="removeImage(i)">
+        <span v-if="i === 0" class="image-grid__cover-badge">
+          <PhStar :size="10" weight="fill" />
+          Couverture
+        </span>
+        <button
+          v-else
+          type="button"
+          class="image-grid__cover-btn"
+          aria-label="Définir comme photo de couverture"
+          title="Définir comme photo de couverture"
+          @click="setCover(i)"
+        >
+          <PhStar :size="12" />
+        </button>
+        <button type="button" class="image-grid__remove" aria-label="Retirer cette image" @click="removeImage(i)">
           <PhX :size="12" weight="bold" />
         </button>
       </div>
@@ -68,6 +92,11 @@ function addManualUrl() {
       <PhImage :size="24" weight="light" color="var(--color-neutral-500)" />
       <span class="text-muted" style="font-size: 12px">Aucune image pour l'instant</span>
     </div>
+    <p v-if="images.length > 1" class="text-muted mb-2 text-fine">
+      La photo "Couverture" (première de la liste) est celle affichée dans le catalogue et les cartes produit —
+      cliquez sur <PhStar :size="10" weight="bold" style="vertical-align: -1px" /> sur une autre photo pour la
+      remplacer.
+    </p>
 
     <input
       ref="fileInput"
@@ -140,6 +169,46 @@ function addManualUrl() {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.image-grid__cover-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.image-grid__cover-btn {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.image-grid__cover-btn:hover {
+  opacity: 1;
+  color: var(--color-accent);
 }
 
 .image-empty {
