@@ -386,3 +386,31 @@ async def test_updating_product_description_is_also_sanitized(
 
     assert response.status_code == 200
     assert response.json()["description"] == "<p>Texte <em>en italique</em></p>"
+
+
+async def test_update_variant_keeping_the_same_attribute_name_does_not_fail(
+    client: AsyncClient, vendor_user: User, product: Product
+) -> None:
+    """Le frontend renvoie toujours le tableau complet des attributs à chaque
+    PATCH (voir ProductForm.vue::saveVariants), y compris quand aucun nom
+    d'attribut n'a changé — le cas le plus courant. Régression : le
+    remplacement de la collection insérait les nouveaux attributs avant de
+    supprimer les anciens, violant uq_product_variant_attributes_variant_name
+    dès qu'un nom (ex. "Couleur") restait identique."""
+    headers = auth_headers(vendor_user)
+    created = await client.post(
+        f"/products/{product.id}/variants",
+        json={"attributes": [{"name": "Couleur", "value": "Rouge"}], "stock": 5},
+        headers=headers,
+    )
+    variant_id = created.json()["id"]
+
+    response = await client.patch(
+        f"/products/{product.id}/variants/{variant_id}",
+        json={"sku": "ABC", "attributes": [{"name": "Couleur", "value": "Rouge"}]},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["sku"] == "ABC"
+    assert response.json()["attributes"] == [{"name": "Couleur", "value": "Rouge"}]

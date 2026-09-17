@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhPlus, PhSparkle, PhSpinner, PhX } from '@phosphor-icons/vue'
+import { PhPlus, PhSparkle, PhSpinner, PhUploadSimple, PhX } from '@phosphor-icons/vue'
 import type { CategoryRead, VendorSubscriptionRead } from '~/types/api'
 
 export interface VariantAttributeRow {
@@ -134,6 +134,13 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
 <template>
   <div>
+    <!-- Hors du v-window : reste visible quel que soit l'onglet actif, pour
+         ne jamais perdre de vue quel produit on est en train de modifier. -->
+    <div class="product-context">
+      <span class="product-context__label">Produit</span>
+      <span class="product-context__name">{{ model.name.trim() || 'Nouveau produit (sans nom)' }}</span>
+    </div>
+
     <v-tabs v-model="tab" color="primary" class="mb-5">
       <v-tab value="info">Informations</v-tab>
       <v-tab value="images">Photos</v-tab>
@@ -221,6 +228,10 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
             <label class="field-label">Au moins 3 recommandées — la fiche produit affiche un carrousel</label>
             <CommonImagePicker v-model="model.images">
               <template #extra-actions>
+                <div class="ai-hint">
+                  <PhSparkle :size="13" />
+                  <span>Ou uploade de nouvelles photos et laisse l'IA les améliorer automatiquement (fond, netteté) :</span>
+                </div>
                 <input
                   ref="enhanceFileInput"
                   type="file"
@@ -238,8 +249,8 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
                   @click="pickEnhanceFiles"
                 >
                   <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
-                  <PhSparkle v-else :size="14" class="mr-1" />
-                  Améliorer avec l'IA {{ isPremium ? '' : '(Premium)' }}
+                  <PhUploadSimple v-else :size="14" class="mr-1" />
+                  Uploader avec amélioration IA {{ isPremium ? '' : '(Premium)' }}
                 </v-btn>
               </template>
             </CommonImagePicker>
@@ -249,8 +260,9 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
       <v-window-item value="variants">
         <p class="text-muted mb-4 text-body">
-          Ex : couleur, taille, matière... Chaque variante a son propre stock — et, si besoin, son propre prix et ses
-          propres photos.
+          Une variante = une combinaison précise (ex. Couleur : Rouge + Taille : M). Ajoute plusieurs attributs à une
+          même carte pour la préciser, et une carte séparée pour chaque combinaison différente (Rouge/M et Rouge/L
+          sont deux variantes distinctes). Chaque variante a son propre stock — et, si besoin, son propre prix.
         </p>
 
         <CommonEmptyState
@@ -269,8 +281,8 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
             <div class="panel-card__body">
               <div class="attr-box">
-                <label class="field-label mb-2">Attributs</label>
-                <div v-for="(attr, ai) in row.attributes" :key="ai" class="d-flex ga-2 align-center mb-2">
+                <label class="field-label mb-2">Attributs de cette variante</label>
+                <div v-for="(attr, ai) in row.attributes" :key="ai" class="attr-row mb-2">
                   <v-combobox
                     v-model="attr.name"
                     :items="commonAttributeNames"
@@ -278,7 +290,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
                     variant="outlined"
                     density="compact"
                     hide-details
-                    class="flex-grow-1"
+                    class="attr-row__field"
                   />
                   <v-text-field
                     v-model="attr.value"
@@ -286,7 +298,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
                     variant="outlined"
                     density="compact"
                     hide-details
-                    class="flex-grow-1"
+                    class="attr-row__field"
                   />
                   <button
                     type="button"
@@ -299,7 +311,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
                 </div>
                 <v-btn variant="text" color="primary" size="small" @click="addAttribute(row)">
                   <PhPlus :size="14" class="mr-1" />
-                  Ajouter un attribut
+                  Ajouter un attribut à cette variante
                 </v-btn>
               </div>
 
@@ -344,6 +356,10 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
               <v-divider class="mb-4" />
 
               <CommonImagePicker v-model="row.images" label="Photos de cette variante (optionnel)" />
+              <p class="text-muted mt-2 mb-0 text-fine">
+                Laisse vide pour reprendre les photos du produit (onglet Photos) — n'ajoute des photos ici que si
+                cette variante a une apparence différente (ex. une autre couleur).
+              </p>
             </div>
           </div>
         </div>
@@ -390,19 +406,24 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   background: rgba(255, 255, 255, 0.14);
 }
 
-/* Catégorie/Nom puis Prix/Stock : une colonne sur mobile (comportement
-   inchangé), deux dès qu'il y a la place. Le champ lui-même reste plafonné
-   (voir .form-grid > div) même quand .panel-card occupe toute la largeur du
-   conteneur (Informations générales notamment) — sinon un champ "Prix"
-   étiré sur 600px de large serait aussi absurde que la carte trop étroite
-   qu'on corrige ici. */
+/* Catégorie/Nom puis Prix/Stock : une colonne quand la CARTE qui contient
+   ce grid est étroite, deux dès qu'elle a la place. Une @media ferait ce
+   choix sur la largeur du VIEWPORT — faux dès que plusieurs cartes de
+   variante sont posées côte à côte par .variant-grid (chaque carte peut
+   alors rester étroite même sur un très grand écran), d'où les champs mal
+   alignés signalés. @container réagit à la largeur réelle de
+   .panel-card__body (voir container-type ci-dessous), quel que soit le
+   nombre de cartes affichées à côté. Le champ lui-même reste plafonné (voir
+   .form-grid > div) même dans une carte pleine largeur (Informations
+   générales) — sinon un champ "Prix" étiré sur 600px serait aussi absurde
+   que le bug qu'on corrige ici. */
 .form-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0 14px;
 }
 
-@media (min-width: 560px) {
+@container (min-width: 480px) {
   .form-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -410,6 +431,22 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   .form-grid > div {
     max-width: 420px;
   }
+}
+
+/* Nom/Valeur d'un attribut : côte à côte quand il y a la place, sinon
+   chacun repasse sur sa propre ligne plutôt que d'être écrasé — une carte
+   de variante peut descendre jusqu'à 420px de large (voir .variant-grid),
+   pas assez pour deux champs + le bouton de suppression sans wrap. */
+.attr-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.attr-row__field {
+  flex: 1 1 140px;
+  min-width: 140px;
 }
 
 
@@ -456,6 +493,9 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 
 .panel-card__body {
   padding: 20px;
+  /* Sert de référence pour les @container ci-dessus (.form-grid) — la
+     largeur qui compte est celle de CETTE carte, pas celle du viewport. */
+  container-type: inline-size;
 }
 
 /* Détache visuellement le bloc d'attributs (le cœur de "ce qui distingue
@@ -465,5 +505,42 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   background: var(--color-neutral-800);
   border-radius: var(--radius-md);
   padding: 12px;
+}
+
+.product-context {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.product-context__label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-500);
+}
+
+.product-context__name {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  color: var(--color-neutral-200);
+}
+
+.ai-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--color-primary-300);
+  font-size: 11.5px;
+  margin-bottom: 8px;
+}
+
+.ai-hint svg {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 </style>

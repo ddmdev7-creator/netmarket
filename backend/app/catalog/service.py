@@ -243,6 +243,14 @@ async def update_variant(
     if data.attributes is not None:
         # Remplacement complet plutôt qu'un diff pair par pair — plus simple
         # et cohérent avec cascade="all, delete-orphan" sur la relation.
+        # Le flush intermédiaire est nécessaire : sans lui, SQLAlchemy peut
+        # émettre l'INSERT des nouveaux attributs avant le DELETE des
+        # anciens dans le même flush, ce qui viole
+        # uq_product_variant_attributes_variant_name dès qu'un nom
+        # d'attribut (ex. "Couleur") reste inchangé d'une modification à
+        # l'autre — le cas le plus courant en pratique.
+        variant.attributes = []
+        await db.flush()
         variant.attributes = [ProductVariantAttribute(name=a.name, value=a.value) for a in data.attributes]
 
     if "stock" in updates:
