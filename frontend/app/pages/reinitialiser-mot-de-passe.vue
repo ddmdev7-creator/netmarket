@@ -42,31 +42,33 @@ async function submit() {
 </script>
 
 <template>
-  <div class="app-shell d-flex flex-column justify-center pa-6" style="min-height: 100dvh">
-    <NuxtLink to="/mot-de-passe-oublie" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
-      <PhArrowLeft :size="14" />
-      Retour
-    </NuxtLink>
+  <div class="app-shell auth-shell d-flex flex-column justify-center pa-6" style="min-height: 100dvh">
+    <div class="auth-card">
+      <NuxtLink to="/mot-de-passe-oublie" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
+        <PhArrowLeft :size="14" />
+        Retour
+      </NuxtLink>
 
-    <div class="text-center mb-8">
-      <h1 class="text-h5 mb-1">Nouveau mot de passe</h1>
-      <p class="text-muted">Saisissez le code reçu par email et votre nouveau mot de passe</p>
+      <div class="text-center mb-8">
+        <h1 class="text-h5 mb-1">Nouveau mot de passe</h1>
+        <p class="text-muted">Saisissez le code reçu par email et votre nouveau mot de passe</p>
+      </div>
+
+      <v-form @submit.prevent="submit">
+        <v-text-field v-model="phone" label="Téléphone" placeholder="+224621234567" class="mb-2" />
+        <v-text-field
+          v-model="code"
+          label="Code reçu par email"
+          placeholder="00000"
+          maxlength="5"
+          inputmode="numeric"
+          class="mb-2"
+        />
+        <v-text-field v-model="newPassword" label="Nouveau mot de passe" type="password" class="mb-2" />
+        <v-text-field v-model="confirmPassword" label="Confirmer le mot de passe" type="password" class="mb-2" />
+
+        <v-btn type="submit" color="primary" block size="large" :loading="loading">Réinitialiser</v-btn>
+      </v-form>
     </div>
-
-    <v-form @submit.prevent="submit">
-      <v-text-field v-model="phone" label="Téléphone" placeholder="+224621234567" class="mb-2" />
-      <v-text-field
-        v-model="code"
-        label="Code reçu par email"
-        placeholder="00000"
-        maxlength="5"
-        inputmode="numeric"
-        class="mb-2"
-      />
-      <v-text-field v-model="newPassword" label="Nouveau mot de passe" type="password" class="mb-2" />
-      <v-text-field v-model="confirmPassword" label="Confirmer le mot de passe" type="password" class="mb-2" />
-
-      <v-btn type="submit" color="primary" block size="large" :loading="loading">Réinitialiser</v-btn>
-    </v-form>
   </div>
 </template>

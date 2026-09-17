@@ -17,7 +17,11 @@ defineProps<{ products: ProductRead[]; loading?: boolean }>()
 <style scoped>
 .product-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* auto-fill + minmax plutôt que des colonnes fixes : suit naturellement
+     la largeur de .app-shell (480px mobile, jusqu'à 1120px sur desktop via
+     .app-shell--catalog) sans media query dédiée ici — 2 colonnes sur
+     téléphone (comportement inchangé), jusqu'à 6+ sur grand écran. */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
 }
 </style>

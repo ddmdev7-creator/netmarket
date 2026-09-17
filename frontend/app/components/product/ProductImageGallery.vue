@@ -103,6 +103,15 @@ function onLightboxScroll() {
   margin-top: 8px;
 }
 
+/* Fiche produit en deux colonnes sur desktop (voir pages/produits/[id].vue)
+   : la galerie prend toute la hauteur de sa colonne plutôt que de rester
+   figée à la hauteur pensée pour un écran de téléphone. */
+@media (min-width: 960px) {
+  .gallery {
+    height: 460px;
+  }
+}
+
 .gallery__empty {
   height: 100%;
   display: flex;

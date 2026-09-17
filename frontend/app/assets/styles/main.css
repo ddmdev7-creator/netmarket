@@ -192,14 +192,62 @@ h1, h2, h3, h4, h5, h6,
   font-size: 10px;
 }
 
-/* Contient l'app sur un gabarit mobile centré, même en aperçu desktop --
-   cible principale : réseaux mobiles lents en Guinée. Fond plat (pas de
-   teinte de couleur) pour un rendu sobre et professionnel. */
+/* Gabarit mobile centré par défaut -- cible principale : réseaux mobiles
+   lents en Guinée. Fond plat (pas de teinte de couleur) pour un rendu sobre
+   et professionnel. À partir de 960px (même seuil que .dashboard-shell et
+   que les tiroirs desktop admin/vendeur), l'espace acheteur s'élargit
+   plutôt que de rester une colonne téléphone perdue au milieu de l'écran --
+   voir les variantes --catalog/--wide ci-dessous pour les pages qui ont
+   besoin de plus (grille produits, fiche produit) qu'une simple colonne de
+   lecture confortable. */
 .app-shell {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
   background-color: var(--color-bg);
+}
+
+@media (min-width: 960px) {
+  .app-shell {
+    max-width: 720px;
+  }
+}
+
+/* Page d'accueil (catalogue) : seule page avec une vraie grille produits --
+   profite d'une largeur bien plus généreuse pour afficher plusieurs
+   colonnes (voir .product-grid, qui s'adapte automatiquement à cette
+   largeur via auto-fill). */
+@media (min-width: 960px) {
+  .app-shell--catalog {
+    max-width: 1120px;
+  }
+}
+
+/* Fiche produit : assez de place pour une mise en page à deux colonnes
+   (galerie + infos) sans devenir aussi large que le catalogue. */
+@media (min-width: 960px) {
+  .app-shell--wide {
+    max-width: 960px;
+  }
+}
+
+/* Connexion/inscription/mot de passe oublié : sur desktop, un formulaire de
+   720px de large serait absurde -- .auth-shell (le fond, plein écran) reste
+   étroit et centre .auth-card (le formulaire lui-même), qui devient une
+   carte détachée visuellement du fond plutôt que de s'étirer sur toute la
+   hauteur de l'écran. */
+@media (min-width: 960px) {
+  .auth-shell {
+    max-width: 460px;
+  }
+
+  .auth-card {
+    padding: 40px 36px;
+    background: var(--color-neutral-900);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 /* Contre-partie de .app-shell pour les back-offices (admin, vendeur) :
@@ -231,7 +279,10 @@ h1, h2, h3, h4, h5, h6,
   margin: 0 auto;
 }
 
-/* Barre d'action collante en bas d'écran (fiche produit, panier, checkout). */
+/* Barre d'action collante en bas d'écran (fiche produit, panier, checkout).
+   Sa largeur suit celle de .app-shell (720px sur desktop) pour rester
+   alignée avec le contenu au-dessus -- .checkout-bar--wide pour les pages
+   qui utilisent .app-shell--wide (fiche produit). */
 .checkout-bar {
   position: fixed;
   bottom: 0;
@@ -244,6 +295,16 @@ h1, h2, h3, h4, h5, h6,
   border-top: 1px solid var(--color-divider);
   box-shadow: var(--shadow-dock);
   z-index: 5;
+}
+
+@media (min-width: 960px) {
+  .checkout-bar {
+    max-width: 720px;
+  }
+
+  .checkout-bar--wide {
+    max-width: 960px;
+  }
 }
 
 /* Sélecteur de quantité − / valeur / + (fiche produit, panier). */

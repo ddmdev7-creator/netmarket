@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { PhBell, PhUserCircle } from '@phosphor-icons/vue'
+import { PhBell, PhHouse, PhPackage, PhShoppingCart, PhUser, PhUserCircle } from '@phosphor-icons/vue'
+
+/**
+ * showNav: true uniquement depuis layouts/default.vue (espace acheteur).
+ * Une prop explicite plutôt qu'une détection par rôle sur auth.user — ce
+ * dernier peut rester null un court instant après le chargement d'une page
+ * protégée (fetchMe async), ce qui ferait clignoter ce lien vers la nav
+ * acheteur sur les pages vendeur/admin/livreur le temps que l'utilisateur
+ * se charge.
+ */
+const props = withDefaults(defineProps<{ showNav?: boolean }>(), { showNav: false })
 
 const auth = useAuthStore()
 const notifications = useNotificationStore()
+const cartStore = useCartStore()
 
 const roleLabel = computed(() => {
   switch (auth.user?.role) {
@@ -23,11 +34,45 @@ const displayIdentity = computed(() => {
   }
   return user.phone
 })
+
+// Repris de BottomNav (masquée sur desktop, voir BottomNav.vue) : mêmes
+// destinations, affichées ici en ligne uniquement à partir de 960px (voir
+// .top-bar__nav) — en dessous, la bottom nav reste la seule navigation,
+// comme aujourd'hui.
+const navItems = [
+  { to: '/', label: 'Accueil', icon: PhHouse },
+  { to: '/panier', label: 'Panier', icon: PhShoppingCart },
+  { to: '/commandes', label: 'Commandes', icon: PhPackage },
+  { to: '/profil', label: 'Profil', icon: PhUser },
+]
 </script>
 
 <template>
   <div v-if="auth.user" class="top-bar">
     <slot name="leading" />
+
+    <nav v-if="props.showNav" class="top-bar__nav">
+      <NuxtLink
+        v-for="item in navItems"
+        :key="item.to"
+        :to="item.to"
+        class="top-bar__nav-item"
+        active-class="top-bar__nav-item--active"
+      >
+        <v-badge
+          v-if="item.to === '/panier' && cartStore.itemCount > 0"
+          :content="cartStore.itemCount"
+          color="primary"
+          offset-x="-4"
+          offset-y="-2"
+        >
+          <component :is="item.icon" :size="17" />
+        </v-badge>
+        <component :is="item.icon" v-else :size="17" />
+        <span>{{ item.label }}</span>
+      </NuxtLink>
+    </nav>
+
     <NuxtLink to="/profil" class="top-bar__identity">
       <PhUserCircle :size="18" color="var(--color-neutral-400)" />
       <span class="top-bar__phone">{{ displayIdentity }}</span>
@@ -40,6 +85,22 @@ const displayIdentity = computed(() => {
         {{ notifications.unreadCount > 9 ? '9+' : notifications.unreadCount }}
       </span>
     </NuxtLink>
+  </div>
+
+  <!-- Visiteur non connecté sur l'espace acheteur (catalogue accessible sans
+       compte) : rien sur mobile (comme aujourd'hui, la bottom nav suffit),
+       mais sur desktop la bottom nav est masquée (BottomNav.vue) — sans
+       cette barre, un visiteur desktop non connecté n'aurait plus aucun
+       moyen de naviguer ou de se connecter. -->
+  <div v-else-if="props.showNav" class="top-bar top-bar--guest">
+    <NuxtLink to="/" class="top-bar__logo">Netmarket</NuxtLink>
+    <nav class="top-bar__nav">
+      <NuxtLink v-for="item in navItems" :key="item.to" :to="item.to" class="top-bar__nav-item">
+        <component :is="item.icon" :size="17" />
+        <span>{{ item.label }}</span>
+      </NuxtLink>
+    </nav>
+    <NuxtLink to="/connexion" class="top-bar__login ml-auto">Se connecter</NuxtLink>
   </div>
 </template>
 
@@ -112,5 +173,75 @@ const displayIdentity = computed(() => {
   font-weight: 700;
   line-height: 15px;
   text-align: center;
+}
+
+/* Nav horizontale (Accueil/Panier/Commandes/Profil) : masquée sur mobile,
+   où la bottom nav suffit déjà — visible seulement à partir de 960px,
+   quand celle-ci disparaît (voir BottomNav.vue). */
+.top-bar__nav {
+  display: none;
+}
+
+.top-bar--guest {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .top-bar__nav {
+    /* Pas de margin-right: auto ici -- .top-bar__role a déjà
+       margin-left: auto, qui suffit à pousser role/thème/cloche à droite ;
+       un deuxième auto-margin créerait un second espace flexible et
+       pousserait l'identité au centre au lieu de la laisser collée à nav. */
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .top-bar--guest {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+.top-bar__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--color-neutral-400);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.top-bar__nav-item:hover {
+  color: var(--color-neutral-200);
+  background: var(--color-neutral-800);
+}
+
+.top-bar__nav-item--active {
+  color: var(--color-primary);
+}
+
+.top-bar__logo {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--color-primary-300);
+  text-decoration: none;
+  margin-right: 8px;
+}
+
+.top-bar__login {
+  color: var(--color-primary-300);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border: 1px solid var(--color-divider-strong);
+  border-radius: var(--radius-sm);
 }
 </style>

@@ -51,6 +51,14 @@ const navItems = [
   z-index: 10;
 }
 
+/* Remplacée par la navigation horizontale de LayoutTopBar sur desktop
+   (voir TopBar.vue) -- même seuil que .app-shell. */
+@media (min-width: 960px) {
+  .bottom-nav {
+    display: none;
+  }
+}
+
 .bottom-nav__item {
   flex: 1;
   display: flex;

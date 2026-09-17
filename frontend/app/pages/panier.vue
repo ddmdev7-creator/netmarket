@@ -94,10 +94,18 @@ function goCheckout() {
 <style scoped>
 /* This page keeps the default layout's bottom nav (unlike checkout/produit
    which use the blank layout), so the shared .checkout-bar — normally flush
-   with the screen bottom — has to sit above it instead of underneath it. */
+   with the screen bottom — has to sit above it instead of underneath it.
+   That bottom nav is hidden on desktop (see BottomNav.vue), so the bar goes
+   back to being flush with the screen bottom there. */
 .checkout-bar {
   bottom: 76px;
   z-index: 6;
+}
+
+@media (min-width: 960px) {
+  .checkout-bar {
+    bottom: 0;
+  }
 }
 
 .vendor-group__header {
