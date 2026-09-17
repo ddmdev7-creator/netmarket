@@ -179,7 +179,7 @@ async function deleteProduct() {
   <div v-if="loadError" class="pa-6">
     <CommonEmptyState message="Produit introuvable." />
   </div>
-  <div v-else class="app-shell pa-0" style="padding-bottom: 32px">
+  <div v-else class="app-shell app-shell--wide pa-0" style="padding-bottom: 32px">
     <div class="d-flex align-center pa-2 ga-2">
       <v-btn icon variant="text" @click="router.back()">
         <PhArrowLeft :size="20" />

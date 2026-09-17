@@ -120,128 +120,154 @@ function addAttribute(row: VariantFormRow) {
 function removeAttribute(row: VariantFormRow, index: number) {
   row.attributes.splice(index, 1)
 }
+
+// Formulaire volumineux (infos + photos + variantes) : des onglets plutôt
+// qu'une longue page qui scrolle, surtout utile sur le conteneur élargi en
+// desktop (.app-shell--wide, voir pages/vendeur/produits/*.vue).
+const tab = ref<'info' | 'images' | 'variants'>('info')
 </script>
 
 <template>
   <div>
-    <label class="field-label">Catégorie</label>
-    <v-select
-      v-model="model.category_id"
-      :items="categories"
-      item-title="name"
-      item-value="id"
-      placeholder="Choisir une catégorie"
-      class="mb-2"
-    />
+    <v-tabs v-model="tab" color="primary" class="mb-4">
+      <v-tab value="info">Informations</v-tab>
+      <v-tab value="images">Photos</v-tab>
+      <v-tab value="variants">
+        Variantes
+        <v-chip v-if="visibleVariants.length" size="x-small" color="primary" class="ml-2">{{
+          visibleVariants.length
+        }}</v-chip>
+      </v-tab>
+    </v-tabs>
 
-    <label class="field-label">Nom du produit</label>
-    <v-text-field v-model="model.name" placeholder="Ex: Riz parfumé 25kg" class="mb-2" />
+    <v-window v-model="tab">
+      <v-window-item value="info">
+        <div class="form-grid">
+          <div>
+            <label class="field-label">Catégorie</label>
+            <v-select
+              v-model="model.category_id"
+              :items="categories"
+              item-title="name"
+              item-value="id"
+              placeholder="Choisir une catégorie"
+              class="mb-2"
+            />
+          </div>
+          <div>
+            <label class="field-label">Nom du produit</label>
+            <v-text-field v-model="model.name" placeholder="Ex: Riz parfumé 25kg" class="mb-2" />
+          </div>
+        </div>
 
-    <label class="field-label">Description (optionnel)</label>
-    <v-textarea v-model="model.description" rows="3" class="mb-2" />
+        <label class="field-label">Description (optionnel)</label>
+        <v-textarea v-model="model.description" rows="3" class="mb-2" />
 
-    <div class="d-flex ga-2">
-      <div class="flex-grow-1">
-        <label class="field-label">Prix (GNF)</label>
-        <v-text-field v-model.number="model.price" type="number" min="0" class="mb-2" />
-      </div>
-      <div class="flex-grow-1">
-        <label class="field-label">Stock</label>
-        <v-text-field
-          v-model.number="model.stock"
-          type="number"
-          min="0"
-          :disabled="visibleVariants.length > 0"
-          :hint="visibleVariants.length > 0 ? 'Calculé automatiquement à partir des variantes.' : undefined"
-          :persistent-hint="visibleVariants.length > 0"
-          class="mb-2"
-        />
-      </div>
-    </div>
+        <div class="form-grid">
+          <div>
+            <label class="field-label">Prix (GNF)</label>
+            <v-text-field v-model.number="model.price" type="number" min="0" class="mb-2" />
+          </div>
+          <div>
+            <label class="field-label">Stock</label>
+            <v-text-field
+              v-model.number="model.stock"
+              type="number"
+              min="0"
+              :disabled="visibleVariants.length > 0"
+              :hint="visibleVariants.length > 0 ? 'Calculé automatiquement à partir des variantes.' : undefined"
+              :persistent-hint="visibleVariants.length > 0"
+              class="mb-2"
+            />
+          </div>
+        </div>
+      </v-window-item>
 
-    <label class="field-label">Images — au moins 3 recommandées, la fiche produit affiche un carrousel</label>
-    <CommonImagePicker v-model="model.images">
-      <template #extra-actions>
-        <input
-          ref="enhanceFileInput"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          class="d-none"
-          @change="onEnhanceFilesSelected"
-        />
-        <v-btn variant="outlined" size="small" block class="mb-2" :loading="enhancing" @click="pickEnhanceFiles">
-          <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
-          <PhSparkle v-else :size="14" class="mr-1" />
-          Améliorer avec l'IA {{ isPremium ? '' : '(Premium)' }}
+      <v-window-item value="images">
+        <label class="field-label">Images — au moins 3 recommandées, la fiche produit affiche un carrousel</label>
+        <CommonImagePicker v-model="model.images">
+          <template #extra-actions>
+            <input
+              ref="enhanceFileInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              class="d-none"
+              @change="onEnhanceFilesSelected"
+            />
+            <v-btn variant="outlined" size="small" block class="mb-2" :loading="enhancing" @click="pickEnhanceFiles">
+              <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
+              <PhSparkle v-else :size="14" class="mr-1" />
+              Améliorer avec l'IA {{ isPremium ? '' : '(Premium)' }}
+            </v-btn>
+          </template>
+        </CommonImagePicker>
+      </v-window-item>
+
+      <v-window-item value="variants">
+        <p class="text-muted mb-3" style="font-size: 12px">
+          Ex : couleur, taille, matière... Chaque variante a son propre stock — et, si besoin, son propre prix et ses
+          propres photos.
+        </p>
+
+        <div v-if="visibleVariants.length" class="variant-grid mb-3">
+          <v-card v-for="row in visibleVariants" :key="row._key" variant="outlined" class="pa-3">
+            <div class="d-flex justify-space-between align-center mb-3">
+              <span style="font-weight: 600; font-size: 13.5px">{{ variantTitle(row) }}</span>
+              <button type="button" class="attr-remove" aria-label="Supprimer cette variante" @click="removeVariant(row)">
+                <PhX :size="16" />
+              </button>
+            </div>
+
+            <label class="field-label">Attributs (ex: Couleur → Rouge)</label>
+            <div v-for="(attr, ai) in row.attributes" :key="ai" class="d-flex ga-2 align-center mb-2">
+              <v-text-field
+                v-model="attr.name"
+                placeholder="Nom (ex: Couleur)"
+                density="compact"
+                hide-details
+                class="flex-grow-1"
+              />
+              <v-text-field
+                v-model="attr.value"
+                placeholder="Valeur (ex: Rouge)"
+                density="compact"
+                hide-details
+                class="flex-grow-1"
+              />
+              <button type="button" class="attr-remove" aria-label="Retirer cet attribut" @click="removeAttribute(row, ai)">
+                <PhX :size="14" />
+              </button>
+            </div>
+            <v-btn variant="text" size="small" class="mb-4" @click="addAttribute(row)">
+              <PhPlus :size="14" class="mr-1" />
+              Ajouter un attribut
+            </v-btn>
+
+            <div class="d-flex ga-2">
+              <div class="flex-grow-1">
+                <label class="field-label">SKU (optionnel)</label>
+                <v-text-field v-model="row.sku" density="compact" class="mb-2" />
+              </div>
+              <div class="flex-grow-1">
+                <label class="field-label">Stock</label>
+                <v-text-field v-model.number="row.stock" type="number" min="0" density="compact" class="mb-2" />
+              </div>
+            </div>
+
+            <label class="field-label">Prix (optionnel — sinon le prix de base s'applique)</label>
+            <v-text-field v-model.number="row.price" type="number" min="0" density="compact" class="mb-4" />
+
+            <CommonImagePicker v-model="row.images" label="Photos de cette variante (optionnel)" />
+          </v-card>
+        </div>
+
+        <v-btn variant="outlined" size="small" block class="mb-2" @click="addVariant">
+          <PhPlus :size="14" class="mr-1" />
+          Ajouter une variante
         </v-btn>
-      </template>
-    </CommonImagePicker>
-
-    <v-divider class="my-4" />
-
-    <label class="field-label">Variantes (optionnel)</label>
-    <p class="text-muted mb-3" style="font-size: 12px">
-      Ex : couleur, taille, matière... Chaque variante a son propre stock — et, si besoin, son propre prix et ses
-      propres photos.
-    </p>
-
-    <v-expansion-panels v-if="visibleVariants.length" variant="accordion" class="mb-3">
-      <v-expansion-panel v-for="row in visibleVariants" :key="row._key">
-        <v-expansion-panel-title>{{ variantTitle(row) }}</v-expansion-panel-title>
-        <v-expansion-panel-text>
-          <label class="field-label">Attributs (ex: Couleur → Rouge)</label>
-          <div v-for="(attr, ai) in row.attributes" :key="ai" class="d-flex ga-2 align-center mb-2">
-            <v-text-field
-              v-model="attr.name"
-              placeholder="Nom (ex: Couleur)"
-              density="compact"
-              hide-details
-              class="flex-grow-1"
-            />
-            <v-text-field
-              v-model="attr.value"
-              placeholder="Valeur (ex: Rouge)"
-              density="compact"
-              hide-details
-              class="flex-grow-1"
-            />
-            <button type="button" class="attr-remove" aria-label="Retirer cet attribut" @click="removeAttribute(row, ai)">
-              <PhX :size="14" />
-            </button>
-          </div>
-          <v-btn variant="text" size="small" class="mb-4" @click="addAttribute(row)">
-            <PhPlus :size="14" class="mr-1" />
-            Ajouter un attribut
-          </v-btn>
-
-          <div class="d-flex ga-2">
-            <div class="flex-grow-1">
-              <label class="field-label">SKU (optionnel)</label>
-              <v-text-field v-model="row.sku" density="compact" class="mb-2" />
-            </div>
-            <div class="flex-grow-1">
-              <label class="field-label">Stock</label>
-              <v-text-field v-model.number="row.stock" type="number" min="0" density="compact" class="mb-2" />
-            </div>
-          </div>
-
-          <label class="field-label">Prix (optionnel — sinon le prix de base ci-dessus s'applique)</label>
-          <v-text-field v-model.number="row.price" type="number" min="0" density="compact" class="mb-4" />
-
-          <CommonImagePicker v-model="row.images" label="Photos de cette variante (optionnel)" />
-
-          <v-btn variant="outlined" color="error" size="small" block class="mt-2" @click="removeVariant(row)">
-            Supprimer cette variante
-          </v-btn>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-    </v-expansion-panels>
-
-    <v-btn variant="outlined" size="small" block class="mb-2" @click="addVariant">
-      <PhPlus :size="14" class="mr-1" />
-      Ajouter une variante
-    </v-btn>
+      </v-window-item>
+    </v-window>
   </div>
 </template>
 
@@ -254,5 +280,36 @@ function removeAttribute(row: VariantFormRow, index: number) {
   margin: -10px;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+/* Catégorie/Nom puis Prix/Stock : une colonne sur mobile (comportement
+   inchangé), deux dès qu'il y a la place — le formulaire est maintenant
+   affiché dans un conteneur élargi sur desktop (.app-shell--wide, voir
+   pages/vendeur/produits/*.vue). */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 12px;
+}
+
+@media (min-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Une carte de variante par ligne sur mobile, deux dès qu'il y a la place —
+   chaque carte reste assez large pour son propre formulaire (attributs,
+   stock, prix, photos). */
+.variant-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .variant-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>

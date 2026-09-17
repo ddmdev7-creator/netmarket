@@ -105,6 +105,12 @@ function addManualUrl() {
   gap: 8px;
 }
 
+@media (min-width: 640px) {
+  .image-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
 .image-grid__item {
   position: relative;
   aspect-ratio: 1;
