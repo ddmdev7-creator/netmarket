@@ -210,7 +210,7 @@ function continueShopping() {
           <template #label>
             <div class="flex-grow-1">
               <div class="d-flex align-center ga-2">
-                <span style="font-weight: 600; font-size: 13.5px">{{ a.label }}</span>
+                <span class="text-body" style="font-weight: 600">{{ a.label }}</span>
                 <v-chip v-if="a.is_default" color="primary" size="x-small" variant="tonal">
                   <PhStar :size="10" weight="fill" class="mr-1" />
                   Par défaut
@@ -219,7 +219,7 @@ function continueShopping() {
                   {{ a.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Domicile' }}
                 </v-chip>
               </div>
-              <div class="text-muted" style="font-size: 12px">{{ a.zone }}</div>
+              <div class="text-muted text-meta">{{ a.zone }}</div>
             </div>
           </template>
         </v-radio>
@@ -232,7 +232,7 @@ function continueShopping() {
           :class="{ 'address-option--selected': selectedId === NEW_ADDRESS }"
         >
           <template #label>
-            <div class="d-flex align-center ga-1" style="font-size: 13.5px; font-weight: 600">
+            <div class="d-flex align-center ga-1 text-body" style="font-weight: 600">
               <PhPlus :size="15" />
               <span>Nouvelle adresse</span>
             </div>
@@ -270,13 +270,13 @@ function continueShopping() {
       <template v-if="cart">
         <div v-for="group in cart.vendors" :key="group.vendor_id" class="mb-3">
           <div class="recap-shop-label mb-1">{{ group.shop_name }}</div>
-          <div v-for="item in group.items" :key="item.id" class="d-flex justify-space-between" style="font-size: 13px">
+          <div v-for="item in group.items" :key="item.id" class="d-flex justify-space-between text-meta">
             <span>{{ item.product_name }} × {{ item.quantity }}</span>
             <span>{{ formatGnf(item.subtotal) }}</span>
           </div>
         </div>
         <v-divider class="mb-2" />
-        <div class="d-flex justify-space-between" style="font-size: 17px; font-weight: 600">
+        <div class="d-flex justify-space-between text-lg">
           <span>Total</span>
           <span>{{ formatGnf(cart.total) }}</span>
         </div>
@@ -293,7 +293,7 @@ function continueShopping() {
       <v-card v-if="confirmedOrder" class="pa-6 text-center">
         <PhCheckCircle :size="44" weight="fill" color="var(--color-success)" style="margin: 0 auto" />
         <div class="text-h6 mt-3">Commande confirmée</div>
-        <div class="text-muted mt-2" style="font-size: 13px">
+        <div class="text-muted mt-2 text-meta">
           Commande #{{ confirmedOrder.id.slice(0, 8).toUpperCase() }} · Paiement à la livraison<br />
           Vous serez contacté avant la livraison.
         </div>
@@ -301,8 +301,7 @@ function continueShopping() {
           <div
             v-for="sub in confirmedOrder.sub_orders"
             :key="sub.id"
-            class="d-flex justify-space-between"
-            style="font-size: 12.5px"
+            class="d-flex justify-space-between text-meta"
           >
             <span class="text-muted">{{ sub.shop_name }}</span>
             <strong v-if="sub.estimated_delivery_min && sub.estimated_delivery_max">

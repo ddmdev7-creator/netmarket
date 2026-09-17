@@ -39,7 +39,7 @@ async function submit() {
   <v-dialog v-model="open" max-width="360">
     <v-card class="pa-4">
       <h2 class="text-h6 mb-3">Signaler</h2>
-      <p class="text-muted mb-3" style="font-size: 12.5px">
+      <p class="text-muted mb-3 text-meta">
         Expliquez brièvement le problème — notre équipe va l'examiner.
       </p>
       <v-form @submit.prevent="submit">

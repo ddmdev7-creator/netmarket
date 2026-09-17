@@ -68,26 +68,25 @@ function shortId(id: string) {
     <div class="px-4">
       <div v-for="sub in order.sub_orders" :key="sub.id" class="mb-6">
         <div class="d-flex justify-space-between align-center mb-3">
-          <span style="font-weight: 600; font-size: 13px">{{ sub.shop_name }}</span>
+          <span class="text-meta" style="font-weight: 600">{{ sub.shop_name }}</span>
           <StatusBadge :status="sub.status" />
         </div>
         <OrderTimeline :status="sub.status" :delivery-type="order.delivery_type" />
         <p
           v-if="sub.estimated_delivery_min && sub.estimated_delivery_max && !['delivered', 'cancelled'].includes(sub.status)"
-          class="text-muted mt-2 mb-3"
-          style="font-size: 12px"
+          class="text-muted mt-2 mb-3 text-meta"
         >
           Livraison estimée :
           <strong>{{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}</strong>
         </p>
-        <div v-for="item in sub.items" :key="item.id" class="d-flex justify-space-between mt-1" style="font-size: 13px">
+        <div v-for="item in sub.items" :key="item.id" class="d-flex justify-space-between mt-1 text-meta">
           <span>{{ item.product_name }} × {{ item.quantity }}</span>
           <span class="amount">{{ formatGnf(item.unit_price * item.quantity) }}</span>
         </div>
 
         <div v-if="sub.delivery_token" class="qr-block mt-4">
           <OrderDeliveryQrCode :token="sub.delivery_token" />
-          <p class="text-muted mt-2 mb-0" style="font-size: 12px; max-width: 220px">
+          <p class="text-muted mt-2 mb-0 text-meta" style="max-width: 220px">
             Présentez ce code au livreur à la remise du colis — il confirme la livraison automatiquement.
           </p>
         </div>
@@ -109,9 +108,9 @@ function shortId(id: string) {
       />
 
       <h3 class="text-subtitle-2 text-muted mb-1">Paiement</h3>
-      <p style="font-size: 13px" class="mb-4">{{ paymentLabels[order.payment_method] }}</p>
+      <p class="mb-4 text-meta">{{ paymentLabels[order.payment_method] }}</p>
 
-      <div class="d-flex justify-space-between" style="font-size: 16px; font-weight: 600">
+      <div class="d-flex justify-space-between text-lg">
         <span>Total</span>
         <span class="amount amount--total">{{ formatGnf(order.total) }}</span>
       </div>

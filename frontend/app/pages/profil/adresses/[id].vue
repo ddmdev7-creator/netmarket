@@ -136,7 +136,7 @@ async function deleteAddress() {
     <v-dialog v-model="confirmDelete" max-width="340">
       <v-card class="pa-5">
         <div class="text-subtitle-1 mb-2">Supprimer cette adresse ?</div>
-        <p class="text-muted mb-4" style="font-size: 13px">Cette action est définitive.</p>
+        <p class="text-muted mb-4 text-meta">Cette action est définitive.</p>
         <div class="d-flex ga-2">
           <v-btn variant="outlined" class="flex-grow-1" @click="confirmDelete = false">Annuler</v-btn>
           <v-btn color="error" class="flex-grow-1" :loading="deleting" @click="deleteAddress">Supprimer</v-btn>

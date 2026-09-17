@@ -86,7 +86,7 @@ async function deleteAddress() {
             <div class="address-card-type mb-1">
               {{ a.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Livraison à domicile' }}
             </div>
-            <p class="text-muted mb-0" style="font-size: 13px">{{ a.zone }}</p>
+            <p class="text-muted mb-0 text-meta">{{ a.zone }}</p>
           </div>
           <PhCaretRight :size="16" color="var(--color-neutral-600)" class="flex-shrink-0" />
         </NuxtLink>
@@ -112,7 +112,7 @@ async function deleteAddress() {
     <v-dialog :model-value="!!confirmDeleteId" max-width="340" @update:model-value="(v) => !v && (confirmDeleteId = null)">
       <v-card class="pa-5">
         <div class="text-subtitle-1 mb-2">Supprimer cette adresse ?</div>
-        <p class="text-muted mb-4" style="font-size: 13px">Cette action est définitive.</p>
+        <p class="text-muted mb-4 text-meta">Cette action est définitive.</p>
         <div class="d-flex ga-2">
           <v-btn variant="outlined" class="flex-grow-1" @click="confirmDeleteId = null">Annuler</v-btn>
           <v-btn color="error" class="flex-grow-1" :loading="deleting" @click="deleteAddress">Supprimer</v-btn>

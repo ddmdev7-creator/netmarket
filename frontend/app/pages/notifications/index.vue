@@ -67,9 +67,9 @@ function formatDate(iso: string) {
       >
         <div class="d-flex justify-space-between align-center mb-1">
           <span class="notification-row__title">{{ n.title }}</span>
-          <span class="text-muted" style="font-size: 11px">{{ formatDate(n.created_at) }}</span>
+          <span class="text-muted text-fine">{{ formatDate(n.created_at) }}</span>
         </div>
-        <div class="text-muted" style="font-size: 12.5px">{{ n.body }}</div>
+        <div class="text-muted text-meta">{{ n.body }}</div>
       </button>
     </div>
   </div>

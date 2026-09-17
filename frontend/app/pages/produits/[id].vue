@@ -81,13 +81,13 @@ async function addToCart() {
           <PhFlag :size="16" />
         </button>
       </div>
-      <div class="text-muted mb-1" style="font-size: 12px">Vendu par {{ product.vendor_shop_name }}</div>
-      <div v-if="product.average_rating !== null" class="d-flex align-center ga-1 mb-3" style="font-size: 12.5px">
+      <div class="text-muted mb-1 text-meta">Vendu par {{ product.vendor_shop_name }}</div>
+      <div v-if="product.average_rating !== null" class="d-flex align-center ga-1 mb-3 text-meta">
         <PhStar :size="14" weight="fill" color="var(--color-accent)" />
         <span>{{ product.average_rating.toFixed(1) }}</span>
         <span class="text-muted">({{ product.review_count }} avis)</span>
       </div>
-      <div v-else class="text-muted mb-3" style="font-size: 12px">Aucun avis pour l'instant</div>
+      <div v-else class="text-muted mb-3 text-meta">Aucun avis pour l'instant</div>
 
       <div class="d-flex align-center ga-3 mb-4">
         <span class="text-heading" style="font-size: 22px; font-weight: 600; color: var(--color-accent)">{{
@@ -99,7 +99,7 @@ async function addToCart() {
       </div>
 
       <div class="mb-4">
-        <div class="text-muted mb-1" style="font-size: 12px">Quantité</div>
+        <div class="text-muted mb-1 text-meta">Quantité</div>
         <div class="qty-selector">
           <button type="button" :disabled="quantity <= 1" @click="decr">−</button>
           <span>{{ quantity }}</span>
@@ -110,14 +110,13 @@ async function addToCart() {
       <v-divider class="mb-4" />
 
       <h3 class="text-subtitle-1 mb-2">Description</h3>
-      <p class="text-muted" style="font-size: 13px; white-space: pre-line">
+      <p class="text-muted text-meta" style="white-space: pre-line">
         {{ product.description || 'Aucune description fournie par le vendeur.' }}
       </p>
 
       <div
         v-if="product.estimated_delivery_min && product.estimated_delivery_max"
-        class="d-flex ga-2 mt-4 align-center"
-        style="font-size: 12.5px"
+        class="d-flex ga-2 mt-4 align-center text-meta"
       >
         <PhTruck :size="16" color="var(--color-primary)" />
         <span>
@@ -126,7 +125,7 @@ async function addToCart() {
         </span>
       </div>
 
-      <div class="d-flex ga-2 mt-2 text-muted" style="font-size: 12px">
+      <div class="d-flex ga-2 mt-2 text-muted text-meta">
         <PhMapPin :size="16" />
         <span>Livraison par zone/quartier avec point de repère — pas d'adresse postale requise</span>
       </div>

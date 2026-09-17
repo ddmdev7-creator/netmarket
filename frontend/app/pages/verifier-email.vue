@@ -53,15 +53,15 @@ async function resend() {
       <v-btn icon variant="text" @click="router.back()">
         <PhArrowLeft :size="20" />
       </v-btn>
-      <h1 class="text-h6">Vérifie ton email</h1>
+      <h1 class="text-h6">Vérifiez votre email</h1>
       <LayoutHomeLink />
     </div>
 
     <div class="px-4 pt-4 d-flex flex-column align-center text-center">
       <PhEnvelopeSimple :size="40" weight="light" color="var(--color-primary)" class="mb-3" />
-      <p class="text-muted mb-6" style="font-size: 13px; max-width: 300px">
+      <p class="text-muted mb-6 text-meta" style="max-width: 300px">
         Un code à 5 chiffres a été envoyé à <strong>{{ auth.user?.email }}</strong
-        >. Saisis-le ci-dessous pour confirmer ton compte.
+        >. Saisissez-le ci-dessous pour confirmer votre compte.
       </p>
 
       <v-form class="w-100" style="max-width: 260px" @submit.prevent="submit">

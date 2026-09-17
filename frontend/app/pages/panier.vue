@@ -56,14 +56,14 @@ function goCheckout() {
               <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
             </NuxtLink>
             <div class="flex-grow-1">
-              <div style="font-size: 13px">{{ item.product_name }}</div>
+              <div class="text-meta">{{ item.product_name }}</div>
               <div class="d-flex justify-space-between align-center mt-1">
                 <div class="qty-selector">
                   <button type="button" @click="updateQty(item.id, item.quantity - 1)">−</button>
                   <span>{{ item.quantity }}</span>
                   <button type="button" @click="updateQty(item.id, item.quantity + 1)">+</button>
                 </div>
-                <span style="font-size: 13px; font-weight: 600">{{ formatGnf(item.subtotal) }}</span>
+                <span class="text-meta" style="font-weight: 600">{{ formatGnf(item.subtotal) }}</span>
               </div>
             </div>
             <button class="cart-row__remove" aria-label="Retirer cet article" @click="removeItem(item.id)">
@@ -71,14 +71,14 @@ function goCheckout() {
             </button>
           </div>
 
-          <div class="d-flex justify-space-between text-muted mt-2" style="font-size: 12.5px">
+          <div class="d-flex justify-space-between text-muted mt-2 text-meta">
             <span>Sous-total {{ group.shop_name }}</span>
             <span>{{ formatGnf(group.subtotal) }}</span>
           </div>
           <v-divider class="my-3" />
         </div>
 
-        <div class="d-flex justify-space-between mt-2" style="font-size: 17px; font-weight: 600">
+        <div class="d-flex justify-space-between mt-2 text-lg">
           <span>Total</span>
           <span>{{ formatGnf(cartStore.cart!.total) }}</span>
         </div>

@@ -51,8 +51,8 @@ async function logout() {
     <div class="d-flex align-center ga-3 mb-4">
       <div class="avatar">{{ initials }}</div>
       <div>
-        <div style="font-size: 15px">{{ displayName }}</div>
-        <div class="text-muted" style="font-size: 12.5px">{{ auth.user?.phone }}</div>
+        <div class="text-body">{{ displayName }}</div>
+        <div class="text-muted text-meta">{{ auth.user?.phone }}</div>
       </div>
     </div>
 

@@ -129,14 +129,14 @@ async function useCurrentPosition() {
         {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
       </v-btn>
 
-      <p class="text-muted mb-2" style="font-size: 11.5px">Ou touchez la carte pour placer le repère vous-même.</p>
+      <p class="text-muted mb-2 text-fine">Ou touchez la carte pour placer le repère vous-même.</p>
       <CommonMapPicker
         v-model:latitude="model.latitude"
         v-model:longitude="model.longitude"
         class="mb-2"
       />
 
-      <div v-if="hasPosition" class="d-flex align-center ga-1 mb-3" style="font-size: 12px">
+      <div v-if="hasPosition" class="d-flex align-center ga-1 mb-3 text-meta">
         <PhCheckCircle :size="14" weight="fill" color="var(--color-success)" />
         <span class="text-muted">{{ positionLabel }}</span>
       </div>
@@ -153,7 +153,7 @@ async function useCurrentPosition() {
     <template v-else>
       <template v-if="pickupPoints.length > 0">
         <label class="field-label">Choisir un point de retrait</label>
-        <p class="text-muted mb-2" style="font-size: 11.5px">
+        <p class="text-muted mb-2 text-fine">
           Repérez-vous sur la carte ou recherchez un quartier, puis touchez un point pour voir ses détails.
         </p>
         <CommonPickupPointsMap
@@ -171,7 +171,7 @@ async function useCurrentPosition() {
           class="mb-1"
           @update:model-value="selectPickupPoint"
         />
-        <div v-if="model.zone" class="text-muted mb-3" style="font-size: 12px">{{ model.zone }}</div>
+        <div v-if="model.zone" class="text-muted mb-3 text-meta">{{ model.zone }}</div>
       </template>
       <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-3">
         Aucun point de retrait disponible pour le moment.

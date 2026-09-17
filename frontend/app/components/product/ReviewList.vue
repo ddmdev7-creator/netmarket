@@ -51,8 +51,8 @@ function formatDate(iso: string) {
           <PhFlag :size="14" />
         </button>
       </div>
-      <p v-if="r.comment" class="mb-1" style="font-size: 13px">{{ r.comment }}</p>
-      <div class="text-muted" style="font-size: 11px">{{ formatDate(r.created_at) }}</div>
+      <p v-if="r.comment" class="mb-1 text-meta">{{ r.comment }}</p>
+      <div class="text-muted text-fine">{{ formatDate(r.created_at) }}</div>
     </div>
 
     <CommonReportDialog v-model="reportDialogOpen" :endpoint="reportEndpoint" @reported="refresh" />

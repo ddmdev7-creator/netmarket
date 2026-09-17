@@ -35,7 +35,7 @@ async function submit() {
 
 <template>
   <div class="app-shell d-flex flex-column justify-center pa-6" style="min-height: 100dvh">
-    <NuxtLink to="/" class="d-flex align-center ga-1 text-muted mb-4" style="font-size: 12.5px; text-decoration: none">
+    <NuxtLink to="/" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
       <PhArrowLeft :size="14" />
       Retour à l'accueil
     </NuxtLink>

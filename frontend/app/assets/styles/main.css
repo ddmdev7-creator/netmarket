@@ -168,6 +168,30 @@ h1, h2, h3, h4, h5, h6,
   color: var(--color-neutral-400);
 }
 
+/* Échelle typographique pour tout ce qui n'est pas un vrai titre (couvert
+   par les classes Vuetify text-h6/text-subtitle-1) ni .field-label/
+   .section-title ci-dessous — remplace les ~15 valeurs `style="font-size:
+   Npx"` ad hoc accumulées page par page par 5 rôles documentés. Choisir
+   celui qui correspond au RÔLE du texte (prix/total mis en avant, lecture
+   normale, info secondaire, aide, badge/horodatage), pas la taille la plus
+   proche visuellement. */
+.text-lg {
+  font-size: 16px;
+  font-weight: 600;
+}
+.text-body {
+  font-size: 14px;
+}
+.text-meta {
+  font-size: 12.5px;
+}
+.text-fine {
+  font-size: 11px;
+}
+.text-tiny {
+  font-size: 10px;
+}
+
 /* Contient l'app sur un gabarit mobile centré, même en aperçu desktop --
    cible principale : réseaux mobiles lents en Guinée. Fond plat (pas de
    teinte de couleur) pour un rendu sobre et professionnel. */

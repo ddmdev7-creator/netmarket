@@ -54,13 +54,13 @@ function formatDate(iso: string) {
         <span style="font-weight: 600">{{ shortId(order.id) }}</span>
         <StatusBadge :status="order.status" />
       </div>
-      <div class="text-muted mt-1" style="font-size: 12px">
+      <div class="text-muted mt-1 text-meta">
         {{ formatDate(order.created_at) }} · {{ itemCount(order) }} article{{ itemCount(order) > 1 ? 's' : '' }} ·
         {{ vendorCount(order) }} boutique{{ vendorCount(order) > 1 ? 's' : '' }}
       </div>
       <div class="d-flex justify-space-between mt-1">
-        <span class="text-muted" style="font-size: 12.5px">Total</span>
-        <span style="font-size: 13px">{{ formatGnf(order.total) }}</span>
+        <span class="text-muted text-meta">Total</span>
+        <span class="text-meta">{{ formatGnf(order.total) }}</span>
       </div>
     </NuxtLink>
   </div>

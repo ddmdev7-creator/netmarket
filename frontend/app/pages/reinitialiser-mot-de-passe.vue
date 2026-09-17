@@ -43,14 +43,14 @@ async function submit() {
 
 <template>
   <div class="app-shell d-flex flex-column justify-center pa-6" style="min-height: 100dvh">
-    <NuxtLink to="/mot-de-passe-oublie" class="d-flex align-center ga-1 text-muted mb-4" style="font-size: 12.5px; text-decoration: none">
+    <NuxtLink to="/mot-de-passe-oublie" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
       <PhArrowLeft :size="14" />
       Retour
     </NuxtLink>
 
     <div class="text-center mb-8">
       <h1 class="text-h5 mb-1">Nouveau mot de passe</h1>
-      <p class="text-muted">Saisis le code reçu par email et ton nouveau mot de passe</p>
+      <p class="text-muted">Saisissez le code reçu par email et votre nouveau mot de passe</p>
     </div>
 
     <v-form @submit.prevent="submit">
