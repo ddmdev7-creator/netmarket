@@ -179,7 +179,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
             </div>
 
             <label class="field-label">Description (optionnel)</label>
-            <v-textarea v-model="model.description" rows="4" variant="outlined" class="mb-3 description-field" />
+            <CommonRichTextEditor v-model="model.description" class="mb-3" />
 
             <div class="form-grid">
               <div>
@@ -412,11 +412,6 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   }
 }
 
-/* Un texte long reste plus lisible sur une largeur de paragraphe que sur
-   toute la largeur de .panel-card. */
-.description-field {
-  max-width: 720px;
-}
 
 /* auto-fit + minmax(min(420px, 100%), 1fr) plutôt que des colonnes fixes
    par media query : avec une seule variante, un grid-template-columns fixe

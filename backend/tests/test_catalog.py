@@ -353,3 +353,36 @@ async def test_updating_product_stock_directly_is_rejected_once_variants_exist(
     response = await client.patch(f"/products/{product.id}", json={"stock": 999}, headers=headers)
 
     assert response.status_code == 409
+
+
+# --- Description : assainissement du mini éditeur riche ---
+
+
+async def test_product_description_strips_disallowed_tags_and_attributes(
+    client: AsyncClient, vendor_user: User, category: Category
+) -> None:
+    dirty = (
+        '<p>Bonjour <strong>le monde</strong></p><script>alert(1)</script>'
+        '<img src=x onerror=alert(2)><a href="javascript:alert(3)">clic</a><ul><li>un</li></ul>'
+    )
+    response = await client.post(
+        "/products",
+        json={"category_id": str(category.id), "name": "Produit", "price": 1000, "stock": 1, "description": dirty},
+        headers=auth_headers(vendor_user),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["description"] == "<p>Bonjour <strong>le monde</strong></p>clic<ul><li>un</li></ul>"
+
+
+async def test_updating_product_description_is_also_sanitized(
+    client: AsyncClient, vendor_user: User, product: Product
+) -> None:
+    response = await client.patch(
+        f"/products/{product.id}",
+        json={"description": "<p onclick=\"alert(1)\">Texte <em>en italique</em></p>"},
+        headers=auth_headers(vendor_user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["description"] == "<p>Texte <em>en italique</em></p>"

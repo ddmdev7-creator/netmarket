@@ -213,9 +213,12 @@ async function addToCart() {
         <v-divider class="mb-4" />
 
         <h3 class="text-subtitle-1 mb-2">Description</h3>
-        <p class="text-muted text-meta" style="white-space: pre-line">
-          {{ product.description || 'Aucune description fournie par le vendeur.' }}
-        </p>
+        <!-- v-html sûr ici : le backend assainit systématiquement la
+             description à l'écriture (app/catalog/service.py::_sanitize_description),
+             quel que soit le point d'entrée — jamais confiance dans le HTML
+             saisi côté client seul, voir le commentaire côté backend. -->
+        <div v-if="product.description" class="description-content text-muted text-meta" v-html="product.description" />
+        <p v-else class="text-muted text-meta mb-0">Aucune description fournie par le vendeur.</p>
 
         <div
           v-if="product.estimated_delivery_min && product.estimated_delivery_max"
@@ -281,6 +284,29 @@ async function addToCart() {
   padding: 10px;
   margin: -10px;
   cursor: pointer;
+}
+
+/* white-space: pre-line préserve l'affichage des descriptions déjà en base
+   avant le mini éditeur riche (texte brut avec retours à la ligne, sans
+   balises) ; les balises produites par l'éditeur (p/ul/ol) gèrent leurs
+   propres sauts de ligne via leur affichage en bloc, indépendamment de
+   cette règle. */
+.description-content {
+  white-space: pre-line;
+}
+
+.description-content :deep(p) {
+  margin: 0 0 8px;
+}
+
+.description-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.description-content :deep(ul),
+.description-content :deep(ol) {
+  margin: 0 0 8px;
+  padding-left: 20px;
 }
 
 @media (min-width: 960px) {

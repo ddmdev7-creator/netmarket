@@ -3,6 +3,7 @@
 import uuid
 from datetime import date
 
+import nh3
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import repository
@@ -47,6 +48,22 @@ def _attach_delivery_estimate(product: Product) -> Product:
     product.estimated_delivery_min = estimate.min_date
     product.estimated_delivery_max = estimate.max_date
     return product
+
+# Mini éditeur riche côté frontend (ProductForm.vue) : gras, italique,
+# listes. Seules ces balises survivent, sans aucun attribut — la
+# description est réaffichée telle quelle (v-html) sur la fiche produit à
+# tous les acheteurs, donc jamais confiance dans le HTML envoyé par le
+# client, même si le frontend ne peut normalement en produire que ce
+# sous-ensemble (un appel direct à l'API pourrait envoyer n'importe quoi).
+_ALLOWED_DESCRIPTION_TAGS = {"p", "br", "strong", "b", "em", "i", "ul", "ol", "li"}
+
+
+def _sanitize_description(html: str | None) -> str | None:
+    if html is None:
+        return None
+    cleaned = nh3.clean(html, tags=_ALLOWED_DESCRIPTION_TAGS, attributes={}, strip_comments=True).strip()
+    return cleaned or None
+
 
 # --- Categories (admin only, enforced at router level) ---
 
@@ -98,7 +115,9 @@ async def create_product(db: AsyncSession, user: User, data: ProductCreate) -> P
         raise NotFoundError("Catégorie introuvable.")
 
     vendor_id = await _require_own_vendor(db, user)
-    product = await repository.create_product(db, vendor_id=vendor_id, **data.model_dump())
+    fields = data.model_dump()
+    fields["description"] = _sanitize_description(fields.get("description"))
+    product = await repository.create_product(db, vendor_id=vendor_id, **fields)
     await db.commit()
     return await get_product(db, product.id)
 
@@ -151,6 +170,8 @@ async def update_product(db: AsyncSession, user: User, product_id: uuid.UUID, da
         raise ConflictError("Le stock de ce produit est calculé automatiquement à partir de ses variantes.")
 
     for field, value in data.model_dump(exclude_unset=True).items():
+        if field == "description":
+            value = _sanitize_description(value)
         setattr(product, field, value)
 
     await db.commit()
