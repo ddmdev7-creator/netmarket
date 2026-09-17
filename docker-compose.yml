@@ -28,16 +28,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # SMTP catcher for local dev: the API sends real emails (verification codes,
-  # etc.) to it over SMTP, and the web UI (localhost:8025) lets you read them
-  # without a real mailbox or any external provider account.
-  mailpit:
-    image: axllent/mailpit:latest
-    restart: unless-stopped
-    ports:
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"
-      - "${MAILPIT_UI_PORT:-8025}:8025"
-
   # Stockage objet S3-compatible pour les images produit (self-hosted, pas de
   # compte cloud requis en dev) — voir cahier des charges §5.1. L'API s'y
   # connecte via le réseau docker interne (STORAGE_ENDPOINT=http://minio:9000)
@@ -72,9 +62,8 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       TEST_DATABASE_URL: ${TEST_DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
-      # SMTP_HOST/PORT/FROM/USERNAME/PASSWORD come from .env (env_file above)
-      # instead of being fixed here, so switching from mailpit to a real
-      # provider is a one-file edit — see .env.example.
+      # BREVO_API_KEY/SENDER_NAME/SENDER_EMAIL come from .env (env_file above)
+      # instead of being fixed here — see .env.example.
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
@@ -84,8 +73,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      mailpit:
-        condition: service_started
       minio:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

@@ -16,7 +16,7 @@ from app.pickup_point_managers.models import PickupPointManager
 from app.reports.models import Report
 from app.reviews.models import Review
 from app.subscriptions.models import VendorSubscription
-from app.users.models import EmailVerificationCode, User, UserRole
+from app.users.models import EmailCode, EmailCodePurpose, User, UserRole
 from app.vendors.models import Vendor
 
 
@@ -38,6 +38,11 @@ async def get_by_phone(db: AsyncSession, phone: str) -> User | None:
 async def get_by_email(db: AsyncSession, email: str) -> User | None:
     result = await db.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
+
+
+async def admin_exists(db: AsyncSession) -> bool:
+    result = await db.execute(select(User.id).where(User.role == UserRole.ADMIN).limit(1))
+    return result.scalar_one_or_none() is not None
 
 
 async def create(
@@ -63,26 +68,29 @@ async def create(
     return user
 
 
-async def get_verification_code(db: AsyncSession, user_id: uuid.UUID) -> EmailVerificationCode | None:
-    result = await db.execute(select(EmailVerificationCode).where(EmailVerificationCode.user_id == user_id))
+async def get_email_code(db: AsyncSession, user_id: uuid.UUID, purpose: EmailCodePurpose) -> EmailCode | None:
+    result = await db.execute(
+        select(EmailCode).where(EmailCode.user_id == user_id, EmailCode.purpose == purpose)
+    )
     return result.scalar_one_or_none()
 
 
-async def put_verification_code(
-    db: AsyncSession, user_id: uuid.UUID, *, code_hash: str, expires_at: datetime
-) -> EmailVerificationCode:
-    """Replace whatever code this user currently has (register, or a resend) with a fresh one."""
-    existing = await get_verification_code(db, user_id)
+async def put_email_code(
+    db: AsyncSession, user_id: uuid.UUID, purpose: EmailCodePurpose, *, code_hash: str, expires_at: datetime
+) -> EmailCode:
+    """Replace whatever code this user currently has for this purpose (register, resend,
+    forgot-password) with a fresh one."""
+    existing = await get_email_code(db, user_id, purpose)
     if existing is not None:
         await db.delete(existing)
         await db.flush()
-    record = EmailVerificationCode(user_id=user_id, code_hash=code_hash, expires_at=expires_at)
+    record = EmailCode(user_id=user_id, purpose=purpose, code_hash=code_hash, expires_at=expires_at)
     db.add(record)
     await db.flush()
     return record
 
 
-async def delete_verification_code(db: AsyncSession, record: EmailVerificationCode) -> None:
+async def delete_email_code(db: AsyncSession, record: EmailCode) -> None:
     await db.delete(record)
 
 
@@ -136,6 +144,6 @@ async def purge_user(db: AsyncSession, user: User) -> None:
     await db.execute(delete(Review).where(Review.user_id == user.id))
     await db.execute(delete(Report).where(Report.reporter_id == user.id))
     await db.execute(delete(Address).where(Address.user_id == user.id))
-    await db.execute(delete(EmailVerificationCode).where(EmailVerificationCode.user_id == user.id))
+    await db.execute(delete(EmailCode).where(EmailCode.user_id == user.id))
 
     await db.delete(user)

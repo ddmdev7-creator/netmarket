@@ -19,16 +19,17 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
 
-    # Dev default points at the mailpit service in docker-compose.yml — no
-    # auth, no TLS, nothing to configure to see emails locally. Set
-    # smtp_username/smtp_password (e.g. a Gmail address + app password) to
-    # switch to a real provider — see app/core/email.py for how that flips
-    # on STARTTLS + login.
-    smtp_host: str = "localhost"
-    smtp_port: int = 1025
-    smtp_from: str = "Marketplace Guinée <no-reply@marketplace-guinee.local>"
-    smtp_username: str | None = None
-    smtp_password: str | None = None
+    # Secret gating POST /auth/admin-bootstrap (app/auth/service.py::bootstrap_admin) —
+    # the one-time endpoint that creates the first admin account. Unset by
+    # default so the endpoint is refused (no default admin backdoor).
+    admin_bootstrap_token: str | None = None
+
+    # Envoi via l'API transactionnelle Brevo (plus de SMTP) — voir
+    # app/core/email.py. Sans clé (dev/CI sans compte Brevo), l'email est
+    # juste loggé, jamais réellement envoyé.
+    brevo_api_key: str | None = None
+    brevo_sender_name: str = "Marketplace Guinée"
+    brevo_sender_email: str = "no-reply@netmarket.ndjouri.com"
 
     # Stockage objet (MinIO en dev, S3-compatible) pour les images produit —
     # voir app/core/storage.py. Uniquement le réseau docker interne : l'API

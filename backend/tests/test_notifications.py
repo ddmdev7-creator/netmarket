@@ -1,8 +1,8 @@
 """Tests for order notifications: the in-app feed (persisted + listed via
 /notifications) and the buyer email sent on the two "package arrived
 somewhere" status changes (arrival at a pickup point, delivery at home —
-see app/notifications/service.py). send_email itself (SMTP over the
-network) is stubbed out — these tests check the trigger logic, not mailpit
+see app/notifications/service.py). send_email itself (the Brevo API call)
+is stubbed out — these tests check the trigger logic, not actual
 delivery."""
 
 import pytest
@@ -30,7 +30,7 @@ async def _checkout(client: AsyncClient, buyer: User, product: Product) -> str:
 def _stub_send_email(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, str]]:
     calls: list[tuple[str, str, str]] = []
 
-    async def fake_send_email(to: str, subject: str, body: str) -> None:
+    async def fake_send_email(to: str, subject: str, body: str, html: str | None = None) -> None:
         calls.append((to, subject, body))
 
     monkeypatch.setattr("app.notifications.service.send_email", fake_send_email)

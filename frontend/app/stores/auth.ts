@@ -47,14 +47,30 @@ export const useAuthStore = defineStore('auth', () => {
     await fetchMe()
   }
 
-  async function register(phone: string, password: string, email?: string) {
+  async function register(phone: string, password: string, email: string) {
     const tokens = await $fetch<TokenPair>('/auth/register', {
       baseURL: apiBase,
       method: 'POST',
-      body: { phone, password, email: email || undefined },
+      body: { phone, password, email },
     })
     setTokens(tokens)
     await fetchMe()
+  }
+
+  async function forgotPassword(phone: string) {
+    await $fetch('/auth/forgot-password', {
+      baseURL: apiBase,
+      method: 'POST',
+      body: { phone },
+    })
+  }
+
+  async function resetPassword(phone: string, code: string, newPassword: string) {
+    await $fetch('/auth/reset-password', {
+      baseURL: apiBase,
+      method: 'POST',
+      body: { phone, code, new_password: newPassword },
+    })
   }
 
   async function tryRefresh(): Promise<boolean> {
@@ -77,5 +93,18 @@ export const useAuthStore = defineStore('auth', () => {
     clear()
   }
 
-  return { accessToken, refreshToken, user, isAuthenticated, login, register, logout, fetchMe, tryRefresh, setTokens }
+  return {
+    accessToken,
+    refreshToken,
+    user,
+    isAuthenticated,
+    login,
+    register,
+    logout,
+    fetchMe,
+    tryRefresh,
+    setTokens,
+    forgotPassword,
+    resetPassword,
+  }
 })

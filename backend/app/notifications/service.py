@@ -22,12 +22,13 @@ has no email on file.
 """
 
 import logging
-import smtplib
 import uuid
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.email import send_email
+from app.core.email_templates import order_status_email
 from app.notifications import repository
 from app.notifications.models import Notification, NotificationType
 from app.notifications.ws_manager import manager as ws_manager
@@ -120,13 +121,9 @@ async def notify_sub_order_status_changed(db: AsyncSession, buyer: User, sub_ord
     if not buyer.email:
         return
     try:
-        await send_email(
-            buyer.email,
-            f"Votre commande chez {sub_order.shop_name} est {label}",
-            f"Bonjour,\n\nVotre commande chez « {sub_order.shop_name} » est maintenant {label}.\n\n"
-            "Vous pouvez suivre son statut dans votre espace « Mes commandes ».",
-        )
-    except (OSError, smtplib.SMTPException):
+        subject, text, html = order_status_email(sub_order.shop_name, label)
+        await send_email(buyer.email, subject, text, html)
+    except httpx.HTTPError:
         logger.warning("Échec d'envoi de la notification de statut pour la sous-commande %s", sub_order.id)
 
 

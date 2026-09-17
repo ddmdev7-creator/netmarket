@@ -15,7 +15,9 @@ opérationnel. Intégration NimbaPay réelle et SMS restent à construire (voir
 ## Stack
 
 - **Backend** : FastAPI (Python 3.12), SQLAlchemy 2.0 (async), PostgreSQL, Redis
-- **Auth** : JWT (access + refresh), mot de passe hashé (Argon2)
+- **Auth** : JWT (access + refresh), mot de passe hashé (Argon2), mot de passe
+  oublié self-service par code email
+- **Email** : API transactionnelle Brevo (`app/core/email.py`)
 - **Migrations** : Alembic
 - **Tests** : pytest + pytest-asyncio + httpx (base de données PostgreSQL réelle)
 - **Conteneurisation** : Docker + docker-compose (api, db, redis)
@@ -367,11 +369,19 @@ Le module `notifications/` a deux canaux, déclenchés aux deux mêmes endroits
   de retrait, l'acheteur est déjà sur place à ce moment-là). Les autres
   transitions (confirmée, en préparation, expédiée, annulée) ne passent que
   par le canal in-app/WebSocket, pour limiter le volume de mails envoyés.
-  Via l'infra SMTP existante (`app/core/email.py` — mailpit en dev).
+  Via l'API Brevo (`app/core/email.py` — sans clé configurée, l'email est
+  juste loggé, pratique en dev/CI).
   Silencieusement ignoré si l'acheteur n'a pas renseigné d'email (champ
   optionnel à l'inscription).
 
-Les deux canaux sont best-effort : un échec (SMTP ou push WebSocket) est
+Le même module Brevo envoie aussi : le code de confirmation d'email à la
+création de compte (acheteur si un email est fourni, vendeur à
+l'onboarding — `app/users/service.py::send_verification_code`) et le code de
+réinitialisation de mot de passe (`POST /auth/forgot-password` puis
+`/auth/reset-password`, sans révéler si un compte existe pour le numéro
+donné).
+
+Les deux canaux (email + in-app) sont best-effort : un échec (Brevo ou push WebSocket) est
 journalisé mais n'annule jamais la mise à jour de statut qui l'a déclenché —
 la notification in-app reste de toute façon consultable via `GET
 /notifications` même si le push en direct a échoué (socket fermée, etc.).

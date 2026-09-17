@@ -43,6 +43,10 @@ async function submit() {
       <v-text-field v-model="phone" label="Téléphone" placeholder="+224621234567" class="mb-2" />
       <v-text-field v-model="password" label="Mot de passe" type="password" class="mb-2" />
 
+      <div class="text-right mb-4">
+        <NuxtLink to="/mot-de-passe-oublie" class="text-primary" style="font-size: 12.5px">Mot de passe oublié ?</NuxtLink>
+      </div>
+
       <v-btn type="submit" color="primary" block size="large" :loading="loading">Se connecter</v-btn>
     </v-form>
 

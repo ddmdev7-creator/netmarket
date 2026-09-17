@@ -1,10 +1,10 @@
-"""User ORM model, role enum, and email verification codes."""
+"""User ORM model, role enum, and one-time email codes (verification, password reset)."""
 
 import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +18,11 @@ class UserRole(StrEnum):
     COURIER = "courier"
     PICKUP_POINT_MANAGER = "pickup_point_manager"
     ADMIN = "admin"
+
+
+class EmailCodePurpose(StrEnum):
+    EMAIL_VERIFICATION = "email_verification"
+    PASSWORD_RESET = "password_reset"
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -34,24 +39,28 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    # Only meaningful once `email` is set. Currently gated behind vendor
-    # onboarding (see app/vendors/service.py) — buyers can leave email unset
-    # entirely, so this stays False and unused for them.
+    # Email is mandatory and verified at registration (see
+    # app/auth/service.py::register_user) — this starts False and flips once
+    # the signup code is confirmed, same flow as vendor onboarding.
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
-class EmailVerificationCode(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """One active code per user — a new send (register/resend) replaces it.
+class EmailCode(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """One active code per (user, purpose) — a new send (register/resend/forgot-password)
+    replaces the previous one for that purpose.
 
     The code itself is short (4-5 digits, ~100k possibilities), so `attempts`
     caps guesses and `expires_at` bounds the window; both matter more here
     than they would for a long random token.
     """
 
-    __tablename__ = "email_verification_codes"
+    __tablename__ = "email_codes"
+    __table_args__ = (UniqueConstraint("user_id", "purpose"),)
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    purpose: Mapped[EmailCodePurpose] = mapped_column(
+        SAEnum(EmailCodePurpose, name="email_code_purpose", values_callable=lambda enum: [e.value for e in enum]),
+        nullable=False,
     )
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

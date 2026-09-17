@@ -66,12 +66,11 @@ services:
     # CMD par défaut de l'image (backend/Dockerfile) :
     # uvicorn app.main:app --host 0.0.0.0 --port 8000
     #
-    # Email : pas de puits SMTP local ici (contrairement à docker-compose.yml
-    # en dev) — un vrai fournisseur SMTP doit être renseigné dans le .env de
-    # ce déploiement (SMTP_HOST/PORT/FROM/USERNAME/PASSWORD, voir
+    # Email : envoi via l'API Brevo — BREVO_API_KEY/SENDER_NAME/SENDER_EMAIL
+    # doivent être renseignés dans le .env de ce déploiement (voir
     # .env.example) avant de démarrer, sous peine d'échec silencieux de tout
-    # envoi (code de vérification, arrivée de colis — voir
-    # backend/app/core/email.py et backend/app/notifications/service.py).
+    # envoi (code de vérification, mot de passe oublié, arrivée de colis —
+    # voir backend/app/core/email.py et backend/app/notifications/service.py).
 
   frontend:
     build:

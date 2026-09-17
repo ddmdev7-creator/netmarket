@@ -1,10 +1,10 @@
 """Shared pytest fixtures.
 
-Tests run against a real PostgreSQL database (TEST_DATABASE_URL, falling back
-to DATABASE_URL) so that Postgres-specific types used by the models (UUID,
-ARRAY, native ENUM) behave exactly as in production. Each test runs inside a
-SAVEPOINT that is rolled back afterwards, so tests are isolated from each
-other even though the application code calls commit().
+Tests run against a real PostgreSQL database (TEST_DATABASE_URL) so that
+Postgres-specific types used by the models (UUID, ARRAY, native ENUM) behave
+exactly as in production. Each test runs inside a SAVEPOINT that is rolled
+back afterwards, so tests are isolated from each other even though the
+application code calls commit().
 """
 
 import os
@@ -33,7 +33,18 @@ from app.subscriptions.models import SubscriptionPlan
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor, VendorStatus
 
-TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or os.environ["DATABASE_URL"]
+try:
+    TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
+except KeyError as exc:
+    # No fallback to DATABASE_URL: _prepare_database below does a drop_all/
+    # create_all, which would silently wipe whatever database DATABASE_URL
+    # points at (including production, in an environment where only
+    # DATABASE_URL happens to be set) the first time someone runs pytest there.
+    raise RuntimeError(
+        "TEST_DATABASE_URL doit être défini pour lancer les tests — jamais de repli "
+        "sur DATABASE_URL, qui pointerait vers une vraie base (dev ou prod) que "
+        "_prepare_database détruirait (drop_all/create_all)."
+    ) from exc
 
 
 # NullPool: each checkout opens a fresh asyncpg connection and closes it on

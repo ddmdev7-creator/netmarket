@@ -1,6 +1,7 @@
-"""Business logic for the authenticated user's own profile, plus email
-verification codes (currently triggered by vendor onboarding — see
-app/vendors/service.py::register_vendor)."""
+"""Business logic for the authenticated user's own profile, plus one-time email
+codes: verification (triggered at registration — see app/auth/service.py::register_user
+— and vendor onboarding, app/vendors/service.py::register_vendor) and password
+reset (app/auth/service.py::forgot_password/reset_password)."""
 
 import secrets
 import uuid
@@ -9,10 +10,11 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.email import send_email
+from app.core.email_templates import verification_code_email
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password, verify_password
 from app.users import repository
-from app.users.models import User, UserRole
+from app.users.models import EmailCodePurpose, User, UserRole
 from app.users.schemas import AdminPasswordReset, UserUpdate
 
 CODE_LENGTH = 5
@@ -49,11 +51,10 @@ def _generate_code() -> str:
     return f"{secrets.randbelow(10**CODE_LENGTH):0{CODE_LENGTH}d}"
 
 
-async def send_verification_code(db: AsyncSession, user: User) -> None:
-    if not user.email:
-        raise ConflictError("Aucun email renseigné sur ce compte.")
-
-    existing = await repository.get_verification_code(db, user.id)
+async def create_code(db: AsyncSession, user: User, purpose: EmailCodePurpose) -> str:
+    """Generate, store and return a fresh code for this (user, purpose) — also used by
+    app/auth/service.py::forgot_password for password-reset codes."""
+    existing = await repository.get_email_code(db, user.id, purpose)
     if existing is not None:
         age = datetime.now(timezone.utc) - existing.created_at
         if age < timedelta(seconds=RESEND_COOLDOWN_SECONDS):
@@ -62,29 +63,25 @@ async def send_verification_code(db: AsyncSession, user: User) -> None:
 
     code = _generate_code()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=CODE_TTL_MINUTES)
-    await repository.put_verification_code(db, user.id, code_hash=hash_password(code), expires_at=expires_at)
+    await repository.put_email_code(db, user.id, purpose, code_hash=hash_password(code), expires_at=expires_at)
     await db.commit()
-
-    await send_email(
-        user.email,
-        "Votre code de vérification — Marketplace Guinée",
-        f"Votre code de vérification est : {code}\n\n"
-        f"Il expire dans {CODE_TTL_MINUTES} minutes. Si tu n'es pas à l'origine de cette demande, ignore ce message.",
-    )
+    return code
 
 
-async def verify_email_code(db: AsyncSession, user: User, code: str) -> User:
-    record = await repository.get_verification_code(db, user.id)
+async def consume_code(db: AsyncSession, user: User, purpose: EmailCodePurpose, code: str) -> None:
+    """Validate and delete this (user, purpose) code, or raise — also used by
+    app/auth/service.py::reset_password for password-reset codes."""
+    record = await repository.get_email_code(db, user.id, purpose)
     if record is None:
         raise ConflictError("Aucun code en attente. Demande un nouveau code.")
 
     if datetime.now(timezone.utc) > record.expires_at:
-        await repository.delete_verification_code(db, record)
+        await repository.delete_email_code(db, record)
         await db.commit()
         raise ConflictError("Ce code a expiré. Demande un nouveau code.")
 
     if record.attempts >= MAX_ATTEMPTS:
-        await repository.delete_verification_code(db, record)
+        await repository.delete_email_code(db, record)
         await db.commit()
         raise ConflictError("Trop de tentatives. Demande un nouveau code.")
 
@@ -93,8 +90,22 @@ async def verify_email_code(db: AsyncSession, user: User, code: str) -> User:
         await db.commit()
         raise ConflictError("Code incorrect.")
 
+    await repository.delete_email_code(db, record)
+    await db.commit()
+
+
+async def send_verification_code(db: AsyncSession, user: User) -> None:
+    if not user.email:
+        raise ConflictError("Aucun email renseigné sur ce compte.")
+
+    code = await create_code(db, user, EmailCodePurpose.EMAIL_VERIFICATION)
+    subject, text, html = verification_code_email(code, CODE_TTL_MINUTES)
+    await send_email(user.email, subject, text, html)
+
+
+async def verify_email_code(db: AsyncSession, user: User, code: str) -> User:
+    await consume_code(db, user, EmailCodePurpose.EMAIL_VERIFICATION, code)
     user.email_verified = True
-    await repository.delete_verification_code(db, record)
     await db.commit()
     await db.refresh(user)
     return user

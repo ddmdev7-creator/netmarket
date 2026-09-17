@@ -1,38 +1,39 @@
-"""Outbound email — SMTP only, no external provider SDK.
+"""Outbound email — Brevo transactional API (https://api.brevo.com/v3/smtp/email).
 
-In dev/docker-compose, SMTP_HOST/PORT default to the mailpit service (see
-docker-compose.yml): it accepts anything, sends nothing out, and shows
-received mail at http://localhost:8025 — no auth, no TLS.
-
-Set SMTP_USERNAME/SMTP_PASSWORD in .env to go through a real provider instead
-(e.g. Gmail: smtp.gmail.com:587, an app-specific password — Gmail requires
-2-Step Verification enabled first and won't accept the account's normal
-password over SMTP). Their presence is what switches STARTTLS + login on.
+Without BREVO_API_KEY set (local dev/CI without a Brevo account), the email
+is logged instead of sent — no external account required to develop.
 """
 
-import asyncio
-import smtplib
-from email.message import EmailMessage
+import logging
+
+import httpx
 
 from app.core.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 
 
-def _send_sync(to: str, subject: str, body: str) -> None:
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = settings.smtp_from
-    message["To"] = to
-    message.set_content(body)
+async def send_email(to: str, subject: str, body: str, html: str | None = None) -> None:
+    if not settings.brevo_api_key:
+        logger.warning("BREVO_API_KEY absent — email non envoyé (to=%s, subject=%s)", to, subject)
+        return
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
-        if settings.smtp_username and settings.smtp_password:
-            smtp.starttls()
-            smtp.login(settings.smtp_username, settings.smtp_password)
-        smtp.send_message(message)
+    payload = {
+        "sender": {"name": settings.brevo_sender_name, "email": settings.brevo_sender_email},
+        "to": [{"email": to}],
+        "subject": subject,
+        "textContent": body,
+    }
+    if html is not None:
+        payload["htmlContent"] = html
 
-
-async def send_email(to: str, subject: str, body: str) -> None:
-    # smtplib is blocking; keep it off the event loop.
-    await asyncio.to_thread(_send_sync, to, subject, body)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(
+            BREVO_ENDPOINT,
+            headers={"api-key": settings.brevo_api_key, "content-type": "application/json"},
+            json=payload,
+        )
+        response.raise_for_status()

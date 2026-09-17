@@ -13,14 +13,18 @@ const password = ref('')
 const loading = ref(false)
 
 async function submit() {
+  if (!email.value.trim()) {
+    toast.error("L'adresse email est obligatoire.")
+    return
+  }
   if (password.value.length < 8) {
     toast.error('Le mot de passe doit contenir au moins 8 caractères.')
     return
   }
   loading.value = true
   try {
-    await auth.register(phone.value, password.value, email.value)
-    await router.push('/')
+    await auth.register(phone.value, password.value, email.value.trim())
+    await router.push('/verifier-email')
   } catch (error) {
     toast.error(apiErrorMessage(error, 'Impossible de créer le compte.'))
   } finally {
@@ -43,7 +47,7 @@ async function submit() {
 
     <v-form @submit.prevent="submit">
       <v-text-field v-model="phone" label="Téléphone" placeholder="+224621234567" class="mb-2" />
-      <v-text-field v-model="email" label="Email (optionnel)" class="mb-2" />
+      <v-text-field v-model="email" label="Email" type="email" required class="mb-2" />
       <v-text-field v-model="password" label="Mot de passe" type="password" hint="8 caractères minimum" class="mb-2" />
 
       <v-btn type="submit" color="primary" block size="large" :loading="loading">Créer mon compte</v-btn>
