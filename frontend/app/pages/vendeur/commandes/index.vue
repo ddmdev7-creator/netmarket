@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhMagnifyingGlass, PhMotorcycle } from '@phosphor-icons/vue'
+import { PhImage, PhMagnifyingGlass, PhMotorcycle } from '@phosphor-icons/vue'
 import type { CourierRead, OrderStatus, VehicleType, VendorSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -8,6 +8,7 @@ const { apiFetch } = useApi()
 const toast = useToastStore()
 const route = useRoute()
 const router = useRouter()
+const apiBase = useApiBase()
 
 // getCachedData: () => undefined disables Nuxt's static cross-navigation
 // cache — without it, switching tabs in the vendor bottom nav and coming
@@ -259,6 +260,7 @@ function formatDate(iso: string) {
 
     <CommonEmptyState v-if="!pending && visible.length === 0" message="Aucune commande ici pour le moment." />
 
+    <div class="sub-order-grid">
     <v-card
       v-for="so in visible"
       :id="`sub-order-${so.order_id}`"
@@ -272,12 +274,21 @@ function formatDate(iso: string) {
       </div>
       <div class="text-muted mb-3" style="font-size: 12px">{{ formatDate(so.created_at) }}</div>
 
-      <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1" style="font-size: 13px">
-        <span
+      <div v-for="item in so.items" :key="item.id" class="order-item-row mb-2">
+        <NuxtLink :to="`/produits/${item.product_id}`" class="order-item-row__thumb">
+          <img
+            v-if="item.product_image"
+            :src="resolveImageUrl(item.product_image, apiBase)"
+            :alt="item.product_name"
+            loading="lazy"
+          />
+          <PhImage v-else :size="16" weight="light" color="var(--color-neutral-500)" />
+        </NuxtLink>
+        <span class="order-item-row__label" style="font-size: 13px"
           >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
           {{ item.quantity }}</span
         >
-        <span>{{ formatGnf(item.unit_price * item.quantity) }}</span>
+        <span style="font-size: 13px">{{ formatGnf(item.unit_price * item.quantity) }}</span>
       </div>
 
       <OrderDeliveryDetails
@@ -396,10 +407,59 @@ function formatDate(iso: string) {
         {{ waitingMessage(so) }}
       </p>
     </v-card>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* Une seule colonne pleine largeur reste illisible passé 960px (cartes
+   étirées sur près de 1400px, voir .dashboard-shell) — sur grand écran, les
+   commandes se répartissent plutôt sur plusieurs colonnes, chacune bornée à
+   une largeur de carte confortable, sans jamais dépendre d'un nombre de
+   colonnes fixe (auto-fill s'adapte à la largeur réelle disponible). */
+.sub-order-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 0;
+}
+
+@media (min-width: 960px) {
+  .sub-order-grid {
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 0 16px;
+  }
+}
+
+.order-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-item-row__thumb {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.order-item-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.order-item-row__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .manual-assign-toggle {
   display: inline-flex;
   align-items: center;

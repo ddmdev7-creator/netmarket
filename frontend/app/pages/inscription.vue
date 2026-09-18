@@ -43,6 +43,7 @@ async function submit() {
       </NuxtLink>
 
       <div class="text-center mb-8">
+        <div class="auth-brand mb-3">NdjouriMarket</div>
         <h1 class="text-h5 mb-1">Créer un compte</h1>
         <p class="text-muted">Rejoignez la marketplace en quelques secondes</p>
       </div>

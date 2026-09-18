@@ -250,6 +250,17 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
+/* Nom de la marketplace au-dessus du titre de chaque formulaire de
+   connexion/inscription — jusqu'ici seul le <title> d'onglet (useHead)
+   portait ce nom, rien n'était visible sur la page elle-même. */
+.auth-brand {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--color-primary);
+}
+
 /* Contre-partie de .app-shell pour les back-offices (admin, vendeur) :
    ceux-ci gèrent beaucoup de contenu (produits, commandes, statistiques...)
    et sont consultés depuis un ordinateur la plupart du temps, donc pas de

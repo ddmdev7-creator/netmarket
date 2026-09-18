@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhChatCircle } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhChatCircle, PhImage } from '@phosphor-icons/vue'
 import type { OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
@@ -9,6 +9,7 @@ const router = useRouter()
 const { apiFetch } = useApi()
 const toast = useToastStore()
 const notifications = useNotificationStore()
+const apiBase = useApiBase()
 
 const orderId = route.params.id as string
 
@@ -79,8 +80,17 @@ function shortId(id: string) {
           Livraison estimée :
           <strong>{{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}</strong>
         </p>
-        <div v-for="item in sub.items" :key="item.id" class="d-flex justify-space-between mt-1 text-meta">
-          <span
+        <div v-for="item in sub.items" :key="item.id" class="order-item-row mt-2">
+          <NuxtLink :to="`/produits/${item.product_id}`" class="order-item-row__thumb">
+            <img
+              v-if="item.product_image"
+              :src="resolveImageUrl(item.product_image, apiBase)"
+              :alt="item.product_name"
+              loading="lazy"
+            />
+            <PhImage v-else :size="18" weight="light" color="var(--color-neutral-500)" />
+          </NuxtLink>
+          <span class="order-item-row__label text-meta"
             >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
             {{ item.quantity }}</span
           >
@@ -131,6 +141,42 @@ function shortId(id: string) {
 </template>
 
 <style scoped>
+.order-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.order-item-row__thumb {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.order-item-row__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.order-item-row__label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  .order-item-row__thumb {
+    width: 52px;
+    height: 52px;
+  }
+}
+
 .amount {
   font-family: var(--font-heading);
   font-weight: 600;

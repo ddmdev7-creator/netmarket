@@ -6,7 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.catalog.models import Category, Product
+from app.catalog.models import Category, Product, ProductVariant
 from app.orders.models import OrderItem
 from app.users.models import User
 from app.vendors.models import Vendor
@@ -355,6 +355,38 @@ async def test_checkout_decrements_variant_stock_and_product_total(
     product_response = await client.get(f"/products/{product.id}")
     updated_variant = next(v for v in product_response.json()["variants"] if v["id"] == variant["id"])
     assert updated_variant["stock"] == 3
+
+
+async def test_order_item_uses_variant_image_over_product_image(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor_user: User, product: Product
+) -> None:
+    product.images = ["products/phone-front.jpg"]
+    variant = await _create_variant(client, db_session, vendor_user, product, stock=5)
+    variant_row = (
+        await db_session.execute(select(ProductVariant).where(ProductVariant.id == variant["id"]))
+    ).scalar_one()
+    variant_row.images = ["variants/phone-red.jpg"]
+    await db_session.flush()
+    await _add_variant_to_cart(client, buyer_user, product, variant["id"])
+
+    response = await client.post("/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user))
+
+    assert response.status_code == 201
+    item = response.json()["sub_orders"][0]["items"][0]
+    assert item["product_image"] == "variants/phone-red.jpg"
+
+
+async def test_order_item_falls_back_to_product_image_without_variant(
+    client: AsyncClient, buyer_user: User, product: Product
+) -> None:
+    product.images = ["products/phone-front.jpg"]
+    await _add_to_cart(client, buyer_user, product)
+
+    response = await client.post("/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user))
+
+    assert response.status_code == 201
+    item = response.json()["sub_orders"][0]["items"][0]
+    assert item["product_image"] == "products/phone-front.jpg"
 
 
 async def test_checkout_insufficient_variant_stock_fails_and_does_not_mutate_stock(

@@ -452,6 +452,8 @@ export interface OrderItemRead {
   variant_id: string | null
   variant_label: string | null
   product_name: string
+  /** Looked up live from the product/variant (like CartItemRead) — null if deleted since. */
+  product_image: string | null
   quantity: number
   unit_price: number
 }

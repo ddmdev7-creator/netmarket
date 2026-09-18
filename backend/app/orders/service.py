@@ -240,6 +240,8 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
     payment = await payments_repository.get_by_order_id(db, order.id)
     _attach_payment_status(order, payment.status if payment else None)
     await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
+    for sub_order in order.sub_orders:
+        await _attach_product_images(db, sub_order)
     return _attach_delivery_tokens(order)
 
 
@@ -249,6 +251,8 @@ async def list_my_orders(db: AsyncSession, user: User) -> list[Order]:
     for order in orders:
         _attach_payment_status(order, status_map.get(order.id))
         await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
+        for sub_order in order.sub_orders:
+            await _attach_product_images(db, sub_order)
     return [_attach_delivery_tokens(order) for order in orders]
 
 
@@ -316,6 +320,20 @@ async def _attach_dispatch_offer_info(db: AsyncSession, sub_order: SubOrder) -> 
     return sub_order
 
 
+async def _attach_product_images(db: AsyncSession, sub_order: SubOrder) -> SubOrder:
+    # Même logique que app/cart/service.py::get_cart pour product_image :
+    # variante d'abord si elle a ses propres photos, sinon celles du produit.
+    for item in sub_order.items:
+        item.product_image = None
+        product = await catalog_repository.get_product_by_id(db, item.product_id)
+        if product is None:
+            continue
+        variant = await catalog_repository.get_variant_by_id(db, item.variant_id) if item.variant_id else None
+        images = (variant.images if (variant is not None and variant.images) else None) or product.images
+        item.product_image = images[0] if images else None
+    return sub_order
+
+
 async def _attach_pickup_point_contacts(db: AsyncSession, target, pickup_point_id: uuid.UUID | None) -> None:
     # Live lookup, deliberately not frozen: a pickup point can have several
     # managers, and who's currently staffing it can change after the order
@@ -338,6 +356,7 @@ async def list_my_sub_orders(db: AsyncSession, user: User) -> list[SubOrder]:
         await _attach_courier_info(db, so)
         await _attach_dispatch_offer_info(db, so)
         await _attach_pickup_point_contacts(db, so, so.order.pickup_point_id)
+        await _attach_product_images(db, so)
     return sub_orders
 
 
@@ -374,6 +393,7 @@ async def assign_courier(
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
     await _attach_dispatch_offer_info(db, updated)
+    await _attach_product_images(db, updated)
     return await _attach_courier_info(db, updated)
 
 
@@ -401,6 +421,7 @@ async def list_my_deliveries(db: AsyncSession, user: User) -> list[SubOrder]:
     for so in sub_orders:
         _attach_pickup_dropoff_token(_attach_delivery_address(so))
         await _attach_pickup_point_contacts(db, so, so.order.pickup_point_id)
+        await _attach_product_images(db, so)
     return sub_orders
 
 
@@ -413,6 +434,7 @@ async def list_my_point_deliveries(db: AsyncSession, user: User) -> list[SubOrde
     for so in sub_orders:
         _attach_delivery_address(so)
         await _attach_courier_info(db, so)
+        await _attach_product_images(db, so)
         result.append(so)
     return result
 
@@ -514,6 +536,7 @@ async def update_sub_order_status(
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
+    await _attach_product_images(db, updated)
     return await _attach_courier_info(db, updated)
 
 
@@ -608,6 +631,7 @@ async def start_dispatch(db: AsyncSession, user: User, sub_order_id: uuid.UUID, 
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
     await _attach_dispatch_offer_info(db, updated)
+    await _attach_product_images(db, updated)
     return await _attach_courier_info(db, updated)
 
 
@@ -706,6 +730,7 @@ async def accept_delivery(db: AsyncSession, user: User, sub_order_id: uuid.UUID)
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
+    await _attach_product_images(db, updated)
     return await _attach_courier_info(db, updated)
 
 

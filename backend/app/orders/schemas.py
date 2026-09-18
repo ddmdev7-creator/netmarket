@@ -66,6 +66,12 @@ class OrderItemRead(BaseModel):
     variant_id: uuid.UUID | None = None
     variant_label: str | None = None
     product_name: str
+    # Pas une colonne order_items (voir OrderItem dans models.py) : regardée en
+    # direct sur le produit/la variante au moment de la lecture, comme
+    # CartItemRead.product_image (app/cart/service.py::get_cart) — un produit
+    # ou une variante supprimé(e) depuis laisse simplement ce champ à None,
+    # product_name/unit_price restant la source figée pour le reste de la ligne.
+    product_image: str | None = None
     quantity: int
     unit_price: int
 
