@@ -42,7 +42,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="app-shell auth-shell d-flex flex-column justify-center pa-6" style="min-height: 100dvh">
+  <div class="app-shell auth-shell d-flex flex-column justify-center pa-4" style="min-height: 100dvh">
     <v-sheet class="auth-card" theme="daylight" color="white">
       <NuxtLink to="/mot-de-passe-oublie" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
         <PhArrowLeft :size="14" />

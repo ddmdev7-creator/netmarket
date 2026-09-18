@@ -255,8 +255,13 @@ h1, h2, h3, h4, h5, h6,
 .auth-card {
   background: #fff;
   color: #14151a;
-  padding: 28px 20px;
-  border-radius: var(--radius-lg);
+  padding: 32px 20px 28px;
+  border-radius: 22px;
+  /* Liseré de couleur en haut de la carte, à la couleur ndjouri.com — un
+     rappel de marque net sans repeindre toute la carte, et border-top (pas
+     un ::before séparé) suit nativement l'arrondi du coin plutôt que de
+     devoir le recalculer à la main. */
+  border-top: 5px solid #3b1e32;
   box-shadow: var(--shadow-lg);
 }
 
