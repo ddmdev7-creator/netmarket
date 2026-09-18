@@ -144,6 +144,27 @@ const addDisabled = computed(() => {
   return hasVariants.value ? !activeVariant.value || activeVariant.value.stock === 0 : product.value.stock === 0
 })
 
+// Dès qu'un choix ne laisse plus qu'une seule valeur possible pour un autre
+// attribut (ex. "Rouge" n'existe qu'en taille M), on la coche directement —
+// évite à l'acheteur de cliquer sur un groupe qui n'a de toute façon plus
+// qu'une réponse possible avant de pouvoir toucher "Ajouter au panier". En
+// boucle car cocher un groupe peut à son tour rendre un troisième groupe non
+// ambigu (au-delà de 2 attributs).
+function autoSelectUnambiguousAttributes() {
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const group of attributeGroups.value) {
+      if (selected[group.name]) continue
+      const stillPossible = group.values.filter((value) => isValueAvailable(group.name, value))
+      if (stillPossible.length === 1) {
+        selected[group.name] = stillPossible[0]
+        changed = true
+      }
+    }
+  }
+}
+
 function selectAttribute(name: string, value: string) {
   // Recliquer la valeur déjà choisie revient dessus (désélection) plutôt que
   // de rester bloqué dessus — sans ça, une fois un choix fait il était
@@ -152,6 +173,7 @@ function selectAttribute(name: string, value: string) {
     delete selected[name]
   } else {
     selected[name] = value
+    autoSelectUnambiguousAttributes()
   }
   quantity.value = 1
   justAdded.value = false
@@ -391,6 +413,16 @@ async function addToCart() {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px 16px;
+}
+
+/* Sépare visuellement les groupes (Couleur / Taille...) l'un de l'autre —
+   sans backdrop-filter ni pseudo-élément par ligne, juste un liseré sur
+   chaque groupe qui n'est pas premier de sa rangée (le cas courant : 2
+   groupes sur une seule rangée dès qu'ils tiennent, voir le commentaire de
+   .attribute-groups ci-dessus). */
+.attribute-group:not(:first-child) {
+  border-left: 1px solid var(--color-divider);
+  padding-left: 14px;
 }
 
 .reset-selection-btn {

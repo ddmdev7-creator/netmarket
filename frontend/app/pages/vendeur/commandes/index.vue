@@ -282,7 +282,7 @@ function formatDate(iso: string) {
             :alt="item.product_name"
             loading="lazy"
           />
-          <PhImage v-else :size="16" weight="light" color="var(--color-neutral-500)" />
+          <PhImage v-else :size="22" weight="light" color="var(--color-neutral-500)" />
         </NuxtLink>
         <span class="order-item-row__label" style="font-size: 13px"
           >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
@@ -434,12 +434,16 @@ function formatDate(iso: string) {
 .order-item-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
+/* 34px lisait mal les détails du produit (tissu, couleur exacte...) dont un
+   vendeur a justement besoin pour préparer la bonne commande — remonté à une
+   taille qui reste une vignette (pas une photo pleine) mais où le produit
+   reste identifiable au premier coup d'œil. */
 .order-item-row__thumb {
-  width: 34px;
-  height: 34px;
+  width: 48px;
+  height: 48px;
   flex: none;
   border-radius: var(--radius-sm);
   background: var(--color-neutral-800);
@@ -447,6 +451,13 @@ function formatDate(iso: string) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+
+@media (min-width: 960px) {
+  .order-item-row__thumb {
+    width: 60px;
+    height: 60px;
+  }
 }
 
 .order-item-row__thumb img {

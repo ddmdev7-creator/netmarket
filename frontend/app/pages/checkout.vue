@@ -12,6 +12,19 @@ const toast = useToastStore()
 
 await useAsyncData('checkout-cart', () => cartStore.fetchCart())
 
+// Un aller-retour navigateur ("précédent") après confirmation d'une commande
+// remonte sur cette page avec un panier déjà vidé côté serveur (voir
+// confirmOrder ci-dessous, qui appelle cartStore.reset() sur succès) — sans
+// ce garde-fou, l'acheteur se retrouverait sur un écran de paiement figé,
+// vide de tout article, qu'il pourrait même tenter de soumettre à nouveau.
+// Vérifié une seule fois ici (pas un watcher) : la modale de confirmation
+// affichée juste après confirmOrder tourne sur cette même page avec le
+// panier déjà réinitialisé, un watcher redirigerait alors immédiatement
+// loin de cette modale.
+if ((cartStore.cart?.vendors.length ?? 0) === 0) {
+  await navigateTo('/panier')
+}
+
 const { data: addresses } = await useAsyncData('checkout-addresses', () => apiFetch<AddressRead[]>('/addresses'), {
   default: () => [],
 })
