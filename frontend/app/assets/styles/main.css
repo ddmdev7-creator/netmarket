@@ -231,11 +231,32 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Connexion/inscription/mot de passe oublié : sur desktop, un formulaire de
-   720px de large serait absurde -- .auth-shell (le fond, plein écran) reste
-   étroit et centre .auth-card (le formulaire lui-même), qui devient une
-   carte détachée visuellement du fond plutôt que de s'étirer sur toute la
-   hauteur de l'écran. */
+/* Connexion/inscription/mot de passe oublié : même couleur que la première
+   section (hero) de ndjouri.com (var(--primary) de sa charte, #3b1e32) —
+   .auth-shell porte ce fond plein écran, .auth-card reste une carte blanche
+   qui s'en détache nettement, quelle que soit la taille d'écran (avant ce
+   fond de carte n'existait que sur desktop ; sur mobile la carte était
+   invisible, confondue avec le fond de page). */
+.auth-shell {
+  background-color: #3b1e32;
+}
+
+.auth-card {
+  background: #fff;
+  color: #14151a;
+  padding: 28px 20px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* --color-neutral-400 suit le thème clair/sombre du site, mais la carte
+   reste blanche dans les deux cas (voir plus haut) — sans ce forçage, le
+   texte secondaire resterait calibré pour un fond sombre en mode nuit et
+   perdrait en lisibilité ici. */
+.auth-card .text-muted {
+  color: #6e7079;
+}
+
 @media (min-width: 960px) {
   .auth-shell {
     max-width: 460px;
@@ -243,10 +264,6 @@ h1, h2, h3, h4, h5, h6,
 
   .auth-card {
     padding: 40px 36px;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
   }
 }
 

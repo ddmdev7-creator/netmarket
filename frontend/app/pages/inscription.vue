@@ -36,7 +36,7 @@ async function submit() {
 
 <template>
   <div class="app-shell auth-shell d-flex flex-column justify-center pa-6" style="min-height: 100dvh">
-    <div class="auth-card">
+    <v-sheet class="auth-card" theme="daylight" color="white">
       <NuxtLink to="/" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
         <PhArrowLeft :size="14" />
         Retour à l'accueil
@@ -60,6 +60,6 @@ async function submit() {
         Déjà un compte ?
         <NuxtLink to="/connexion" class="text-primary">Se connecter</NuxtLink>
       </div>
-    </div>
+    </v-sheet>
   </div>
 </template>
