@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Message
 from app.core.deps import get_db, require_role
+from app.pickup_point_managers import service as pickup_point_managers_service
+from app.pickup_point_managers.schemas import PickupPointManagerRead
 from app.pickup_points import service
 from app.pickup_points.schemas import PickupPointCreate, PickupPointRead, PickupPointUpdate
 from app.users.models import UserRole
@@ -46,3 +48,12 @@ async def admin_update_pickup_point(
 async def admin_delete_pickup_point(point_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Message:
     await service.delete_point(db, point_id)
     return Message(detail="Point de retrait supprimé.")
+
+
+@admin_router.post(
+    "/{point_id}/link-vendor-manager", response_model=PickupPointManagerRead, status_code=status.HTTP_201_CREATED
+)
+async def admin_link_vendor_as_manager(
+    point_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> PickupPointManagerRead:
+    return await pickup_point_managers_service.admin_link_vendor_as_manager(db, point_id)

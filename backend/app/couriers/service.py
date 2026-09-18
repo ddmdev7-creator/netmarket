@@ -1,9 +1,12 @@
 """Business logic for courier ("livreur") onboarding and admin validation."""
 
+import secrets
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.email import send_email
+from app.core.email_templates import courier_invitation_email
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password
 from app.couriers import repository
@@ -11,7 +14,8 @@ from app.couriers.models import Courier, CourierStatus, IdDocumentType
 from app.couriers.schemas import CourierAdminCreate, CourierAdminUpdate, CourierAvailabilityUpdate, CourierRegister
 from app.notifications import service as notifications_service
 from app.users import repository as users_repository
-from app.users.models import User, UserRole
+from app.users import service as user_service
+from app.users.models import EmailCodePurpose, User, UserRole
 
 
 async def register_courier(db: AsyncSession, user: User, data: CourierRegister) -> Courier:
@@ -73,24 +77,37 @@ async def set_availability(db: AsyncSession, user: User, data: CourierAvailabili
     return await repository.get_by_id(db, courier.id)
 
 
-async def admin_create_courier(db: AsyncSession, data: CourierAdminCreate) -> Courier:
+async def admin_create_courier(db: AsyncSession, data: CourierAdminCreate) -> User:
+    """Invite quelqu'un à devenir livreur — ne crée PAS encore de profil
+    Courier (aucun véhicule/zone/document connu à ce stade). Le compte part
+    BUYER, avec un mot de passe aléatoire inutilisable, et reçoit un email
+    avec un code pour en définir un vrai (voir POST /auth/accept-courier-invitation) ;
+    une fois connecté, l'intéressé complète son profil via le flux
+    d'auto-inscription existant (POST /couriers/me), qui le fait passer
+    BUYER → COURIER en statut PENDING — l'admin approuve seulement à ce
+    moment-là, comme pour n'importe quel livreur auto-inscrit."""
     if await users_repository.get_by_phone(db, data.phone) is not None:
         raise ConflictError("Ce numéro de téléphone est déjà utilisé.")
+    if await users_repository.get_by_email(db, data.email) is not None:
+        raise ConflictError("Cet email est déjà utilisé.")
 
     user = await users_repository.create(
         db,
         phone=data.phone,
-        password_hash=hash_password(data.password),
-        role=UserRole.COURIER,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        role=UserRole.BUYER,
+        email=data.email,
         first_name=data.first_name,
         last_name=data.last_name,
     )
-    courier = await repository.create(db, user_id=user.id, vehicle_type=data.vehicle_type, zone=data.zone)
-    # Un admin qui crée le compte EST la validation — pas besoin de repasser
-    # par le statut pending comme pour l'auto-inscription.
-    courier.status = CourierStatus.APPROVED
     await db.commit()
-    return await repository.get_by_id(db, courier.id)
+    await db.refresh(user)
+
+    code = await user_service.create_code(db, user, EmailCodePurpose.COURIER_INVITATION)
+    subject, text, html = courier_invitation_email(code, user_service.CODE_TTL_MINUTES)
+    await send_email(user.email, subject, text, html)
+
+    return user
 
 
 async def admin_list_couriers(db: AsyncSession, status: CourierStatus | None) -> list[Courier]:

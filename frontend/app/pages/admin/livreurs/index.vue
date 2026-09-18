@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhPlus, PhScales } from '@phosphor-icons/vue'
+import { PhImage, PhMagnifyingGlass, PhPlus, PhScales } from '@phosphor-icons/vue'
 import type { CourierAdminCreate, CourierDetailRead, CourierStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -21,6 +21,15 @@ const { data: couriers, pending, refresh } = await useAsyncData(
   { default: () => [], getCachedData: () => undefined },
 )
 watch(tab, () => refresh())
+
+const search = ref('')
+const visibleCouriers = computed(() => {
+  const query = search.value.trim().toLowerCase()
+  if (!query) return couriers.value
+  return couriers.value.filter((c) =>
+    [c.full_name ?? '', c.phone, c.zone ?? ''].join(' ').toLowerCase().includes(query),
+  )
+})
 
 const statusMeta: Record<CourierStatus, { label: string; color: string }> = {
   pending: { label: 'En attente', color: 'warning' },
@@ -197,15 +206,10 @@ function closeCompare() {
 
 const createOpen = ref(false)
 const creating = ref(false)
-const form = ref({ phone: '', password: '', firstName: '', lastName: '', vehicleType: 'moto', zone: '' })
-const vehicleOptions = [
-  { title: 'Moto', value: 'moto' },
-  { title: 'Taxi', value: 'taxi' },
-  { title: 'Voiture', value: 'voiture' },
-]
+const form = ref({ phone: '', email: '', firstName: '', lastName: '' })
 
 function resetForm() {
-  form.value = { phone: '', password: '', firstName: '', lastName: '', vehicleType: 'moto', zone: '' }
+  form.value = { phone: '', email: '', firstName: '', lastName: '' }
 }
 
 async function createCourier() {
@@ -213,28 +217,24 @@ async function createCourier() {
     toast.error('Numéro invalide — format attendu : +224XXXXXXXXX.')
     return
   }
-  if (form.value.password.length < 8) {
-    toast.error('Le mot de passe doit contenir au moins 8 caractères.')
+  if (!form.value.email.trim()) {
+    toast.error("L'adresse email est obligatoire — c'est là qu'arrive l'invitation.")
     return
   }
   creating.value = true
   try {
     const payload: CourierAdminCreate = {
       phone: form.value.phone.trim(),
-      password: form.value.password,
+      email: form.value.email.trim(),
       first_name: form.value.firstName.trim() || undefined,
       last_name: form.value.lastName.trim() || undefined,
-      vehicle_type: form.value.vehicleType as CourierAdminCreate['vehicle_type'],
-      zone: form.value.zone.trim() || undefined,
     }
-    await apiFetch<CourierDetailRead>('/admin/couriers', { method: 'POST', body: payload })
-    toast.success('Compte livreur créé et approuvé.')
+    await apiFetch('/admin/couriers', { method: 'POST', body: payload })
+    toast.success('Invitation envoyée par email.')
     createOpen.value = false
     resetForm()
-    if (tab.value === 'approved') await refresh()
-    else tab.value = 'approved'
   } catch (e) {
-    toast.error(apiErrorMessage(e, 'Impossible de créer ce compte livreur.'))
+    toast.error(apiErrorMessage(e, "Impossible d'envoyer cette invitation."))
   } finally {
     creating.value = false
   }
@@ -255,9 +255,26 @@ async function createCourier() {
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
     </v-btn-toggle>
 
-    <CommonEmptyState v-if="!pending && couriers.length === 0" message="Aucun livreur dans cette catégorie." />
+    <v-text-field
+      v-if="couriers.length > 0"
+      v-model="search"
+      placeholder="Rechercher par nom, téléphone ou zone…"
+      density="compact"
+      variant="outlined"
+      hide-details
+      clearable
+      class="mb-4"
+    >
+      <template #prepend-inner>
+        <PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" />
+      </template>
+    </v-text-field>
 
-    <v-card v-for="courier in couriers" :key="courier.id" class="mb-3 pa-3">
+    <CommonEmptyState v-if="!pending && couriers.length === 0" message="Aucun livreur dans cette catégorie." />
+    <CommonEmptyState v-else-if="!pending && visibleCouriers.length === 0" message="Aucun livreur ne correspond à cette recherche." />
+
+    <div class="couriers-grid">
+    <v-card v-for="courier in visibleCouriers" :key="courier.id" class="mb-3 pa-3">
       <div class="d-flex justify-space-between align-center mb-1">
         <span style="font-weight: 600">{{ courier.full_name ?? courier.phone }}</span>
         <v-chip :color="statusMeta[courier.status].color" size="small" variant="tonal">
@@ -355,6 +372,7 @@ async function createCourier() {
         </v-btn>
       </div>
     </v-card>
+    </div>
 
     <v-dialog :model-value="!!viewerCourierId" max-width="480" @update:model-value="(v) => !v && closeViewer()">
       <v-card class="pa-3">
@@ -405,41 +423,41 @@ async function createCourier() {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="createOpen" max-width="420">
-      <v-card class="pa-4">
-        <h2 class="text-h6 mb-3">Créer un compte livreur</h2>
-        <p class="text-muted mb-4" style="font-size: 12.5px">
-          Utile pour un partenaire (entreprise de livraison, motard référencé) sans passer par l'auto-inscription.
-          Le compte est approuvé immédiatement.
+    <v-dialog v-model="createOpen" max-width="520">
+      <v-card class="pa-5">
+        <h2 class="text-h6 mb-2">Inviter un livreur</h2>
+        <p class="text-muted mb-4" style="font-size: 12.5px; line-height: 1.5">
+          Un email d'activation sera envoyé à ce livreur pour définir son mot de passe et compléter lui-même son
+          profil (pièce d'identité, informations du véhicule). Son compte apparaîtra ici, dans « En attente »,
+          une fois ce profil soumis — c'est à ce moment-là que tu pourras l'approuver.
         </p>
 
         <v-form @submit.prevent="createCourier">
-          <label class="field-label">Téléphone</label>
-          <v-text-field v-model="form.phone" placeholder="+224621234567" class="mb-2" />
-
-          <label class="field-label">Mot de passe</label>
-          <v-text-field v-model="form.password" type="password" placeholder="8 caractères minimum" class="mb-2" />
-
-          <div class="d-flex ga-2">
+          <div class="d-flex ga-3">
             <div class="flex-grow-1">
-              <label class="field-label">Prénom (optionnel)</label>
-              <v-text-field v-model="form.firstName" class="mb-2" />
+              <label class="field-label">Téléphone</label>
+              <v-text-field v-model="form.phone" placeholder="+224621234567" class="mb-3" />
             </div>
             <div class="flex-grow-1">
-              <label class="field-label">Nom (optionnel)</label>
-              <v-text-field v-model="form.lastName" class="mb-2" />
+              <label class="field-label">Email</label>
+              <v-text-field v-model="form.email" type="email" placeholder="livreur@email.com" class="mb-3" />
             </div>
           </div>
 
-          <label class="field-label">Type de véhicule</label>
-          <v-select v-model="form.vehicleType" :items="vehicleOptions" class="mb-2" />
+          <div class="d-flex ga-3">
+            <div class="flex-grow-1">
+              <label class="field-label">Prénom (optionnel)</label>
+              <v-text-field v-model="form.firstName" class="mb-3" />
+            </div>
+            <div class="flex-grow-1">
+              <label class="field-label">Nom (optionnel)</label>
+              <v-text-field v-model="form.lastName" class="mb-3" />
+            </div>
+          </div>
 
-          <label class="field-label">Zone (optionnel)</label>
-          <v-text-field v-model="form.zone" placeholder="Ex: Kaloum" class="mb-3" />
-
-          <div class="d-flex flex-column ga-2">
-            <v-btn type="submit" color="primary" block :loading="creating">Créer</v-btn>
-            <v-btn variant="text" block @click="createOpen = false">Annuler</v-btn>
+          <div class="d-flex ga-2">
+            <v-btn variant="outlined" class="flex-grow-1" @click="createOpen = false">Annuler</v-btn>
+            <v-btn type="submit" color="primary" class="flex-grow-1" :loading="creating">Envoyer l'invitation</v-btn>
           </div>
         </v-form>
       </v-card>
@@ -448,6 +466,24 @@ async function createCourier() {
 </template>
 
 <style scoped>
+/* Même recette que .sub-order-grid (pages/vendeur/commandes/index.vue) :
+   une colonne pleine largeur reste illisible passé 960px sur .dashboard-shell
+   (jusqu'à 1400px) — auto-fill plutôt qu'un nombre de colonnes fixe, pour
+   s'adapter à la largeur réelle disponible. */
+.couriers-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 0;
+}
+
+@media (min-width: 960px) {
+  .couriers-grid {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 0 16px;
+  }
+}
+
 .doc-toggle {
   display: inline-flex;
   align-items: center;

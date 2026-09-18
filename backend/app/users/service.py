@@ -13,6 +13,7 @@ from app.core.email import send_email
 from app.core.email_templates import verification_code_email
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password, verify_password
+from app.pickup_point_managers import repository as pickup_point_manager_repository
 from app.users import repository
 from app.users.models import EmailCodePurpose, User, UserRole
 from app.users.schemas import AdminPasswordReset, UserUpdate
@@ -27,6 +28,13 @@ async def get_profile(db: AsyncSession, user_id: uuid.UUID) -> User:
     user = await repository.get_by_id(db, user_id)
     if user is None:
         raise NotFoundError("Utilisateur introuvable.")
+    return user
+
+
+async def get_my_profile(db: AsyncSession, user: User) -> User:
+    """Same object as `user`, with is_pickup_point_manager attached — a plain
+    `return current_user` at the router wouldn't carry this transient field."""
+    user.is_pickup_point_manager = await pickup_point_manager_repository.get_by_user_id(db, user.id) is not None
     return user
 
 

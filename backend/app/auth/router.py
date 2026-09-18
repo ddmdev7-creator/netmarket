@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
 from app.auth.schemas import (
+    AcceptCourierInvitationRequest,
     AdminBootstrapRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -56,3 +57,11 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
 async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)) -> Message:
     await service.reset_password(db, payload.phone, payload.code, payload.new_password)
     return Message(detail="Mot de passe réinitialisé.")
+
+
+@router.post("/accept-courier-invitation", response_model=Message)
+async def accept_courier_invitation(
+    payload: AcceptCourierInvitationRequest, db: AsyncSession = Depends(get_db)
+) -> Message:
+    await service.accept_courier_invitation(db, payload.phone, payload.code, payload.new_password)
+    return Message(detail="Compte activé, mot de passe défini.")

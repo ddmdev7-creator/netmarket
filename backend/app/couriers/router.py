@@ -22,6 +22,7 @@ from app.couriers.schemas import (
     CourierAvailabilityUpdate,
     CourierDetailRead,
     CourierDocumentSlot,
+    CourierInvitationRead,
     CourierRead,
     CourierRegister,
 )
@@ -153,8 +154,8 @@ async def list_couriers(db: AsyncSession = Depends(get_db)) -> list[CourierRead]
     return await service.list_public_couriers(db)
 
 
-@admin_router.post("", response_model=CourierDetailRead, status_code=status.HTTP_201_CREATED)
-async def admin_create_courier(payload: CourierAdminCreate, db: AsyncSession = Depends(get_db)) -> CourierDetailRead:
+@admin_router.post("", response_model=CourierInvitationRead, status_code=status.HTTP_201_CREATED)
+async def admin_create_courier(payload: CourierAdminCreate, db: AsyncSession = Depends(get_db)) -> CourierInvitationRead:
     return await service.admin_create_courier(db, payload)
 
 

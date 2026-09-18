@@ -1,5 +1,7 @@
 """Aggregate read queries for the admin dashboard: counts, sales, top rankings."""
 
+import uuid
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -7,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.catalog.models import Product
 from app.core.pagination import PageParams
 from app.orders.models import Order, OrderItem, OrderStatus, SubOrder
+from app.users.models import User
 from app.vendors.models import Vendor, VendorStatus
 
 
@@ -59,6 +62,14 @@ async def top_vendors(db: AsyncSession, limit: int = 5) -> list[tuple]:
         .limit(limit)
     )
     return list((await db.execute(stmt)).all())
+
+
+async def get_vendor_owner(db: AsyncSession, vendor_id: uuid.UUID) -> User | None:
+    """The account behind a boutique — Vendor has no relationship to User,
+    joined here rather than in app/vendors/repository.py since this is
+    admin-only reporting, not something the vendor/catalog modules need."""
+    stmt = select(User).join(Vendor, Vendor.user_id == User.id).where(Vendor.id == vendor_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def list_all_orders(

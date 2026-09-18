@@ -23,6 +23,11 @@ class UserRole(StrEnum):
 class EmailCodePurpose(StrEnum):
     EMAIL_VERIFICATION = "email_verification"
     PASSWORD_RESET = "password_reset"
+    # Compte livreur créé directement par un admin (voir
+    # app/couriers/service.py::admin_create_courier) — le livreur reçoit ce
+    # code par email pour définir son mot de passe et prouver qu'il contrôle
+    # bien cette adresse, avant de compléter lui-même son profil.
+    COURIER_INVITATION = "courier_invitation"
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):

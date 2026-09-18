@@ -140,3 +140,19 @@ async def reset_password(db: AsyncSession, phone: str, code: str, new_password: 
     await user_service.consume_code(db, user, EmailCodePurpose.PASSWORD_RESET, code)
     user.password_hash = hash_password(new_password)
     await db.commit()
+
+
+async def accept_courier_invitation(db: AsyncSession, phone: str, code: str, new_password: str) -> None:
+    """Même mécanique que reset_password, pour le compte livreur créé par un
+    admin (voir app/couriers/service.py::admin_create_courier) — en plus,
+    email_verified passe à True : recevoir puis saisir ce code prouve que
+    l'intéressé contrôle bien cette adresse, ce qu'un simple mot de passe
+    oublié ne prouve pas (le compte existait déjà avec un email vérifié)."""
+    user = await repository.get_by_phone(db, phone)
+    if user is None:
+        raise ConflictError("Code invalide ou expiré.")
+
+    await user_service.consume_code(db, user, EmailCodePurpose.COURIER_INVITATION, code)
+    user.password_hash = hash_password(new_password)
+    user.email_verified = True
+    await db.commit()

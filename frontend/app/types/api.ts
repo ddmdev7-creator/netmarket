@@ -38,6 +38,8 @@ export interface UserRead {
   email_verified: boolean
   role: UserRole
   is_active: boolean
+  /** Vrai si ce compte gère aussi un point de retrait (boutique liée), sans que son rôle principal change. */
+  is_pickup_point_manager: boolean
 }
 
 export interface UserUpdate {
@@ -54,6 +56,9 @@ export interface VendorRead {
   zone: string | null
   latitude: number | null
   longitude: number | null
+  owner_phone: string | null
+  owner_email: string | null
+  owner_full_name: string | null
   commission_rate: number
   preparation_days: number
 }
@@ -176,11 +181,15 @@ export interface CourierRegister {
 
 export interface CourierAdminCreate {
   phone: string
-  password: string
+  email: string
   first_name?: string | null
   last_name?: string | null
-  vehicle_type: VehicleType
-  zone?: string | null
+}
+
+export interface CourierInvitationRead {
+  user_id: string
+  phone: string
+  email: string
 }
 
 export interface CourierAdminUpdate {
@@ -514,6 +523,37 @@ export interface OrderRead {
   total: number
   created_at: string
   sub_orders: SubOrderRead[]
+}
+
+/** Sub-order shape for the admin's own order detail (GET /admin/orders/{id}) — adds the vendor account (not just the frozen shop_name) and courier info. */
+export interface AdminSubOrderRead extends SubOrderBase {
+  courier_name: string | null
+  courier_phone: string | null
+  storage_location: string | null
+  vendor_owner_phone: string | null
+  vendor_owner_email: string | null
+  vendor_owner_full_name: string | null
+}
+
+/** Full order detail for the admin — order + buyer account + per-sub-order vendor/courier info. */
+export interface AdminOrderRead {
+  id: string
+  status: OrderStatus
+  delivery_address: string
+  delivery_type: DeliveryType
+  delivery_zone: string | null
+  delivery_instructions: string | null
+  recipient_name: string | null
+  recipient_phone: string | null
+  pickup_point_contacts: PickupPointContactRead[]
+  payment_method: PaymentMethod
+  payment_status: PaymentStatus | null
+  total: number
+  created_at: string
+  sub_orders: AdminSubOrderRead[]
+  buyer_phone: string
+  buyer_email: string | null
+  buyer_full_name: string | null
 }
 
 export interface AdminTopProduct {

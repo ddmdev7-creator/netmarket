@@ -203,3 +203,49 @@ class OrderRead(BaseModel):
     total: int
     created_at: datetime
     sub_orders: list[SubOrderRead]
+
+
+class AdminSubOrderRead(SubOrderBase):
+    """Sub-order shape for the admin's own order detail view — adds the
+    vendor's own account info (not just the frozen shop_name) and the
+    assigned courier's info, everything an admin needs to investigate an
+    order without switching screens."""
+
+    courier_name: str | None = None
+    courier_phone: str | None = None
+    storage_location: str | None = None
+    # Compte du vendeur propriétaire de cette boutique, attaché en lecture
+    # (voir app/admin/repository.py::get_vendor_owner) — shop_name reste la
+    # source figée pour l'affichage principal, ces champs ne servent qu'à
+    # l'onglet "Boutique" de l'admin.
+    vendor_owner_phone: str | None = None
+    vendor_owner_email: str | None = None
+    vendor_owner_full_name: str | None = None
+
+
+class AdminOrderRead(BaseModel):
+    """Full order detail for the admin's own order screen — order info +
+    buyer account + per-sub-order vendor/courier info, organized as tabs on
+    the frontend (see pages/admin/commandes/[id].vue)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    status: OrderStatus
+    delivery_address: str
+    delivery_type: DeliveryType
+    delivery_zone: str | None = None
+    delivery_instructions: str | None = None
+    recipient_name: str | None = None
+    recipient_phone: str | None = None
+    pickup_point_contacts: list[PickupPointContactRead] = []
+    payment_method: PaymentMethod
+    payment_status: PaymentStatus | None = None
+    total: int
+    created_at: datetime
+    sub_orders: list[AdminSubOrderRead]
+    # Acheteur — Order.user_id n'a pas de relation SQLAlchemy vers User
+    # (jamais eu besoin ailleurs), attaché en lecture comme le reste ici.
+    buyer_phone: str
+    buyer_email: str | None = None
+    buyer_full_name: str | None = None

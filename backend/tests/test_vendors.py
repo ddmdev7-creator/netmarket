@@ -120,6 +120,23 @@ async def test_non_admin_cannot_access_admin_vendor_endpoints(client: AsyncClien
     assert response.status_code == 403
 
 
+async def test_admin_listing_includes_the_linked_owner_account(
+    client: AsyncClient, buyer_user: User, admin_user: User
+) -> None:
+    await client.post(
+        "/vendors/me",
+        json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"},
+        headers=auth_headers(buyer_user),
+    )
+
+    listing = await client.get("/admin/vendors", params={"status": "pending"}, headers=auth_headers(admin_user))
+
+    assert listing.status_code == 200
+    vendor = next(v for v in listing.json() if v["shop_name"] == "Ma Boutique")
+    assert vendor["owner_phone"] == "+224620000001"
+    assert vendor["owner_email"] == "vendeur@test.gn"
+
+
 async def test_public_listing_only_shows_approved_vendors(
     client: AsyncClient, buyer_user: User, admin_user: User
 ) -> None:

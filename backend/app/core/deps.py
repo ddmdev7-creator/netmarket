@@ -51,3 +51,20 @@ def require_role(*roles: UserRole) -> Callable[[User], Coroutine[None, None, Use
         return user
 
     return dependency
+
+
+async def get_pickup_point_manager(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> User:
+    """Gate for pickup-point-manager-only endpoints that checks for an actual
+    PickupPointManager row instead of user.role == PICKUP_POINT_MANAGER —
+    lets a vendor whose shop IS a pickup point (PickupPoint.vendor_id) act as
+    that point's manager with their existing vendor account, without touching
+    their role (see app/pickup_point_managers/service.py::admin_link_vendor_as_manager).
+    Import kept local to dodge a module-level cycle with app.pickup_point_managers.repository."""
+    from app.pickup_point_managers import repository as pickup_point_manager_repository
+
+    manager = await pickup_point_manager_repository.get_by_user_id(db, user.id)
+    if manager is None:
+        raise ForbiddenError("Vous n'avez pas les droits nécessaires pour effectuer cette action.")
+    return user

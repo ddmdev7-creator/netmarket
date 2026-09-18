@@ -14,6 +14,7 @@ from app.pickup_point_managers.schemas import PickupPointManagerAdminCreate, Pic
 from app.pickup_points import repository as pickup_points_repository
 from app.users import repository as users_repository
 from app.users.models import User, UserRole
+from app.vendors import repository as vendor_repository
 
 
 async def _ensure_active_point(db: AsyncSession, pickup_point_id: uuid.UUID) -> None:
@@ -36,6 +37,31 @@ async def admin_create_manager(db: AsyncSession, data: PickupPointManagerAdminCr
         last_name=data.last_name,
     )
     manager = await repository.create(db, user_id=user.id, pickup_point_id=data.pickup_point_id)
+    await db.commit()
+    return await repository.get_by_id(db, manager.id)
+
+
+async def admin_link_vendor_as_manager(db: AsyncSession, pickup_point_id: uuid.UUID) -> PickupPointManager:
+    """Lets the vendor whose shop IS this pickup point (PickupPoint.vendor_id)
+    also manage it, with their existing vendor login — no new account, no
+    change to their role (see app/core/deps.py::get_pickup_point_manager,
+    which authorizes on this row's existence rather than on user.role)."""
+    point = await pickup_points_repository.get_by_id(db, pickup_point_id)
+    if point is None:
+        raise NotFoundError("Point de retrait introuvable.")
+    if point.vendor_id is None:
+        raise ConflictError("Ce point de retrait n'est pas lié à une boutique.")
+
+    vendor = await vendor_repository.get_by_id(db, point.vendor_id)
+    if vendor is None:
+        raise NotFoundError("Boutique introuvable.")
+
+    existing = await repository.list_by_pickup_point(db, pickup_point_id)
+    already_linked = next((m for m in existing if m.user_id == vendor.user_id), None)
+    if already_linked is not None:
+        return already_linked
+
+    manager = await repository.create(db, user_id=vendor.user_id, pickup_point_id=pickup_point_id)
     await db.commit()
     return await repository.get_by_id(db, manager.id)
 

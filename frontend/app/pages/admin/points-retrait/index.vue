@@ -40,6 +40,31 @@ const managersByPoint = computed(() => {
   return grouped
 })
 
+// Le bouton "utiliser le compte de la boutique" n'a de sens que si le point
+// est lié à un vendeur ET que ce vendeur ne gère pas déjà ce point (sinon
+// on proposerait de relier un compte déjà relié).
+function vendorManagerMissing(point: PickupPointRead) {
+  if (!point.vendor_id) return false
+  const vendor = vendorById(point.vendor_id)
+  if (!vendor) return false
+  const linked = managersByPoint.value[point.id] ?? []
+  return !linked.some((m) => m.user_id === vendor.user_id)
+}
+
+const linkingVendorId = ref<string | null>(null)
+async function linkVendorAsManager(point: PickupPointRead) {
+  linkingVendorId.value = point.id
+  try {
+    await apiFetch(`/admin/pickup-points/${point.id}/link-vendor-manager`, { method: 'POST' })
+    await refreshManagers()
+    toast.success('La boutique gère maintenant ce point de retrait.')
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'Impossible de relier ce compte.'))
+  } finally {
+    linkingVendorId.value = null
+  }
+}
+
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const form = ref({
@@ -279,63 +304,75 @@ async function removeManager(managerId: string) {
 
     <CommonEmptyState v-if="!pending && points.length === 0" message="Aucun point de retrait pour l'instant." />
 
-    <v-card v-for="p in points" :key="p.id" class="mb-3 pa-3">
-      <div class="d-flex justify-space-between align-center mb-1">
-        <span style="font-weight: 600">{{ p.name }}</span>
-        <v-chip :color="p.is_active ? 'success' : 'default'" size="x-small" variant="tonal">
-          {{ p.is_active ? 'Actif' : 'Inactif' }}
-        </v-chip>
-      </div>
-      <div v-if="p.vendor_shop_name" class="d-flex align-center ga-1 text-muted mb-1" style="font-size: 11.5px">
-        <PhStorefront :size="13" />
-        <span>Boutique : {{ p.vendor_shop_name }}</span>
-      </div>
-      <div class="text-muted mb-3" style="font-size: 12.5px">{{ p.zone }}</div>
-
-      <div class="d-flex ga-2 mb-3">
-        <v-btn variant="outlined" size="small" class="flex-grow-1" :loading="togglingId === p.id" @click="toggleActive(p)">
-          {{ p.is_active ? 'Désactiver' : 'Activer' }}
-        </v-btn>
-        <v-btn variant="outlined" size="small" @click="startEdit(p)">
-          <PhPencilSimple :size="15" />
-        </v-btn>
-        <v-btn variant="outlined" color="error" size="small" @click="confirmDeleteId = p.id">
-          <PhTrash :size="15" />
-        </v-btn>
-      </div>
-
-      <v-divider class="mb-2" />
-      <div class="d-flex justify-space-between align-center mb-1">
-        <span class="field-label mb-0">Gestionnaires</span>
-        <v-btn variant="text" size="x-small" @click="openManagerDialog(p.id)">
-          <PhPlus :size="13" class="mr-1" />
-          Ajouter
-        </v-btn>
-      </div>
-      <p v-if="!managersByPoint[p.id]?.length" class="text-muted mb-0" style="font-size: 11.5px">
-        Aucun gestionnaire pour ce point.
-      </p>
-      <div
-        v-for="m in managersByPoint[p.id]"
-        :key="m.id"
-        class="d-flex align-center justify-space-between"
-        style="padding: 3px 0"
-      >
-        <div class="d-flex align-center ga-1" style="font-size: 12.5px">
-          <PhUser :size="13" color="var(--color-neutral-500)" />
-          <span>{{ m.full_name ?? m.phone }}</span>
+    <div class="points-grid">
+      <v-card v-for="p in points" :key="p.id" class="points-grid__card pa-3">
+        <div class="d-flex justify-space-between align-center mb-1">
+          <span style="font-weight: 600">{{ p.name }}</span>
+          <v-chip :color="p.is_active ? 'success' : 'default'" size="x-small" variant="tonal">
+            {{ p.is_active ? 'Actif' : 'Inactif' }}
+          </v-chip>
         </div>
-        <v-btn
-          variant="text"
-          color="error"
-          size="x-small"
-          :loading="removingManagerId === m.id"
-          @click="removeManager(m.id)"
+        <div v-if="p.vendor_shop_name" class="d-flex align-center ga-1 text-muted mb-1" style="font-size: 11.5px">
+          <PhStorefront :size="13" />
+          <span>Boutique : {{ p.vendor_shop_name }}</span>
+        </div>
+        <div class="text-muted mb-3" style="font-size: 12.5px">{{ p.zone }}</div>
+
+        <div class="d-flex ga-2 mb-3">
+          <v-btn variant="outlined" size="small" class="flex-grow-1" :loading="togglingId === p.id" @click="toggleActive(p)">
+            {{ p.is_active ? 'Désactiver' : 'Activer' }}
+          </v-btn>
+          <v-btn variant="outlined" size="small" @click="startEdit(p)">
+            <PhPencilSimple :size="15" />
+          </v-btn>
+          <v-btn variant="outlined" color="error" size="small" @click="confirmDeleteId = p.id">
+            <PhTrash :size="15" />
+          </v-btn>
+        </div>
+
+        <v-divider class="mb-2" />
+        <div class="d-flex justify-space-between align-center mb-1">
+          <span class="field-label mb-0">Gestionnaires</span>
+          <v-btn variant="text" size="x-small" @click="openManagerDialog(p.id)">
+            <PhPlus :size="13" class="mr-1" />
+            Ajouter
+          </v-btn>
+        </div>
+        <p v-if="!managersByPoint[p.id]?.length" class="text-muted mb-0" style="font-size: 11.5px">
+          Aucun gestionnaire pour ce point.
+        </p>
+        <div
+          v-for="m in managersByPoint[p.id]"
+          :key="m.id"
+          class="d-flex align-center justify-space-between"
+          style="padding: 3px 0"
         >
-          <PhTrash :size="13" />
-        </v-btn>
-      </div>
-    </v-card>
+          <div class="d-flex align-center ga-1" style="font-size: 12.5px">
+            <PhUser :size="13" color="var(--color-neutral-500)" />
+            <span>{{ m.full_name ?? m.phone }}</span>
+          </div>
+          <v-btn
+            variant="text"
+            color="error"
+            size="x-small"
+            :loading="removingManagerId === m.id"
+            @click="removeManager(m.id)"
+          >
+            <PhTrash :size="13" />
+          </v-btn>
+        </div>
+        <button
+          v-if="vendorManagerMissing(p)"
+          type="button"
+          class="link-vendor-btn mt-2"
+          :disabled="linkingVendorId === p.id"
+          @click="linkVendorAsManager(p)"
+        >
+          <PhStorefront :size="13" class="mr-1" />
+          Utiliser le compte de cette boutique comme gestionnaire
+        </button>
+      </v-card>
+    </div>
 
     <v-dialog :model-value="!!confirmDeleteId" max-width="340" @update:model-value="(v) => !v && (confirmDeleteId = null)">
       <v-card class="pa-5">
@@ -384,3 +421,64 @@ async function removeManager(managerId: string) {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+/* Une colonne unique gaspillait tout l'espace disponible sur un écran de
+   bureau (voir le même correctif déjà fait sur vendeur/commandes) — 3-4
+   colonnes selon la largeur réelle plutôt qu'un nombre fixe. */
+.points-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+@media (min-width: 600px) {
+  .points-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .points-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .points-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.points-grid__card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.points-grid__card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.link-vendor-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.link-vendor-btn:hover {
+  text-decoration: underline;
+}
+
+.link-vendor-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+</style>

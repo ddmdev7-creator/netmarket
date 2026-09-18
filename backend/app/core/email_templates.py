@@ -109,6 +109,28 @@ def password_reset_email(code: str, ttl_minutes: int) -> tuple[str, str, str]:
     return subject, text, _layout(preheader=f"Votre code : {code}", title=subject, body_html=body_html)
 
 
+def courier_invitation_email(code: str, ttl_minutes: int) -> tuple[str, str, str]:
+    subject = f"Ton compte livreur — {BRAND_NAME}"
+    text = (
+        f"Un compte livreur a été créé pour toi sur {BRAND_NAME}.\n\n"
+        f"Utilise le code ci-dessous pour définir ton mot de passe : {code}\n\n"
+        f"Il expire dans {ttl_minutes} minutes. Une fois connecté, complète ton profil "
+        "(pièce d'identité, informations du véhicule) pour que ton compte soit validé."
+    )
+    body_html = f"""\
+<h1 style="margin:0 0 12px; font-size:20px; color:{COLOR_TEXT};">Ton compte livreur est prêt</h1>
+<p style="margin:0; font-size:15px; line-height:22px; color:{COLOR_MUTED};">
+  Un compte livreur a été créé pour toi sur {BRAND_NAME}. Utilise le code ci-dessous pour définir ton mot de passe.
+</p>
+{_code_block(code)}
+<p style="margin:0; font-size:14px; line-height:20px; color:{COLOR_MUTED};">
+  Ce code expire dans {ttl_minutes} minutes. Une fois connecté, il te restera à compléter ton profil
+  (pièce d'identité, informations du véhicule) — ton compte sera validé par un administrateur juste après.
+</p>
+"""
+    return subject, text, _layout(preheader=f"Ton code : {code}", title=subject, body_html=body_html)
+
+
 def order_status_email(shop_name: str, status_label: str) -> tuple[str, str, str]:
     subject = f"Votre commande chez {shop_name} est {status_label}"
     text = (

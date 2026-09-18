@@ -9,7 +9,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, get_db, require_role
+from app.core.deps import get_current_user, get_db, get_pickup_point_manager, require_role
 from app.orders import service
 from app.orders.schemas import (
     CheckoutRequest,
@@ -69,10 +69,9 @@ async def list_my_deliveries(
 @router.get(
     "/pickup-point-deliveries",
     response_model=list[PickupPointManagerSubOrderRead],
-    dependencies=[Depends(require_role(UserRole.PICKUP_POINT_MANAGER))],
 )
 async def list_my_point_deliveries(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_pickup_point_manager), db: AsyncSession = Depends(get_db)
 ) -> list[PickupPointManagerSubOrderRead]:
     return await service.list_my_point_deliveries(db, current_user)
 
@@ -107,12 +106,11 @@ async def update_sub_order_status(
 @router.patch(
     "/sub-orders/{sub_order_id}/storage-location",
     response_model=PickupPointManagerSubOrderRead,
-    dependencies=[Depends(require_role(UserRole.PICKUP_POINT_MANAGER))],
 )
 async def update_storage_location(
     sub_order_id: uuid.UUID,
     payload: StorageLocationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_pickup_point_manager),
     db: AsyncSession = Depends(get_db),
 ) -> PickupPointManagerSubOrderRead:
     return await service.update_storage_location(db, current_user, sub_order_id, payload.storage_location)

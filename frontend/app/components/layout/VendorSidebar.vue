@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { PhChartBar, PhGear, PhPackage, PhStorefront } from '@phosphor-icons/vue'
+import { PhChartBar, PhGear, PhMapPinLine, PhPackage, PhStorefront } from '@phosphor-icons/vue'
 
 const emit = defineEmits<{ navigate: [] }>()
+const auth = useAuthStore()
 
-const navItems = [
+// "Mon point de retrait" n'apparaît que pour un vendeur dont la boutique EST
+// aussi un point de retrait (voir PickupPoint.vendor_id côté backend) — son
+// compte habituel donne alors aussi accès à cet espace, sans rôle séparé.
+const navItems = computed(() => [
   { to: '/vendeur', label: 'Tableau de bord', icon: PhChartBar },
   { to: '/vendeur/produits', label: 'Produits', icon: PhPackage },
   { to: '/vendeur/commandes', label: 'Commandes', icon: PhStorefront },
   { to: '/vendeur/boutique', label: 'Boutique', icon: PhGear },
-]
+  ...(auth.user?.is_pickup_point_manager
+    ? [{ to: '/point-retrait', label: 'Mon point de retrait', icon: PhMapPinLine }]
+    : []),
+])
 </script>
 
 <template>

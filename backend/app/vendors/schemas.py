@@ -50,6 +50,11 @@ class VendorRead(BaseModel):
     longitude: float | None
     commission_rate: float
     preparation_days: int
+    # Attachés en lecture depuis User (voir app/vendors/repository.py) —
+    # défauts sûrs pour tout appelant qui ne ferait pas la jointure.
+    owner_phone: str | None = None
+    owner_email: str | None = None
+    owner_full_name: str | None = None
 
 
 class LowStockProduct(BaseModel):

@@ -73,6 +73,14 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
+  async function acceptCourierInvitation(phone: string, code: string, newPassword: string) {
+    await $fetch('/auth/accept-courier-invitation', {
+      baseURL: apiBase,
+      method: 'POST',
+      body: { phone, code, new_password: newPassword },
+    })
+  }
+
   async function tryRefresh(): Promise<boolean> {
     if (!refreshToken.value) return false
     try {
@@ -106,5 +114,6 @@ export const useAuthStore = defineStore('auth', () => {
     setTokens,
     forgotPassword,
     resetPassword,
+    acceptCourierInvitation,
   }
 })

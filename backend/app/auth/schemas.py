@@ -30,6 +30,12 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class AcceptCourierInvitationRequest(BaseModel):
+    phone: str = Field(pattern=PHONE_PATTERN)
+    code: str = Field(pattern=r"^\d{4,5}$")
+    new_password: str = Field(min_length=8)
+
+
 class AdminBootstrapRequest(BaseModel):
     phone: str = Field(pattern=PHONE_PATTERN, description="Format international, ex: +224621234567")
     password: str = Field(min_length=8)

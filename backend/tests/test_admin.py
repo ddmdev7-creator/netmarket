@@ -102,3 +102,56 @@ async def test_admin_can_list_all_orders_across_buyers(
     body = response.json()
     order_ids = {item["id"] for item in body["items"]}
     assert {order_1["id"], order_2["id"]}.issubset(order_ids)
+
+
+async def test_admin_order_list_includes_product_images(
+    client: AsyncClient, admin_user: User, buyer_user: User, product: Product
+) -> None:
+    product.images = ["products/casque.jpg"]
+    order = await _checkout(client, buyer_user, product)
+
+    response = await client.get("/admin/orders", headers=auth_headers(admin_user))
+
+    assert response.status_code == 200
+    listed = next(o for o in response.json()["items"] if o["id"] == order["id"])
+    assert listed["sub_orders"][0]["items"][0]["product_image"] == "products/casque.jpg"
+
+
+async def test_admin_order_detail_includes_buyer_vendor_and_courier_info(
+    client: AsyncClient,
+    admin_user: User,
+    buyer_user: User,
+    vendor_user: User,
+    product: Product,
+    courier: Courier,
+    courier_user: User,
+) -> None:
+    product.images = ["products/casque.jpg"]
+    order = await _checkout(client, buyer_user, product)
+    await _deliver(client, vendor_user, order["sub_orders"][0]["id"], courier, courier_user)
+
+    response = await client.get(f"/admin/orders/{order['id']}", headers=auth_headers(admin_user))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["buyer_phone"] == buyer_user.phone
+    sub_order = body["sub_orders"][0]
+    assert sub_order["vendor_owner_phone"] == vendor_user.phone
+    assert sub_order["courier_phone"] == courier_user.phone
+    assert sub_order["items"][0]["product_image"] == "products/casque.jpg"
+
+
+async def test_admin_order_detail_404_for_unknown_order(client: AsyncClient, admin_user: User) -> None:
+    response = await client.get(
+        "/admin/orders/00000000-0000-0000-0000-000000000000", headers=auth_headers(admin_user)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_admin_order_detail_requires_admin(client: AsyncClient, buyer_user: User, product: Product) -> None:
+    order = await _checkout(client, buyer_user, product)
+
+    response = await client.get(f"/admin/orders/{order['id']}", headers=auth_headers(buyer_user))
+
+    assert response.status_code == 403

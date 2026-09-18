@@ -9,6 +9,7 @@ from app.couriers.models import Courier
 from app.pickup_point_managers.models import PickupPointManager
 from app.pickup_points.models import PickupPoint
 from app.users.models import User, UserRole
+from app.vendors.models import Vendor
 from tests.conftest import auth_headers, make_user
 
 HOME_DELIVERY_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
@@ -373,3 +374,61 @@ async def test_storage_location_rejected_for_home_delivery(
     )
 
     assert response.status_code == 409
+
+
+async def test_admin_can_link_vendor_as_pickup_point_manager(
+    client: AsyncClient, db_session, admin_user: User, vendor: Vendor, pickup_point: PickupPoint
+) -> None:
+    pickup_point.vendor_id = vendor.id
+    await db_session.flush()
+
+    response = await client.post(
+        f"/admin/pickup-points/{pickup_point.id}/link-vendor-manager", headers=auth_headers(admin_user)
+    )
+
+    assert response.status_code == 201
+    assert response.json()["user_id"] == str(vendor.user_id)
+
+
+async def test_linking_vendor_manager_fails_without_a_linked_vendor(
+    client: AsyncClient, admin_user: User, pickup_point: PickupPoint
+) -> None:
+    response = await client.post(
+        f"/admin/pickup-points/{pickup_point.id}/link-vendor-manager", headers=auth_headers(admin_user)
+    )
+
+    assert response.status_code == 409
+
+
+async def test_vendor_linked_as_manager_can_use_pickup_manager_endpoints(
+    client: AsyncClient,
+    db_session,
+    admin_user: User,
+    vendor_user: User,
+    vendor: Vendor,
+    buyer_user: User,
+    courier_user: User,
+    courier: Courier,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    pickup_point.vendor_id = vendor.id
+    await db_session.flush()
+    link = await client.post(
+        f"/admin/pickup-points/{pickup_point.id}/link-vendor-manager", headers=auth_headers(admin_user)
+    )
+    assert link.status_code == 201
+
+    vendor_headers = auth_headers(vendor_user)
+
+    listing = await client.get("/orders/pickup-point-deliveries", headers=vendor_headers)
+    assert listing.status_code == 200
+
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+    storage = await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/storage-location",
+        json={"storage_location": "Étagère B3"},
+        headers=vendor_headers,
+    )
+    assert storage.status_code == 200
+    assert storage.json()["storage_location"] == "Étagère B3"

@@ -5,6 +5,8 @@ Vendor validation lives in app/vendors/router.py (admin_router, under
 the cross-cutting concerns (stats, global order list).
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +15,7 @@ from app.admin.schemas import AdminStats
 from app.core.deps import get_db, require_role
 from app.core.pagination import Page, PageParams, pagination_params
 from app.orders.models import OrderStatus
-from app.orders.schemas import OrderRead
+from app.orders.schemas import AdminOrderRead, OrderRead
 from app.users.models import UserRole
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))])
@@ -32,3 +34,8 @@ async def list_orders(
 ) -> Page[OrderRead]:
     items, total = await service.list_orders(db, params, status_filter)
     return Page.create(items=items, total=total, params=params)
+
+
+@router.get("/orders/{order_id}", response_model=AdminOrderRead)
+async def get_order_detail(order_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> AdminOrderRead:
+    return await service.get_order_detail(db, order_id)

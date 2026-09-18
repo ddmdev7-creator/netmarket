@@ -16,8 +16,10 @@ admin_router = APIRouter(prefix="/admin/users", tags=["admin"], dependencies=[De
 
 
 @router.get("/me", response_model=UserRead)
-async def read_my_profile(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+async def read_my_profile(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> User:
+    return await service.get_my_profile(db, current_user)
 
 
 @router.patch("/me", response_model=UserRead)

@@ -88,64 +88,73 @@ async function submit() {
     <h1 class="text-h6 mb-4">Réglages de la boutique</h1>
 
     <template v-if="vendor">
-      <div class="d-flex align-center justify-space-between mb-4">
-        <span class="text-muted" style="font-size: 12.5px">Statut</span>
-        <v-chip :color="statusMeta[vendor.status].color" size="small" variant="tonal">
-          {{ statusMeta[vendor.status].label }}
-        </v-chip>
-      </div>
-      <div class="d-flex align-center justify-space-between mb-5">
-        <span class="text-muted" style="font-size: 12.5px">Commission plateforme</span>
-        <span style="font-size: 13px">{{ vendor.commission_rate }}%</span>
-      </div>
+      <v-card class="pa-4 mb-4" variant="flat">
+        <div class="d-flex align-center justify-space-between mb-4">
+          <span class="text-muted" style="font-size: 12.5px">Statut</span>
+          <v-chip :color="statusMeta[vendor.status].color" size="small" variant="tonal">
+            {{ statusMeta[vendor.status].label }}
+          </v-chip>
+        </div>
+        <div class="d-flex align-center justify-space-between mb-1">
+          <span class="text-muted" style="font-size: 12.5px">Commission plateforme</span>
+          <span style="font-size: 13px">{{ vendor.commission_rate }}%</span>
+        </div>
+      </v-card>
 
-      <label class="field-label">Nom de la boutique</label>
-      <v-text-field v-model="shopName" class="mb-2" />
+      <v-card class="pa-4 mb-4" variant="flat">
+        <div class="section-title mb-3">Informations générales</div>
+        <label class="field-label">Nom de la boutique</label>
+        <v-text-field v-model="shopName" class="mb-2" />
 
-      <label class="field-label">Zone</label>
-      <v-text-field v-model="zone" placeholder="Ex: Kaloum" class="mb-2" />
+        <label class="field-label">Zone</label>
+        <v-text-field v-model="zone" placeholder="Ex: Kaloum" class="mb-2" />
 
-      <label class="field-label">Position de la boutique</label>
-      <p class="text-muted mb-2" style="font-size: 11.5px">
-        Utilisée pour proposer la livraison au livreur disponible le plus proche.
-      </p>
-      <v-btn color="primary" block :loading="locating" class="mb-2" @click="useCurrentPosition">
-        <PhMapPin :size="17" class="mr-1" />
-        {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
-      </v-btn>
-      <p class="text-muted mb-2" style="font-size: 11.5px">Ou touche la carte pour placer le repère toi-même.</p>
-      <CommonMapPicker v-model:latitude="latitude" v-model:longitude="longitude" class="mb-2" />
-      <div v-if="hasPosition" class="d-flex align-center ga-1 mb-4" style="font-size: 12px">
-        <span class="text-muted">{{ positionLabel }}</span>
-      </div>
-      <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-4">
-        Sans position, tu ne pourras pas rechercher automatiquement un livreur.
-      </v-alert>
+        <label class="field-label">Délai de préparation habituel (jours)</label>
+        <v-text-field
+          v-model.number="preparationDays"
+          type="number"
+          min="0"
+          max="14"
+          class="mb-1"
+        />
+        <p class="text-muted mb-0" style="font-size: 11.5px">
+          Utilisé pour l'estimation de livraison affichée aux acheteurs sur vos produits.
+        </p>
+      </v-card>
 
-      <label class="field-label">Délai de préparation habituel (jours)</label>
-      <v-text-field
-        v-model.number="preparationDays"
-        type="number"
-        min="0"
-        max="14"
-        class="mb-1"
-      />
-      <p class="text-muted mb-4" style="font-size: 11.5px">
-        Utilisé pour l'estimation de livraison affichée aux acheteurs sur vos produits.
-      </p>
+      <v-card class="pa-4 mb-4" variant="flat">
+        <div class="section-title mb-3">Position de la boutique</div>
+        <p class="text-muted mb-2" style="font-size: 11.5px">
+          Utilisée pour proposer la livraison au livreur disponible le plus proche.
+        </p>
+        <v-btn color="primary" block :loading="locating" class="mb-2" @click="useCurrentPosition">
+          <PhMapPin :size="17" class="mr-1" />
+          {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
+        </v-btn>
+        <p class="text-muted mb-2" style="font-size: 11.5px">Ou touche la carte pour placer le repère toi-même.</p>
+        <CommonMapPicker v-model:latitude="latitude" v-model:longitude="longitude" class="mb-2" />
+        <div v-if="hasPosition" class="d-flex align-center ga-1" style="font-size: 12px">
+          <span class="text-muted">{{ positionLabel }}</span>
+        </div>
+        <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-0">
+          Sans position, tu ne pourras pas rechercher automatiquement un livreur.
+        </v-alert>
+      </v-card>
 
       <v-btn color="primary" block size="large" class="mb-6" :loading="submitting" @click="submit">Enregistrer</v-btn>
     </template>
 
-    <v-divider class="mb-2" />
-    <NuxtLink to="/vendeur/abonnement" class="list-item">
-      <PhSparkle :size="18" color="var(--color-neutral-400)" />
-      <span>Abonnement premium</span>
-    </NuxtLink>
-    <NuxtLink to="/profil" class="list-item">
-      <PhArrowLeft :size="18" color="var(--color-neutral-400)" />
-      <span>Retour à l'espace acheteur</span>
-    </NuxtLink>
+    <v-card variant="flat" class="pa-2">
+      <NuxtLink to="/vendeur/abonnement" class="list-item">
+        <PhSparkle :size="18" color="var(--color-neutral-400)" />
+        <span>Abonnement premium</span>
+      </NuxtLink>
+      <v-divider />
+      <NuxtLink to="/profil" class="list-item">
+        <PhArrowLeft :size="18" color="var(--color-neutral-400)" />
+        <span>Retour à l'espace acheteur</span>
+      </NuxtLink>
+    </v-card>
    </div>
   </div>
 </template>

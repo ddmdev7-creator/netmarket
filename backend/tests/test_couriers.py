@@ -2,12 +2,24 @@
 verification, and admin validation."""
 
 import io
+import re
 
+import pytest
 from httpx import AsyncClient
 from PIL import Image
 
 from app.users.models import User, UserRole
 from tests.conftest import auth_headers, make_user
+
+
+def _stub_send_email(monkeypatch: pytest.MonkeyPatch, target: str) -> list[tuple[str, str, str]]:
+    calls: list[tuple[str, str, str]] = []
+
+    async def fake_send_email(to: str, subject: str, body: str, html: str | None = None) -> None:
+        calls.append((to, subject, body))
+
+    monkeypatch.setattr(target, fake_send_email)
+    return calls
 
 
 def _fake_jpeg(size: tuple[int, int] = (600, 600), color: tuple[int, int, int] = (255, 255, 255)) -> bytes:
@@ -114,34 +126,54 @@ async def test_non_admin_cannot_validate_couriers(client: AsyncClient, buyer_use
     assert response.status_code == 403
 
 
-async def test_admin_can_create_courier_directly_and_approved(client: AsyncClient, admin_user: User) -> None:
+async def test_admin_invites_courier_by_email_instead_of_approving_directly(
+    client: AsyncClient, admin_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _stub_send_email(monkeypatch, "app.couriers.service.send_email")
+
     response = await client.post(
         "/admin/couriers",
         json={
             "phone": "+224655000099",
-            "password": "partner-delivery-co",
+            "email": "fatoumata@example.com",
             "first_name": "Fatoumata",
             "last_name": "Barry",
-            "vehicle_type": "voiture",
-            "zone": "Ratoma",
         },
         headers=auth_headers(admin_user),
     )
 
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "approved"
     assert body["phone"] == "+224655000099"
-    assert body["full_name"] == "Fatoumata Barry"
+    assert body["email"] == "fatoumata@example.com"
+    assert len(calls) == 1
+    assert calls[0][0] == "fatoumata@example.com"
 
-    login = await client.post("/auth/login", json={"phone": "+224655000099", "password": "partner-delivery-co"})
-    assert login.status_code == 200
+    # Pas encore un livreur : compte acheteur en attendant l'activation, et
+    # aucune fiche Courier tant que le profil n'est pas complété soi-même.
+    listing = await client.get("/admin/couriers", params={"status": "pending"}, headers=auth_headers(admin_user))
+    assert listing.json() == []
 
 
 async def test_admin_create_courier_rejects_duplicate_phone(client: AsyncClient, admin_user: User, buyer_user: User) -> None:
     response = await client.post(
         "/admin/couriers",
-        json={"phone": buyer_user.phone, "password": "whatever123", "vehicle_type": "moto"},
+        json={"phone": buyer_user.phone, "email": "someone-else@example.com"},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 409
+
+
+async def test_admin_create_courier_rejects_duplicate_email(client: AsyncClient, admin_user: User) -> None:
+    await client.post(
+        "/auth/register",
+        json={"phone": "+224655000094", "password": "password123", "email": "taken@example.com"},
+    )
+
+    response = await client.post(
+        "/admin/couriers",
+        json={"phone": "+224655000097", "email": "taken@example.com"},
         headers=auth_headers(admin_user),
     )
 
@@ -151,11 +183,56 @@ async def test_admin_create_courier_rejects_duplicate_phone(client: AsyncClient,
 async def test_non_admin_cannot_create_courier(client: AsyncClient, buyer_user: User) -> None:
     response = await client.post(
         "/admin/couriers",
-        json={"phone": "+224655000098", "password": "whatever123", "vehicle_type": "moto"},
+        json={"phone": "+224655000098", "email": "someone@example.com"},
         headers=auth_headers(buyer_user),
     )
 
     assert response.status_code == 403
+
+
+async def test_courier_invitation_full_loop_activates_and_logs_in(
+    client: AsyncClient, admin_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _stub_send_email(monkeypatch, "app.couriers.service.send_email")
+
+    invite = await client.post(
+        "/admin/couriers",
+        json={"phone": "+224655000096", "email": "invited@example.com"},
+        headers=auth_headers(admin_user),
+    )
+    assert invite.status_code == 201
+    code = re.search(r"\d{5}", calls[0][2]).group()
+
+    activate = await client.post(
+        "/auth/accept-courier-invitation",
+        json={"phone": "+224655000096", "code": code, "new_password": "new-password123"},
+    )
+    assert activate.status_code == 200
+
+    login = await client.post(
+        "/auth/login", json={"phone": "+224655000096", "password": "new-password123"}
+    )
+    assert login.status_code == 200
+
+    me = await client.get("/users/me", headers={"Authorization": f"Bearer {login.json()['access_token']}"})
+    assert me.json()["role"] == "buyer"
+    assert me.json()["email_verified"] is True
+
+
+async def test_courier_invitation_rejects_wrong_code(client: AsyncClient, admin_user: User, monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_send_email(monkeypatch, "app.couriers.service.send_email")
+    await client.post(
+        "/admin/couriers",
+        json={"phone": "+224655000095", "email": "wrongcode@example.com"},
+        headers=auth_headers(admin_user),
+    )
+
+    response = await client.post(
+        "/auth/accept-courier-invitation",
+        json={"phone": "+224655000095", "code": "00000", "new_password": "new-password123"},
+    )
+
+    assert response.status_code == 409
 
 
 async def test_admin_reject_without_reason_fails(client: AsyncClient, buyer_user: User, admin_user: User) -> None:

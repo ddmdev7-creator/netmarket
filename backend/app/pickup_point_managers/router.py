@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Message
-from app.core.deps import get_current_user, get_db, require_role
+from app.core.deps import get_db, get_pickup_point_manager, require_role
 from app.pickup_point_managers import service
 from app.pickup_point_managers.schemas import (
     PickupPointManagerAdminCreate,
@@ -23,13 +23,9 @@ admin_router = APIRouter(
 )
 
 
-@router.get(
-    "/me",
-    response_model=PickupPointManagerRead,
-    dependencies=[Depends(require_role(UserRole.PICKUP_POINT_MANAGER))],
-)
+@router.get("/me", response_model=PickupPointManagerRead)
 async def get_my_manager(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_pickup_point_manager), db: AsyncSession = Depends(get_db)
 ) -> PickupPointManagerRead:
     return await service.get_my_manager_profile(db, current_user)
 

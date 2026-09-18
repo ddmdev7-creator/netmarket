@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhBellSlash, PhCheckCircle } from '@phosphor-icons/vue'
-import type { NotificationRead } from '~/types/api'
+import {
+  PhArrowLeft,
+  PhArrowsClockwise,
+  PhBellSlash,
+  PhCheckCircle,
+  PhMotorcycle,
+  PhPackage,
+  PhWarningCircle,
+  PhXCircle,
+} from '@phosphor-icons/vue'
+import type { Component } from 'vue'
+import type { NotificationRead, NotificationType } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
@@ -11,6 +21,29 @@ const notifications = useNotificationStore()
 onMounted(() => {
   notifications.fetchInitial()
 })
+
+// Icône + teinte par type de notification — un aperçu du "quoi" avant même
+// de lire le titre, plutôt que des lignes de texte toutes identiques
+// visuellement quel que soit l'événement.
+const ICON_BY_TYPE: Record<NotificationType, Component> = {
+  order_received: PhPackage,
+  order_status_changed: PhArrowsClockwise,
+  courier_verification_approved: PhCheckCircle,
+  courier_verification_rejected: PhXCircle,
+  delivery_request: PhMotorcycle,
+  delivery_request_accepted: PhCheckCircle,
+  delivery_no_courier_found: PhWarningCircle,
+}
+
+const TONE_BY_TYPE: Record<NotificationType, 'primary' | 'success' | 'error'> = {
+  order_received: 'primary',
+  order_status_changed: 'primary',
+  courier_verification_approved: 'success',
+  courier_verification_rejected: 'error',
+  delivery_request: 'primary',
+  delivery_request_accepted: 'success',
+  delivery_no_courier_found: 'error',
+}
 
 function targetPath(notification: NotificationRead): string | null {
   if (!notification.order_id) return null
@@ -65,11 +98,16 @@ function formatDate(iso: string) {
         :class="{ 'notification-row--unread': !n.read_at }"
         @click="open(n)"
       >
-        <div class="d-flex justify-space-between align-center mb-1">
-          <span class="notification-row__title">{{ n.title }}</span>
-          <span class="text-muted text-fine">{{ formatDate(n.created_at) }}</span>
+        <div class="notification-row__icon" :class="`notification-row__icon--${TONE_BY_TYPE[n.type]}`">
+          <component :is="ICON_BY_TYPE[n.type]" :size="19" weight="bold" />
         </div>
-        <div class="text-muted text-meta">{{ n.body }}</div>
+        <div class="notification-row__content">
+          <div class="d-flex justify-space-between align-center mb-1 ga-2">
+            <span class="notification-row__title">{{ n.title }}</span>
+            <span class="text-muted text-fine" style="flex: none">{{ formatDate(n.created_at) }}</span>
+          </div>
+          <div class="text-muted text-meta">{{ n.body }}</div>
+        </div>
       </button>
     </div>
   </div>
@@ -77,7 +115,9 @@ function formatDate(iso: string) {
 
 <style scoped>
 .notification-row {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   width: 100%;
   text-align: left;
   padding: 12px 10px;
@@ -89,24 +129,42 @@ function formatDate(iso: string) {
 }
 
 .notification-row--unread {
-  /* Léger lavis teinté primary plutôt qu'un fallback blanc qui ne se voyait
-     déjà quasiment plus (--color-accent-900 référencé ici n'a jamais existé
-     comme token — cette règle utilisait donc toujours son fallback). */
-  background: rgba(10, 102, 245, 0.08);
+  border-left: 3px solid var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
+.notification-row__icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-row__icon--primary {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+}
+
+.notification-row__icon--success {
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success);
+}
+
+.notification-row__icon--error {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: var(--color-error);
+}
+
+.notification-row__content {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .notification-row__title {
   font-size: 13.5px;
   font-weight: 600;
-}
-
-.notification-row--unread .notification-row__title::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  margin-right: 6px;
 }
 </style>

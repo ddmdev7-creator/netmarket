@@ -3,7 +3,7 @@
 import uuid
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.auth.schemas import PHONE_PATTERN
 from app.couriers.models import CourierStatus, IdDocumentType, VehicleType
@@ -34,16 +34,32 @@ class CourierRegister(BaseModel):
 
 
 class CourierAdminCreate(BaseModel):
-    """Admin-direct account creation — e.g. for a partner delivery company
-    that shouldn't have to self-register as a buyer first. Approved immediately
-    (an admin creating the account IS the validation), unlike self-registration."""
+    """Admin-direct account INVITATION — e.g. pour une société de livraison
+    partenaire qui ne devrait pas avoir à s'auto-inscrire comme acheteur.
+    Contrairement à une ancienne version de ce schéma, ceci ne crée plus un
+    livreur validé d'emblée : le compte part en BUYER, reçoit un email pour
+    définir son mot de passe (voir app/couriers/service.py::admin_create_courier),
+    puis complète lui-même son profil via le flux d'auto-inscription existant
+    (POST /couriers/me) — l'admin approuve seulement une fois ce profil soumis,
+    exactement comme pour un livreur auto-inscrit."""
 
     phone: str = Field(pattern=PHONE_PATTERN, description="Format international, ex: +224621234567")
-    password: str = Field(min_length=8)
+    email: EmailStr
     first_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
-    vehicle_type: VehicleType
-    zone: str | None = Field(default=None, max_length=150)
+
+
+class CourierInvitationRead(BaseModel):
+    """Réponse de la création d'une invitation — pas encore un profil livreur
+    (aucune ligne Courier n'existe tant que l'intéressé n'a pas complété son
+    profil), donc pas CourierDetailRead. Construite depuis le User créé (voir
+    app/couriers/service.py::admin_create_courier), d'où l'alias sur id."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: uuid.UUID = Field(validation_alias="id")
+    phone: str
+    email: str
 
 
 class CourierAdminUpdate(BaseModel):

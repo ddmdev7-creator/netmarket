@@ -18,6 +18,10 @@ class UserRead(BaseModel):
     email_verified: bool
     role: UserRole
     is_active: bool
+    # Un vendeur (ou tout autre rôle) peut aussi gérer un point de retrait
+    # sans changer son role principal (voir app/pickup_point_managers) — ce
+    # champ permet au frontend de le savoir sans dupliquer le rôle "officiel".
+    is_pickup_point_manager: bool = False
 
 
 class UserUpdate(BaseModel):
