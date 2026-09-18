@@ -241,8 +241,10 @@ async function addToCart() {
           </p>
         </div>
 
+        <v-divider class="mb-4" />
+
         <div class="mb-4">
-          <div class="text-muted mb-1 text-meta">Quantité</div>
+          <div class="mb-1 text-body" style="font-weight: 700">Quantité</div>
           <div class="qty-selector">
             <button type="button" :disabled="quantity <= 1" @click="decr">−</button>
             <span>{{ quantity }}</span>
@@ -250,15 +252,25 @@ async function addToCart() {
           </div>
         </div>
 
-        <v-divider class="mb-4" />
+        <v-divider class="mb-2" />
 
-        <h3 class="text-subtitle-1 mb-2">Description</h3>
-        <!-- v-html sûr ici : le backend assainit systématiquement la
-             description à l'écriture (app/catalog/service.py::_sanitize_description),
-             quel que soit le point d'entrée — jamais confiance dans le HTML
-             saisi côté client seul, voir le commentaire côté backend. -->
-        <div v-if="product.description" class="description-content text-muted text-meta" v-html="product.description" />
-        <p v-else class="text-muted text-meta mb-0">Aucune description fournie par le vendeur.</p>
+        <v-expansion-panels variant="accordion">
+          <v-expansion-panel>
+            <v-expansion-panel-title>Description</v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <!-- v-html sûr ici : le backend assainit systématiquement la
+                   description à l'écriture (app/catalog/service.py::_sanitize_description),
+                   quel que soit le point d'entrée — jamais confiance dans le HTML
+                   saisi côté client seul, voir le commentaire côté backend. -->
+              <div
+                v-if="product.description"
+                class="description-content text-muted text-meta"
+                v-html="product.description"
+              />
+              <p v-else class="text-muted text-meta mb-0">Aucune description fournie par le vendeur.</p>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
 
         <div
           v-if="product.estimated_delivery_min && product.estimated_delivery_max"

@@ -95,48 +95,46 @@ watch(page, () => refresh())
       <v-text-field
         v-model="search"
         placeholder="Rechercher un produit…"
-        density="compact"
-        variant="solo-filled"
+        density="comfortable"
+        variant="solo"
         hide-details
         flat
         rounded
+        class="search-field"
         @update:model-value="onSearchInput"
       >
         <template #prepend-inner>
-          <PhMagnifyingGlass :size="18" color="var(--color-neutral-500)" />
+          <PhMagnifyingGlass :size="19" weight="bold" color="var(--color-primary)" />
         </template>
       </v-text-field>
 
-      <v-btn
-        icon
-        variant="tonal"
-        :color="hasActiveFilters ? 'primary' : undefined"
-        aria-label="Filtres"
-        @click="filtersOpen = true"
-      >
+      <button type="button" class="filter-btn" :class="{ 'filter-btn--active': hasActiveFilters }" aria-label="Filtres" @click="filtersOpen = true">
         <PhFunnel :size="18" weight="bold" />
-      </v-btn>
+        <span v-if="hasActiveFilters" class="filter-btn__dot" />
+      </button>
     </div>
 
-    <div class="chip-row mb-3">
-      <v-chip
-        :variant="activeCategoryId === null ? 'flat' : 'outlined'"
-        :color="activeCategoryId === null ? 'primary' : undefined"
-        class="chip-row__item mr-2"
-        @click="selectCategory(null)"
-      >
-        Tout
-      </v-chip>
-      <v-chip
-        v-for="category in categories"
-        :key="category.id"
-        :variant="activeCategoryId === category.id ? 'flat' : 'outlined'"
-        :color="activeCategoryId === category.id ? 'primary' : undefined"
-        class="chip-row__item mr-2"
-        @click="selectCategory(category.id)"
-      >
-        {{ category.name }}
-      </v-chip>
+    <div class="chip-row-wrap mb-3">
+      <div class="chip-row">
+        <v-chip
+          :variant="activeCategoryId === null ? 'flat' : 'outlined'"
+          :color="activeCategoryId === null ? 'primary' : undefined"
+          class="chip-row__item mr-2"
+          @click="selectCategory(null)"
+        >
+          Tout
+        </v-chip>
+        <v-chip
+          v-for="category in categories"
+          :key="category.id"
+          :variant="activeCategoryId === category.id ? 'flat' : 'outlined'"
+          :color="activeCategoryId === category.id ? 'primary' : undefined"
+          class="chip-row__item mr-2"
+          @click="selectCategory(category.id)"
+        >
+          {{ category.name }}
+        </v-chip>
+      </div>
     </div>
 
     <ProductGrid :products="products" :loading="pending" />
@@ -177,10 +175,75 @@ watch(page, () => refresh())
 </template>
 
 <style scoped>
+/* Champ de recherche mis en avant : fond blanc plein (variant="solo") avec
+   une ombre légère plutôt que le gris plat "solo-filled" précédent, qui se
+   fondait presque dans le fond de page — c'est la première action de la
+   page, elle doit se voir immédiatement. */
+.search-field :deep(.v-field) {
+  box-shadow: var(--shadow-sm);
+}
+
+.search-field :deep(.v-field__input) {
+  font-size: 14px;
+}
+
+/* Bouton filtre : toujours visible comme un vrai bouton (bordure) plutôt
+   que de compter uniquement sur un changement de couleur pour signaler
+   l'état actif — le point orange en complément reste lisible même pour qui
+   ne perçoit pas bien la différence de teinte. */
+.filter-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider-strong);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-300);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.filter-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.filter-btn--active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-100);
+  color: var(--color-primary);
+}
+
+.filter-btn__dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-neutral-900);
+}
+
+/* Le fondu à droite (mask-image) signale qu'il y a plus de catégories à
+   découvrir sans avoir à réactiver la scrollbar native — un indice visuel
+   discret mais immédiat, plutôt que de compter sur l'utilisateur pour
+   deviner que la liste défile. */
+.chip-row-wrap {
+  position: relative;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+}
+
 .chip-row {
   display: flex;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 2px 20px 6px 2px;
   scrollbar-width: none;
 }
 

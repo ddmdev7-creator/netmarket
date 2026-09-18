@@ -269,38 +269,47 @@ function lightboxNext() {
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 2;
   display: flex;
-  gap: 6px;
-  padding: 5px 9px;
+  gap: 7px;
+  padding: 6px 10px;
   border-radius: 999px;
-  /* Plus opaque qu'avant (0.35 → 0.6) : sur une photo produit à fond clair
-     (très courant en e-commerce), le fond semi-transparent laissait passer
-     trop de lumière et les points devenaient à peine visibles. */
-  background: rgba(0, 0, 0, 0.6);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  /* Quasi opaque (0.6 puis 0.35 se sont révélés encore trop transparents
+     sur une photo produit à fond clair, très courant en e-commerce — un
+     fond clair sous une pastille semi-transparente noircit à peine et les
+     points s'y distinguent mal). 0.8 + un liseré clair donnent un contraste
+     fiable quelle que soit la photo derrière. */
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .gallery__dot {
-  /* Visible dot stays 6px (background-clip: content-box keeps the padding
+  /* Visible dot stays 7px (background-clip: content-box keeps the padding
      transparent) — the padding itself is what brings the actual tap target
      up to a reasonable mobile size without changing how this looks. */
-  width: 6px;
-  height: 6px;
-  padding: 9px;
+  width: 7px;
+  height: 7px;
+  padding: 8px;
   background-clip: content-box;
   border-radius: 50%;
-  /* 0.5 → 0.7 : même raison que le fond de .gallery__dots ci-dessus. */
-  background-color: rgba(255, 255, 255, 0.7);
+  /* Blanc plein plutôt que semi-transparent : sur un fond de pastille déjà
+     à 80% opaque, un point net se distingue toujours de l'actif ci-dessous
+     sans dépendre en plus de la photo affichée. */
+  background-color: #fff;
+  opacity: 0.55;
   border: none;
   cursor: pointer;
   transition:
+    opacity 0.15s ease,
     background-color 0.15s ease,
     width 0.15s ease;
 }
 
 .gallery__dot--active {
   background-color: var(--color-primary);
-  width: 16px;
+  opacity: 1;
+  width: 18px;
   border-radius: 3px;
 }
 </style>

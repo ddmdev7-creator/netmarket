@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhPlus, PhStar } from '@phosphor-icons/vue'
+import { PhImage, PhShoppingCartSimple, PhStar } from '@phosphor-icons/vue'
 import type { ProductRead } from '~/types/api'
 
 const props = defineProps<{ product: ProductRead }>()
@@ -64,7 +64,7 @@ async function quickAdd(event: MouseEvent) {
           :aria-label="`Ajouter ${product.name} au panier`"
           @click="quickAdd"
         >
-          <PhPlus v-if="!justAdded" :size="16" weight="bold" />
+          <PhShoppingCartSimple v-if="!justAdded" :size="16" weight="bold" />
           <span v-else class="product-card__quick-add-check">✓</span>
         </button>
       </div>
@@ -177,7 +177,11 @@ async function quickAdd(event: MouseEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary);
+  /* Orange comme le prix (--color-accent) plutôt que le bleu primary habituel
+     — associe visuellement le bouton d'ajout rapide au prix qu'il ajoute au
+     panier, cohérent avec la charte "orange = ce qui accroche l'œil sur le
+     prix/l'achat" déjà utilisée sur la carte (prix, étoiles de notation). */
+  background: var(--color-accent);
   color: #fff;
   box-shadow: var(--shadow-md);
   transition: transform 0.15s ease, background 0.15s ease;

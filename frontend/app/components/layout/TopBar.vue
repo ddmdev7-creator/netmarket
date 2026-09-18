@@ -88,10 +88,12 @@ const navItems = [
   </div>
 
   <!-- Visiteur non connecté sur l'espace acheteur (catalogue accessible sans
-       compte) : rien sur mobile (comme aujourd'hui, la bottom nav suffit),
-       mais sur desktop la bottom nav est masquée (BottomNav.vue) — sans
-       cette barre, un visiteur desktop non connecté n'aurait plus aucun
-       moyen de naviguer ou de se connecter. -->
+       compte) : affichée sur toutes les tailles d'écran désormais — logo +
+       lien de connexion visibles même sur mobile (les liens de nav internes
+       à cette barre restent masqués sous 960px via .top-bar__nav, la bottom
+       nav suffit déjà à cette taille). Sans cette barre, un visiteur
+       desktop n'aurait plus aucun moyen de naviguer une fois la bottom nav
+       masquée (voir BottomNav.vue). -->
   <div v-else-if="props.showNav" class="top-bar top-bar--guest">
     <NuxtLink to="/" class="top-bar__logo">Netmarket</NuxtLink>
     <nav class="top-bar__nav">
@@ -182,8 +184,14 @@ const navItems = [
   display: none;
 }
 
+/* Contrairement à .top-bar__nav ci-dessus, cette barre elle-même reste
+   visible à toutes les tailles — c'est la seule chose qu'un visiteur non
+   connecté voit en haut de l'app, pas la peine d'attendre le desktop pour
+   ça (voir le commentaire sur le v-else-if plus haut). */
 .top-bar--guest {
-  display: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 @media (min-width: 960px) {
@@ -195,12 +203,6 @@ const navItems = [
     display: flex;
     align-items: center;
     gap: 4px;
-  }
-
-  .top-bar--guest {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 }
 
