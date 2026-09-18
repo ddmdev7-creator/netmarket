@@ -299,7 +299,16 @@ function lightboxNext() {
   background-color: #fff;
   opacity: 0.55;
   border: none;
+  outline: none;
   cursor: pointer;
+  /* Sans ça, le chrome natif d'un <button> (surtout Safari iOS) peut
+     redessiner sa propre apparence par-dessus background-color/border-radius
+     une fois le bouton assez petit — les deux précédents ajustements
+     d'opacité (0.35 → 0.6 → 0.8 sur la pastille) ne changeaient rien
+     puisque le point restait masqué par ce rendu natif, pas par un manque
+     de contraste. */
+  appearance: none;
+  -webkit-appearance: none;
   transition:
     opacity 0.15s ease,
     background-color 0.15s ease,

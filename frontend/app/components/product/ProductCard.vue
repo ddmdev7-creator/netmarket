@@ -15,8 +15,14 @@ const justAdded = ref(false)
 
 const isOutOfStock = computed(() => props.product.stock <= 0)
 const isLowStock = computed(() => props.product.stock > 0 && props.product.stock <= 5)
+const hasVariants = computed(() => props.product.variants.length > 0)
 
 async function quickAdd(event: MouseEvent) {
+  // Un produit à variantes (couleur, taille…) ne peut pas être ajouté
+  // directement depuis la carte — pas de sélection possible ici. On laisse
+  // alors le clic remonter normalement vers le NuxtLink englobant plutôt que
+  // de faire disparaître l'icône : elle sert à ouvrir la fiche pour choisir.
+  if (hasVariants.value) return
   event.preventDefault()
   event.stopPropagation()
   if (isOutOfStock.value || adding.value) return
@@ -56,12 +62,12 @@ async function quickAdd(event: MouseEvent) {
         <span v-else-if="isLowStock" class="product-card__stock-tag product-card__stock-tag--low">Derniers exemplaires</span>
 
         <button
-          v-if="!isOutOfStock && product.variants.length === 0"
+          v-if="!isOutOfStock"
           type="button"
           class="product-card__quick-add"
           :class="{ 'product-card__quick-add--done': justAdded }"
           :disabled="adding"
-          :aria-label="`Ajouter ${product.name} au panier`"
+          :aria-label="hasVariants ? `Voir les options de ${product.name}` : `Ajouter ${product.name} au panier`"
           @click="quickAdd"
         >
           <PhShoppingCartSimple v-if="!justAdded" :size="16" weight="bold" />

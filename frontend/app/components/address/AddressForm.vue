@@ -88,6 +88,15 @@ function selectPickupPoint(pointId: string | null) {
 const hasPosition = computed(() => model.value.latitude !== null && model.value.longitude !== null)
 const isHomeDelivery = computed(() => model.value.delivery_type === 'home_delivery')
 
+// Regroupe les champs secondaires (destinataire, instructions) sous des
+// onglets plutôt qu'à la suite les uns des autres — évite un formulaire à
+// rallonge alors que ces informations ne sont consultées/éditées que
+// ponctuellement, contrairement à la position qui reste la donnée clé.
+const infoTab = ref<'recipient' | 'instructions'>(isHomeDelivery.value ? 'recipient' : 'instructions')
+watch(isHomeDelivery, (home) => {
+  if (!home) infoTab.value = 'instructions'
+})
+
 // Coordonnées arrondies à ~11m de précision (4 décimales) — largement
 // suffisant pour vérifier visuellement qu'on est au bon endroit.
 const positionLabel = computed(() =>
@@ -182,16 +191,23 @@ async function useCurrentPosition() {
       </v-alert>
     </template>
 
-    <template v-if="isHomeDelivery">
-      <label class="field-label">Nom du destinataire (optionnel)</label>
-      <v-text-field v-model="model.recipient_name" placeholder="Ex: Mamadou Diallo" class="mb-2" />
+    <v-tabs v-model="infoTab" color="primary" density="compact" class="mb-2">
+      <v-tab v-if="isHomeDelivery" value="recipient">Destinataire</v-tab>
+      <v-tab value="instructions">Instructions</v-tab>
+    </v-tabs>
+    <v-window v-model="infoTab">
+      <v-window-item v-if="isHomeDelivery" value="recipient">
+        <label class="field-label">Nom du destinataire (optionnel)</label>
+        <v-text-field v-model="model.recipient_name" placeholder="Ex: Mamadou Diallo" class="mb-2" />
 
-      <label class="field-label">Téléphone (optionnel)</label>
-      <v-text-field v-model="model.recipient_phone" placeholder="+224 6XX XX XX XX" class="mb-2" />
-    </template>
-
-    <label class="field-label">Instructions supplémentaires (optionnel)</label>
-    <v-textarea v-model="model.instructions" rows="2" placeholder="Ex: Appeler avant d'arriver" class="mb-2" />
+        <label class="field-label">Téléphone (optionnel)</label>
+        <v-text-field v-model="model.recipient_phone" placeholder="+224 6XX XX XX XX" class="mb-2" />
+      </v-window-item>
+      <v-window-item value="instructions">
+        <label class="field-label">Instructions supplémentaires (optionnel)</label>
+        <v-textarea v-model="model.instructions" rows="2" placeholder="Ex: Appeler avant d'arriver" class="mb-2" />
+      </v-window-item>
+    </v-window>
 
     <v-checkbox v-model="model.is_default" label="Définir comme adresse par défaut" density="compact" hide-details class="mb-2" />
   </div>

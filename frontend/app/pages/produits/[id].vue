@@ -145,7 +145,22 @@ const addDisabled = computed(() => {
 })
 
 function selectAttribute(name: string, value: string) {
-  selected[name] = value
+  // Recliquer la valeur déjà choisie revient dessus (désélection) plutôt que
+  // de rester bloqué dessus — sans ça, une fois un choix fait il était
+  // impossible de revenir à l'état "rien de sélectionné" pour ce groupe.
+  if (selected[name] === value) {
+    delete selected[name]
+  } else {
+    selected[name] = value
+  }
+  quantity.value = 1
+  justAdded.value = false
+}
+
+const hasSelection = computed(() => Object.keys(selected).length > 0)
+
+function resetSelection() {
+  for (const key of Object.keys(selected)) delete selected[key]
   quantity.value = 1
   justAdded.value = false
 }
@@ -219,6 +234,12 @@ async function addToCart() {
         </div>
 
         <div v-if="hasVariants" class="mb-4">
+          <div class="d-flex justify-space-between align-center mb-1">
+            <div class="text-muted text-meta">Choisissez vos options</div>
+            <button v-if="hasSelection" type="button" class="reset-selection-btn" @click="resetSelection">
+              Réinitialiser
+            </button>
+          </div>
           <div class="attribute-groups">
             <div v-for="group in attributeGroups" :key="group.name" class="attribute-group">
               <div class="text-muted mb-1 text-meta">{{ group.name }}</div>
@@ -370,6 +391,20 @@ async function addToCart() {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px 16px;
+}
+
+.reset-selection-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.reset-selection-btn:hover {
+  text-decoration: underline;
 }
 
 @media (min-width: 960px) {
