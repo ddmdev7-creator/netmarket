@@ -43,7 +43,7 @@ async function submit() {
 
 <template>
   <div class="app-shell auth-shell d-flex flex-column justify-center pa-4" style="min-height: 100dvh">
-    <v-sheet class="auth-card" theme="daylight" color="white">
+    <div class="auth-card">
       <NuxtLink to="/mot-de-passe-oublie" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
         <PhArrowLeft :size="14" />
         Retour
@@ -69,6 +69,6 @@ async function submit() {
 
         <v-btn type="submit" color="primary" block size="large" :loading="loading">Réinitialiser</v-btn>
       </v-form>
-    </v-sheet>
+    </div>
   </div>
 </template>

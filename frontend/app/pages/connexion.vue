@@ -30,7 +30,7 @@ async function submit() {
 
 <template>
   <div class="app-shell auth-shell d-flex flex-column justify-center pa-4" style="min-height: 100dvh">
-    <v-sheet class="auth-card" theme="daylight" color="white">
+    <div class="auth-card">
       <NuxtLink to="/" class="d-flex align-center ga-1 text-muted mb-4 text-meta" style="text-decoration: none">
         <PhArrowLeft :size="14" />
         Retour à l'accueil
@@ -57,6 +57,6 @@ async function submit() {
         Pas encore de compte ?
         <NuxtLink to="/inscription" class="text-primary">Créer un compte</NuxtLink>
       </div>
-    </v-sheet>
+    </div>
   </div>
 </template>
