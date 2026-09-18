@@ -19,6 +19,7 @@ from app.orders.schemas import (
     DispatchRequest,
     OrderRead,
     PickupPointManagerSubOrderRead,
+    StorageLocationUpdate,
     SubOrderStatusUpdate,
     VendorSubOrderRead,
 )
@@ -101,6 +102,20 @@ async def update_sub_order_status(
     db: AsyncSession = Depends(get_db),
 ) -> VendorSubOrderRead:
     return await service.update_sub_order_status(db, current_user, sub_order_id, payload)
+
+
+@router.patch(
+    "/sub-orders/{sub_order_id}/storage-location",
+    response_model=PickupPointManagerSubOrderRead,
+    dependencies=[Depends(require_role(UserRole.PICKUP_POINT_MANAGER))],
+)
+async def update_storage_location(
+    sub_order_id: uuid.UUID,
+    payload: StorageLocationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PickupPointManagerSubOrderRead:
+    return await service.update_storage_location(db, current_user, sub_order_id, payload.storage_location)
 
 
 @router.patch(

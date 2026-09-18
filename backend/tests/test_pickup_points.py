@@ -3,6 +3,7 @@
 from httpx import AsyncClient
 
 from app.users.models import User
+from app.vendors.models import Vendor
 from tests.conftest import auth_headers
 
 
@@ -74,3 +75,45 @@ async def test_admin_can_delete_pickup_point(client: AsyncClient, admin_user: Us
     assert response.status_code == 200
     listing = await client.get("/admin/pickup-points", headers=headers)
     assert listing.json() == []
+
+
+async def test_admin_can_link_pickup_point_to_a_vendor(client: AsyncClient, admin_user: User, vendor: Vendor) -> None:
+    response = await client.post(
+        "/admin/pickup-points",
+        json={"name": "Boutique Test — retrait", "zone": "Kaloum", "vendor_id": str(vendor.id)},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["vendor_id"] == str(vendor.id)
+    assert body["vendor_shop_name"] == "Boutique Test"
+
+
+async def test_admin_cannot_link_pickup_point_to_an_unknown_vendor(client: AsyncClient, admin_user: User) -> None:
+    response = await client.post(
+        "/admin/pickup-points",
+        json={"name": "Point orphelin", "zone": "Kaloum", "vendor_id": "00000000-0000-0000-0000-000000000000"},
+        headers=auth_headers(admin_user),
+    )
+
+    assert response.status_code == 404
+
+
+async def test_admin_can_unlink_pickup_point_from_its_vendor(
+    client: AsyncClient, admin_user: User, vendor: Vendor
+) -> None:
+    headers = auth_headers(admin_user)
+    created = await client.post(
+        "/admin/pickup-points",
+        json={"name": "Boutique Test — retrait", "zone": "Kaloum", "vendor_id": str(vendor.id)},
+        headers=headers,
+    )
+
+    response = await client.patch(
+        f"/admin/pickup-points/{created.json()['id']}", json={"vendor_id": None}, headers=headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["vendor_id"] is None
+    assert response.json()["vendor_shop_name"] is None

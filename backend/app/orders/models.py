@@ -143,6 +143,13 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     dispatch_queue: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(PG_UUID(as_uuid=True)), default=list, nullable=False)
 
+    # Emplacement de stockage au point de retrait (ex. "Étagère B3") — texte
+    # libre renseigné/modifié par le gestionnaire du point (voir
+    # app/orders/service.py::update_storage_location), pour retrouver
+    # rapidement le colis physique au moment de la remise. Sans objet pour
+    # une livraison à domicile (delivery_type == home_delivery).
+    storage_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     order: Mapped["Order"] = relationship(back_populates="sub_orders")
     items: Mapped[list["OrderItem"]] = relationship(back_populates="sub_order", cascade="all, delete-orphan")
 

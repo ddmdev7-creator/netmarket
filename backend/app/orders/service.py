@@ -439,6 +439,33 @@ async def list_my_point_deliveries(db: AsyncSession, user: User) -> list[SubOrde
     return result
 
 
+async def update_storage_location(
+    db: AsyncSession, user: User, sub_order_id: uuid.UUID, storage_location: str | None
+) -> SubOrder:
+    """Le gestionnaire note où il a rangé le colis (étagère, case...) —
+    purement informatif, jamais vérifié contre le statut de la sous-commande :
+    il peut le renseigner dès la réception ou le corriger à tout moment avant
+    la remise, sans que ça n'affecte le cycle de vie de la commande."""
+    sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+    if sub_order is None:
+        raise NotFoundError("Sous-commande introuvable.")
+    if sub_order.order.delivery_type != DeliveryType.PICKUP_POINT:
+        raise ConflictError("Cette commande n'est pas une livraison en point de retrait.")
+
+    manager = await pickup_point_manager_repository.get_by_user_id(db, user.id)
+    if manager is None or manager.pickup_point_id != sub_order.order.pickup_point_id:
+        raise ForbiddenError("Cette sous-commande ne fait pas partie de votre point de retrait.")
+
+    sub_order.storage_location = storage_location
+    await db.commit()
+
+    updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    _attach_delivery_address(updated)
+    await _attach_courier_info(db, updated)
+    await _attach_product_images(db, updated)
+    return updated
+
+
 async def update_sub_order_status(
     db: AsyncSession, user: User, sub_order_id: uuid.UUID, data: SubOrderStatusUpdate
 ) -> SubOrder:

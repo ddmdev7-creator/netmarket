@@ -264,3 +264,112 @@ async def test_vendor_cannot_ship_without_assigning_a_courier(
     )
 
     assert response.status_code == 409
+
+
+async def test_manager_can_set_and_clear_storage_location(
+    client: AsyncClient,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    manager_user: User,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+    manager_headers = auth_headers(manager_user)
+
+    response = await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/storage-location",
+        json={"storage_location": "Étagère B3"},
+        headers=manager_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["storage_location"] == "Étagère B3"
+
+    listing = await client.get("/orders/pickup-point-deliveries", headers=manager_headers)
+    entry = next(so for so in listing.json() if so["id"] == sub_order_id)
+    assert entry["storage_location"] == "Étagère B3"
+
+    cleared = await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/storage-location",
+        json={"storage_location": None},
+        headers=manager_headers,
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["storage_location"] is None
+
+
+async def test_manager_of_another_point_cannot_set_storage_location(
+    client: AsyncClient,
+    db_session,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    other_point = PickupPoint(name="Autre point", zone="Matoto")
+    db_session.add(other_point)
+    await db_session.flush()
+    other_manager_user = await make_user(db_session, phone="+224620009994", role=UserRole.PICKUP_POINT_MANAGER)
+    other_manager = PickupPointManager(user_id=other_manager_user.id, pickup_point_id=other_point.id)
+    db_session.add(other_manager)
+    await db_session.flush()
+
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+
+    response = await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/storage-location",
+        json={"storage_location": "Étagère B3"},
+        headers=auth_headers(other_manager_user),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_courier_cannot_set_storage_location(
+    client: AsyncClient,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+
+    response = await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/storage-location",
+        json={"storage_location": "Étagère B3"},
+        headers=auth_headers(courier_user),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_storage_location_rejected_for_home_delivery(
+    client: AsyncClient,
+    db_session,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    manager_user: User,
+    product,
+) -> None:
+    sub_order_id = await _checkout(client, buyer_user, product, HOME_DELIVERY_PAYLOAD)
+    await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/courier",
+        json={"courier_id": str(courier.id)},
+        headers=auth_headers(vendor_user),
+    )
+
+    response = await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/storage-location",
+        json={"storage_location": "Étagère B3"},
+        headers=auth_headers(manager_user),
+    )
+
+    assert response.status_code == 409

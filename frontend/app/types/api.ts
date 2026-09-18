@@ -110,6 +110,9 @@ export interface PickupPointRead {
   latitude: number | null
   longitude: number | null
   is_active: boolean
+  /** Renseigné quand ce point est la boutique d'un vendeur plutôt qu'un local dédié. */
+  vendor_id: string | null
+  vendor_shop_name: string | null
 }
 
 export interface PickupPointCreate {
@@ -118,6 +121,7 @@ export interface PickupPointCreate {
   latitude?: number | null
   longitude?: number | null
   is_active?: boolean
+  vendor_id?: string | null
 }
 
 export type PickupPointUpdate = Partial<PickupPointCreate>
@@ -250,6 +254,7 @@ export interface PickupPointManagerSubOrderRead {
   delivery_instructions: string | null
   courier_name: string | null
   courier_phone: string | null
+  storage_location: string | null
 }
 
 export interface LowStockProduct {

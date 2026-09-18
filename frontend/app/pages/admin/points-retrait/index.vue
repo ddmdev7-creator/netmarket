@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { PhCheckCircle, PhMapPin, PhPencilSimple, PhPlus, PhTrash, PhUser } from '@phosphor-icons/vue'
-import type { PickupPointManagerAdminCreate, PickupPointManagerRead, PickupPointRead } from '~/types/api'
+import { PhCheckCircle, PhMapPin, PhPencilSimple, PhPlus, PhStorefront, PhTrash, PhUser } from '@phosphor-icons/vue'
+import type { PickupPointManagerAdminCreate, PickupPointManagerRead, PickupPointRead, VendorRead } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
 
@@ -20,6 +20,18 @@ const { data: managers, refresh: refreshManagers } = await useAsyncData(
   { default: () => [], getCachedData: () => undefined },
 )
 
+// Pour proposer de rattacher un point à une boutique existante — un point de
+// retrait n'est pas forcément une boutique (on peut aussi construire un local
+// dédié uniquement à ça), donc toujours optionnel (voir vendorOptions ci-dessous).
+const { data: vendors } = await useAsyncData('admin-vendors-for-pickup-points', () => apiFetch<VendorRead[]>('/admin/vendors'), {
+  default: () => [],
+})
+
+const vendorOptions = computed(() => vendors.value.map((v) => ({ title: v.shop_name, value: v.id })))
+function vendorById(id: string | null) {
+  return id ? (vendors.value.find((v) => v.id === id) ?? null) : null
+}
+
 const managersByPoint = computed(() => {
   const grouped: Record<string, PickupPointManagerRead[]> = {}
   for (const m of managers.value) {
@@ -30,19 +42,43 @@ const managersByPoint = computed(() => {
 
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
-const form = ref({ name: '', zone: '', latitude: null as number | null, longitude: null as number | null })
+const form = ref({
+  name: '',
+  zone: '',
+  latitude: null as number | null,
+  longitude: null as number | null,
+  vendorId: null as string | null,
+})
 const submitting = ref(false)
 
 function startCreate() {
   editingId.value = null
-  form.value = { name: '', zone: '', latitude: null, longitude: null }
+  form.value = { name: '', zone: '', latitude: null, longitude: null, vendorId: null }
   showForm.value = true
 }
 
 function startEdit(point: PickupPointRead) {
   editingId.value = point.id
-  form.value = { name: point.name, zone: point.zone, latitude: point.latitude, longitude: point.longitude }
+  form.value = {
+    name: point.name,
+    zone: point.zone,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    vendorId: point.vendor_id,
+  }
   showForm.value = true
+}
+
+// Évite de ressaisir la zone/position déjà connue quand le point EST la
+// boutique du vendeur choisi — reste une pure commodité, l'admin peut
+// toujours corriger ensuite (ex. un local de retrait séparé du magasin).
+function fillFromVendor() {
+  const vendor = vendorById(form.value.vendorId)
+  if (!vendor) return
+  if (!form.value.name.trim()) form.value.name = vendor.shop_name
+  if (vendor.zone) form.value.zone = vendor.zone
+  if (vendor.latitude !== null) form.value.latitude = vendor.latitude
+  if (vendor.longitude !== null) form.value.longitude = vendor.longitude
 }
 
 async function useCurrentPosition() {
@@ -72,6 +108,7 @@ async function submit() {
       zone: form.value.zone.trim(),
       latitude: form.value.latitude,
       longitude: form.value.longitude,
+      vendor_id: form.value.vendorId,
     }
     if (editingId.value) {
       await apiFetch(`/admin/pickup-points/${editingId.value}`, { method: 'PATCH', body })
@@ -190,6 +227,31 @@ async function removeManager(managerId: string) {
     </div>
 
     <v-card v-if="showForm" class="mb-4 pa-3">
+      <label class="field-label">Boutique liée (optionnel)</label>
+      <p class="text-muted mb-2" style="font-size: 11.5px">
+        À renseigner uniquement si ce point de retrait EST la boutique d'un vendeur — un point peut aussi être un
+        local dédié, sans lien avec une boutique.
+      </p>
+      <v-select
+        v-model="form.vendorId"
+        :items="vendorOptions"
+        placeholder="Aucune"
+        clearable
+        density="comfortable"
+        class="mb-1"
+      />
+      <v-btn
+        v-if="form.vendorId"
+        variant="text"
+        size="small"
+        class="mb-3"
+        style="padding: 0"
+        @click="fillFromVendor"
+      >
+        <PhStorefront :size="14" class="mr-1" />
+        Reprendre le nom/la zone/la position de cette boutique
+      </v-btn>
+
       <label class="field-label">Nom du point</label>
       <v-text-field v-model="form.name" placeholder="Ex: Point Wari Madina" class="mb-2" />
 
@@ -223,6 +285,10 @@ async function removeManager(managerId: string) {
         <v-chip :color="p.is_active ? 'success' : 'default'" size="x-small" variant="tonal">
           {{ p.is_active ? 'Actif' : 'Inactif' }}
         </v-chip>
+      </div>
+      <div v-if="p.vendor_shop_name" class="d-flex align-center ga-1 text-muted mb-1" style="font-size: 11.5px">
+        <PhStorefront :size="13" />
+        <span>Boutique : {{ p.vendor_shop_name }}</span>
       </div>
       <div class="text-muted mb-3" style="font-size: 12.5px">{{ p.zone }}</div>
 

@@ -32,6 +32,11 @@ class SubOrderStatusUpdate(BaseModel):
     status: OrderStatus
 
 
+class StorageLocationUpdate(BaseModel):
+    # None efface l'emplacement (colis déjà remis, ou note plus valable).
+    storage_location: str | None = Field(default=None, max_length=100)
+
+
 class DeliveryConfirmRequest(BaseModel):
     token: str
 
@@ -178,6 +183,7 @@ class PickupPointManagerSubOrderRead(BaseModel):
     delivery_instructions: str | None = None
     courier_name: str | None = None
     courier_phone: str | None = None
+    storage_location: str | None = None
 
 
 class OrderRead(BaseModel):
