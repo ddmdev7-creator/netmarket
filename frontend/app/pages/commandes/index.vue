@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { PhWarningCircle } from '@phosphor-icons/vue'
+import { PhImage, PhWarningCircle } from '@phosphor-icons/vue'
 import type { OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
 const { apiFetch } = useApi()
+const apiBase = useApiBase()
+
+// Pas plus de 4 vignettes par commande — au-delà, "+N" plutôt que de
+// surcharger une ligne de liste censée rester un aperçu, pas le détail
+// (déjà disponible en ouvrant la commande).
+const MAX_THUMBS = 4
+
+function orderItems(order: OrderRead) {
+  return order.sub_orders.flatMap((so) => so.items)
+}
 
 const { data: orders, pending, error } = await useAsyncData('my-orders', () => apiFetch<OrderRead[]>('/orders'), {
   default: () => [],
@@ -54,6 +64,20 @@ function formatDate(iso: string) {
         <span style="font-weight: 600">{{ shortId(order.id) }}</span>
         <StatusBadge :status="order.status" />
       </div>
+      <div class="order-thumbs mt-2">
+        <div v-for="item in orderItems(order).slice(0, MAX_THUMBS)" :key="item.id" class="order-thumbs__item">
+          <img
+            v-if="item.product_image"
+            :src="resolveImageUrl(item.product_image, apiBase)"
+            :alt="item.product_name"
+            loading="lazy"
+          />
+          <PhImage v-else :size="14" weight="light" color="var(--color-neutral-500)" />
+        </div>
+        <div v-if="orderItems(order).length > MAX_THUMBS" class="order-thumbs__more">
+          +{{ orderItems(order).length - MAX_THUMBS }}
+        </div>
+      </div>
       <div class="text-muted mt-1 text-meta">
         {{ formatDate(order.created_at) }} · {{ itemCount(order) }} article{{ itemCount(order) > 1 ? 's' : '' }} ·
         {{ vendorCount(order) }} boutique{{ vendorCount(order) > 1 ? 's' : '' }}
@@ -73,5 +97,35 @@ function formatDate(iso: string) {
   border-bottom: 1px solid var(--color-divider);
   text-decoration: none;
   color: inherit;
+}
+
+.order-thumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.order-thumbs__item {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.order-thumbs__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.order-thumbs__more {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-neutral-400);
 }
 </style>

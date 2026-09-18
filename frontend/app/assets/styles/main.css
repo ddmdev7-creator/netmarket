@@ -232,12 +232,23 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Connexion/inscription/mot de passe oublié : même couleur que la première
-   section (hero) de ndjouri.com (var(--primary) de sa charte, #3b1e32) —
-   .auth-shell porte ce fond plein écran, .auth-card reste une carte blanche
-   qui s'en détache nettement, quelle que soit la taille d'écran (avant ce
-   fond de carte n'existait que sur desktop ; sur mobile la carte était
-   invisible, confondue avec le fond de page). */
+   section (hero) de ndjouri.com (var(--primary) de sa charte, #3b1e32),
+   remplaçant le gris (--color-bg) habituel de .app-shell — .auth-card reste
+   une carte blanche qui s'en détache nettement, quelle que soit la taille
+   d'écran (avant ce fond de carte n'existait que sur desktop ; sur mobile la
+   carte était invisible, confondue avec le fond de page).
+   Un ::before position:fixed plutôt qu'un simple background sur .auth-shell :
+   .auth-shell reste borné par .app-shell (colonne centrée, 480/720px) pour la
+   mise en page de la carte, mais la couleur doit elle couvrir tout l'écran,
+   y compris l'espace vide de part et d'autre sur un écran large. */
 .auth-shell {
+  position: relative;
+}
+
+.auth-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
   background-color: #3b1e32;
 }
 
