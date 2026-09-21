@@ -10,13 +10,38 @@ from app.orders.models import DeliveryType, OrderStatus, PaymentMethod
 from app.payments.models import PaymentStatus
 
 
-class CheckoutRequest(BaseModel):
-    delivery_address: str = Field(min_length=3, max_length=300)
+class DeliveryQuoteRequest(BaseModel):
+    """Où livrer — le strict nécessaire pour chiffrer les frais de livraison.
+    Base de CheckoutRequest : le devis affiché à l'acheteur et le checkout
+    calculent ainsi leurs frais exactement de la même façon."""
+
     delivery_type: DeliveryType = DeliveryType.HOME_DELIVERY
     # Requis quand delivery_type == PICKUP_POINT (validé dans
-    # service.checkout_cart) — route la commande vers le bon gestionnaire de
-    # point, en plus du texte figé delivery_address.
+    # service._resolve_destination) — route la commande vers le bon
+    # gestionnaire de point, en plus du texte figé delivery_address.
     pickup_point_id: uuid.UUID | None = None
+    # Position GPS de l'adresse de livraison à domicile (ignorée pour un point
+    # de retrait, dont la position est celle du point). Optionnelle : sans
+    # elle, le palier de repli s'applique (voir delivery.service.compute_fee).
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+class DeliveryQuoteVendorRead(BaseModel):
+    vendor_id: uuid.UUID
+    shop_name: str
+    delivery_fee: int
+
+
+class DeliveryQuoteRead(BaseModel):
+    vendors: list[DeliveryQuoteVendorRead]
+    items_total: int
+    delivery_total: int
+    total: int
+
+
+class CheckoutRequest(DeliveryQuoteRequest):
+    delivery_address: str = Field(min_length=3, max_length=300)
     # Champs structurés, optionnels : mêmes informations que delivery_address
     # mais gardées séparées pour un affichage ligne par ligne. recipient_*
     # est ignoré (forcé à None) côté service pour un point de retrait — voir
@@ -90,6 +115,7 @@ class SubOrderBase(BaseModel):
     status: OrderStatus
     amount: int
     commission: int
+    delivery_fee: int
     items: list[OrderItemRead]
     # None pour les commandes passées avant l'ajout de l'estimation de
     # livraison (voir app/orders/models.py::SubOrder.estimated_delivery_min).

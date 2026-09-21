@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhArrowLeft, PhCheckCircle, PhPlus, PhStar } from '@phosphor-icons/vue'
 import type { AddressFormValues } from '~/components/address/AddressForm.vue'
-import type { AddressRead, OrderRead } from '~/types/api'
+import type { AddressRead, DeliveryQuoteRead, OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
@@ -53,6 +53,50 @@ const submitting = ref(false)
 const confirmedOrder = ref<OrderRead | null>(null)
 
 const cart = computed(() => cartStore.cart)
+
+/**
+ * Frais de livraison : devis calculé côté serveur (même calcul que le
+ * checkout, par colis vendeur) dès que la destination est connue. Tant que
+ * le devis n'est pas là (ou en échec), le récapitulatif retombe sur le total
+ * panier sans frais plutôt que d'afficher un montant inventé.
+ */
+const destination = computed(() => {
+  const source =
+    selectedId.value === NEW_ADDRESS
+      ? newAddressForm.value
+      : addresses.value.find((a) => a.id === selectedId.value)
+  if (!source) return null
+  if (source.delivery_type === 'pickup_point' && !source.pickup_point_id) return null
+  return {
+    delivery_type: source.delivery_type,
+    pickup_point_id: source.pickup_point_id ?? undefined,
+    latitude: source.latitude ?? undefined,
+    longitude: source.longitude ?? undefined,
+  }
+})
+
+const quote = ref<DeliveryQuoteRead | null>(null)
+let quoteRequestId = 0
+watch(
+  destination,
+  async (value) => {
+    const requestId = ++quoteRequestId
+    quote.value = null
+    if (!value) return
+    try {
+      const result = await apiFetch<DeliveryQuoteRead>('/orders/delivery-quote', { method: 'POST', body: value })
+      // Ignore une réponse périmée : l'acheteur a changé d'adresse entre-temps.
+      if (requestId === quoteRequestId) quote.value = result
+    } catch {
+      // Le checkout recalcule de toute façon les frais côté serveur.
+    }
+  },
+  { immediate: true, deep: true },
+)
+
+function deliveryFeeFor(vendorId: string): number | null {
+  return quote.value?.vendors.find((v) => v.vendor_id === vendorId)?.delivery_fee ?? null
+}
 
 /**
  * zoneText() est la source unique de la zone affichée, réutilisée à la fois
@@ -127,6 +171,8 @@ async function confirmOrder() {
     let deliveryAddress: string
     let deliveryType: string
     let pickupPointId: string | null
+    let latitude: number | null
+    let longitude: number | null
     let deliveryZone: string
     let deliveryInstructions: string | null
     let recipientName: string | null
@@ -136,6 +182,8 @@ async function confirmOrder() {
       deliveryAddress = buildAddressText(newAddressForm.value, newAddressForm.value.delivery_type)
       deliveryType = newAddressForm.value.delivery_type
       pickupPointId = newAddressForm.value.pickup_point_id
+      latitude = newAddressForm.value.latitude
+      longitude = newAddressForm.value.longitude
       deliveryZone = zoneText(newAddressForm.value)
       deliveryInstructions = newAddressForm.value.instructions.trim() || null
       recipientName = newAddressForm.value.recipient_name.trim() || null
@@ -162,6 +210,8 @@ async function confirmOrder() {
       deliveryAddress = buildAddressText(selected, selected.delivery_type)
       deliveryType = selected.delivery_type
       pickupPointId = selected.pickup_point_id
+      latitude = selected.latitude
+      longitude = selected.longitude
       deliveryZone = zoneText(selected)
       deliveryInstructions = selected.instructions
       recipientName = selected.recipient_name
@@ -174,6 +224,8 @@ async function confirmOrder() {
         delivery_address: deliveryAddress,
         delivery_type: deliveryType,
         pickup_point_id: pickupPointId ?? undefined,
+        latitude: latitude ?? undefined,
+        longitude: longitude ?? undefined,
         delivery_zone: deliveryZone || undefined,
         delivery_instructions: deliveryInstructions ?? undefined,
         recipient_name: recipientName ?? undefined,
@@ -290,12 +342,20 @@ function continueShopping() {
             >
             <span>{{ formatGnf(item.subtotal) }}</span>
           </div>
+          <div class="d-flex justify-space-between text-meta text-muted">
+            <span>Livraison</span>
+            <span v-if="deliveryFeeFor(group.vendor_id) !== null">
+              {{ deliveryFeeFor(group.vendor_id) ? formatGnf(deliveryFeeFor(group.vendor_id)!) : 'Gratuite' }}
+            </span>
+            <span v-else>—</span>
+          </div>
         </div>
         <v-divider class="mb-2" />
         <div class="d-flex justify-space-between text-lg">
           <span>Total</span>
-          <span>{{ formatGnf(cart.total) }}</span>
+          <span>{{ formatGnf(quote?.total ?? cart.total) }}</span>
         </div>
+        <p v-if="!quote" class="text-muted text-meta mt-1 mb-0">Les frais de livraison s’affichent une fois l’adresse choisie.</p>
       </template>
     </div>
 

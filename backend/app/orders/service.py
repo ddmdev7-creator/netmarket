@@ -18,10 +18,20 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import InvalidTokenError, TokenType, create_delivery_token, decode_token
 from app.couriers import repository as courier_repository
 from app.couriers.models import CourierStatus
+from app.delivery import repository as delivery_repository
+from app.delivery.service import compute_fee
 from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders.models import DeliveryType, Order, OrderStatus, SubOrder
-from app.orders.schemas import CheckoutRequest, CourierAssignRequest, DispatchRequest, SubOrderStatusUpdate
+from app.orders.schemas import (
+    CheckoutRequest,
+    CourierAssignRequest,
+    DeliveryQuoteRead,
+    DeliveryQuoteRequest,
+    DeliveryQuoteVendorRead,
+    DispatchRequest,
+    SubOrderStatusUpdate,
+)
 from app.payments import repository as payments_repository
 from app.payments import service as payments_service
 from app.payments.models import PaymentStatus
@@ -124,10 +134,62 @@ def _attach_delivery_tokens(order: Order) -> Order:
     return order
 
 
-async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> Order:
+async def _load_checkout_rows(db: AsyncSession, user: User) -> list[tuple]:
     rows = await cart_repository.list_items_with_product_variant_and_vendor(db, user.id)
     if not rows:
         raise ConflictError("Votre panier est vide.")
+    return rows
+
+
+def _group_by_vendor(rows: list[tuple]) -> dict[uuid.UUID, list[tuple]]:
+    by_vendor: dict[uuid.UUID, list[tuple]] = {}
+    for row in rows:
+        by_vendor.setdefault(row[3].id, []).append(row)
+    return by_vendor
+
+
+def _vendor_amount(vendor_items: list[tuple]) -> int:
+    return sum(_line_unit_price(product, variant) * cart_item.quantity for cart_item, product, variant, _ in vendor_items)
+
+
+async def _resolve_destination(
+    db: AsyncSession, data: DeliveryQuoteRequest
+) -> tuple[uuid.UUID | None, tuple[float | None, float | None]]:
+    """Pickup point id (None for home delivery) and the GPS position parcels
+    are delivered to — the point's own position for a pickup point, the
+    buyer's submitted one for a home delivery."""
+    if data.delivery_type != DeliveryType.PICKUP_POINT:
+        return None, (data.latitude, data.longitude)
+    if data.pickup_point_id is None:
+        raise ConflictError("Un point de retrait doit être sélectionné.")
+    point = await pickup_points_repository.get_by_id(db, data.pickup_point_id)
+    if point is None or not point.is_active:
+        raise ConflictError("Ce point de retrait n'est pas disponible.")
+    return point.id, (point.latitude, point.longitude)
+
+
+async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteRequest) -> DeliveryQuoteRead:
+    """Delivery fee per vendor parcel for the current cart, without ordering —
+    same computation as checkout_cart, so the amount shown never differs."""
+    rows = await _load_checkout_rows(db, user)
+    _, destination = await _resolve_destination(db, data)
+    tiers = await delivery_repository.list_all(db)
+
+    vendors: list[DeliveryQuoteVendorRead] = []
+    items_total = 0
+    for vendor_items in _group_by_vendor(rows).values():
+        vendor = vendor_items[0][3]
+        fee = compute_fee(tiers, (vendor.latitude, vendor.longitude), destination)
+        vendors.append(DeliveryQuoteVendorRead(vendor_id=vendor.id, shop_name=vendor.shop_name, delivery_fee=fee))
+        items_total += _vendor_amount(vendor_items)
+    delivery_total = sum(v.delivery_fee for v in vendors)
+    return DeliveryQuoteRead(
+        vendors=vendors, items_total=items_total, delivery_total=delivery_total, total=items_total + delivery_total
+    )
+
+
+async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> Order:
+    rows = await _load_checkout_rows(db, user)
 
     for cart_item, product, variant, _vendor in rows:
         if product.status != ProductStatus.ACTIVE:
@@ -137,22 +199,14 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
             label = f" ({variant.label()})" if variant is not None else ""
             raise ConflictError(f"Stock insuffisant pour « {product.name}{label} » (disponible : {available}).")
 
-    by_vendor: dict[uuid.UUID, list[tuple]] = {}
-    for row in rows:
-        by_vendor.setdefault(row[3].id, []).append(row)
-
-    grand_total = sum(
-        _line_unit_price(product, variant) * cart_item.quantity for cart_item, product, variant, _ in rows
-    )
-
-    pickup_point_id = None
-    if data.delivery_type == DeliveryType.PICKUP_POINT:
-        if data.pickup_point_id is None:
-            raise ConflictError("Un point de retrait doit être sélectionné.")
-        point = await pickup_points_repository.get_by_id(db, data.pickup_point_id)
-        if point is None or not point.is_active:
-            raise ConflictError("Ce point de retrait n'est pas disponible.")
-        pickup_point_id = data.pickup_point_id
+    by_vendor = _group_by_vendor(rows)
+    pickup_point_id, destination = await _resolve_destination(db, data)
+    tiers = await delivery_repository.list_all(db)
+    delivery_fees = {
+        vendor_id: compute_fee(tiers, (items[0][3].latitude, items[0][3].longitude), destination)
+        for vendor_id, items in by_vendor.items()
+    }
+    grand_total = sum(_vendor_amount(items) for items in by_vendor.values()) + sum(delivery_fees.values())
 
     # Un point de retrait n'a pas de destinataire personnel (voir
     # AddressForm.vue côté frontend, qui vide déjà ces champs) — on l'impose
@@ -180,10 +234,7 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
 
     for vendor_items in by_vendor.values():
         vendor = vendor_items[0][3]
-        amount = sum(
-            _line_unit_price(product, variant) * cart_item.quantity
-            for cart_item, product, variant, _ in vendor_items
-        )
+        amount = _vendor_amount(vendor_items)
         commission = _commission_amount(amount, Decimal(str(vendor.commission_rate)))
         # Figée au checkout — voir le commentaire sur SubOrder.estimated_delivery_min
         # dans app/orders/models.py pour pourquoi ce n'est pas recalculé à la volée.
@@ -200,6 +251,7 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
             vendor_id=vendor.id,
             amount=amount,
             commission=commission,
+            delivery_fee=delivery_fees[vendor.id],
             shop_name=vendor.shop_name,
             estimated_delivery_min=estimate.min_date,
             estimated_delivery_max=estimate.max_date,

@@ -16,6 +16,8 @@ from app.orders.schemas import (
     CourierAssignRequest,
     CourierSubOrderRead,
     DeliveryConfirmRequest,
+    DeliveryQuoteRead,
+    DeliveryQuoteRequest,
     DispatchRequest,
     OrderRead,
     PickupPointManagerSubOrderRead,
@@ -26,6 +28,15 @@ from app.orders.schemas import (
 from app.users.models import User, UserRole
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+@router.post("/delivery-quote", response_model=DeliveryQuoteRead)
+async def delivery_quote(
+    payload: DeliveryQuoteRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DeliveryQuoteRead:
+    return await service.quote_delivery(db, current_user, payload)
 
 
 @router.post("/checkout", response_model=OrderRead, status_code=status.HTTP_201_CREATED)

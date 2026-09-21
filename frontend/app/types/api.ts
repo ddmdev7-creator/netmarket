@@ -479,6 +479,8 @@ interface SubOrderBase {
   status: OrderStatus
   amount: number
   commission: number
+  /** Frozen at checkout (distance grid); not included in amount/commission. 0 for orders placed before delivery fees existed. */
+  delivery_fee: number
   items: OrderItemRead[]
   /** null for orders placed before the delivery-estimate feature existed. */
   estimated_delivery_min: string | null
@@ -506,6 +508,21 @@ export interface VendorSubOrderRead extends SubOrderBase {
   courier_phone: string | null
   dispatch_offered_courier_id: string | null
   dispatch_offered_courier_name: string | null
+}
+
+/** POST /orders/delivery-quote — same computation as checkout, per vendor parcel. */
+export interface DeliveryQuoteRead {
+  vendors: { vendor_id: string; shop_name: string; delivery_fee: number }[]
+  items_total: number
+  delivery_total: number
+  total: number
+}
+
+/** One row of the admin distance grid; max_km null = "au-delà" catch-all (also the fallback when a position is missing). */
+export interface DeliveryFeeTierRead {
+  id: string
+  max_km: number | null
+  fee: number
 }
 
 export interface OrderRead {

@@ -271,6 +271,19 @@ gestion d'adresses pour que la règle ne diverge plus entre elles) :
   Le statut global de la commande est recalculé automatiquement à partir de
   ses sous-commandes.
 
+### Frais de livraison
+
+Grille de **paliers de distance** éditable par l'admin (`/admin/frais-livraison`,
+table `delivery_fee_tiers`) : « jusqu'à X km = tant de GNF », plus un palier
+« au-delà » (`max_km` NULL) qui sert aussi de repli quand une position GPS
+manque. Les frais sont calculés **par sous-commande** (un colis par vendeur),
+sur la distance boutique → adresse de livraison (GPS envoyé au checkout) ou
+boutique → point de retrait (position du point). Sans aucun palier, la
+livraison est gratuite. `POST /orders/delivery-quote` chiffre le panier avant
+commande avec exactement le même calcul que le checkout ; le résultat est
+**figé** sur `SubOrder.delivery_fee`. `Order.total` = Σ(articles + frais), mais
+la commission ne porte que sur les articles.
+
 ### Estimation de livraison
 
 Pas de vraie donnée logistique (pas de transporteur, pas de réseau

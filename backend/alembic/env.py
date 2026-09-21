@@ -16,6 +16,7 @@ from app.addresses import models as addresses_models  # noqa: F401
 from app.cart import models as cart_models  # noqa: F401
 from app.catalog import models as catalog_models  # noqa: F401
 from app.couriers import models as couriers_models  # noqa: F401
+from app.delivery import models as delivery_models  # noqa: F401
 from app.notifications import models as notifications_models  # noqa: F401
 from app.orders import models as orders_models  # noqa: F401
 from app.payments import models as payments_models  # noqa: F401

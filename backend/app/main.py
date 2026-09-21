@@ -9,6 +9,7 @@ from app.auth.router import router as auth_router
 from app.cart.router import router as cart_router
 from app.catalog.router import router as catalog_router
 from app.core.exceptions import register_exception_handlers
+from app.delivery.router import admin_router as delivery_admin_router
 from app.couriers.router import admin_router as couriers_admin_router
 from app.couriers.router import router as couriers_router
 from app.notifications.router import router as notifications_router
@@ -49,6 +50,7 @@ app.include_router(vendors_router)
 app.include_router(vendors_admin_router)
 app.include_router(couriers_router)
 app.include_router(couriers_admin_router)
+app.include_router(delivery_admin_router)
 app.include_router(cart_router)
 app.include_router(orders_router)
 app.include_router(pickup_points_router)

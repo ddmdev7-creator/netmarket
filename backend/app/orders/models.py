@@ -104,6 +104,7 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint("amount >= 0", name="ck_sub_orders_amount_non_negative"),
         CheckConstraint("commission >= 0", name="ck_sub_orders_commission_non_negative"),
+        CheckConstraint("delivery_fee >= 0", name="ck_sub_orders_delivery_fee_non_negative"),
     )
 
     order_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
@@ -120,6 +121,11 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     # Commission due à la marketplace, calculée depuis Vendor.commission_rate au moment de la commande.
     commission: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Frais de livraison de ce colis, calculés puis figés au checkout d'après la
+    # grille de paliers de distance (voir app/delivery/service.py::compute_fee).
+    # Distinct de amount : la commission ne s'applique qu'aux articles, jamais
+    # au frais de livraison, et Order.total = Σ(amount + delivery_fee).
+    delivery_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     # Nom de la boutique figé au moment de la commande (affichage stable même si la boutique est renommée).
     shop_name: Mapped[str] = mapped_column(String(150), nullable=False)
     # Estimation de livraison calculée et figée au checkout (voir

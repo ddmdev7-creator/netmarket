@@ -97,6 +97,11 @@ function shortId(id: string) {
           <span class="amount">{{ formatGnf(item.unit_price * item.quantity) }}</span>
         </div>
 
+        <div v-if="sub.delivery_fee > 0" class="d-flex justify-space-between text-meta text-muted mt-2">
+          <span>Livraison</span>
+          <span class="amount">{{ formatGnf(sub.delivery_fee) }}</span>
+        </div>
+
         <div v-if="sub.delivery_token" class="qr-block mt-4">
           <OrderDeliveryQrCode :token="sub.delivery_token" />
           <p class="text-muted mt-2 mb-0 text-meta" style="max-width: 220px">
