@@ -201,16 +201,6 @@ watch(page, () => refresh())
   font-size: 14px;
 }
 
-/* Plafonné sur ordinateur : sans ça, le champ (qui grandit pour occuper
-   l'espace flex disponible) s'étirerait sur toute la largeur de la fenêtre
-   maintenant que .app-shell--catalog n'est plus plafonné — démesuré pour un
-   simple champ de recherche. */
-@media (min-width: 960px) {
-  .search-field {
-    max-width: 440px;
-  }
-}
-
 /* Bouton filtre : toujours visible comme un vrai bouton (bordure) plutôt
    que de compter uniquement sur un changement de couleur pour signaler
    l'état actif — le point orange en complément reste lisible même pour qui
