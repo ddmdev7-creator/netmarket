@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PhImage, PhShoppingCartSimple, PhStar, PhTruck } from '@phosphor-icons/vue'
-import type { ProductRead } from '~/types/api'
+import type { ProductRead, ProductVariantRead } from '~/types/api'
 
 const props = defineProps<{ product: ProductRead }>()
 
@@ -17,17 +17,102 @@ const isOutOfStock = computed(() => props.product.stock <= 0)
 const isLowStock = computed(() => props.product.stock > 0 && props.product.stock <= 5)
 const hasVariants = computed(() => props.product.variants.length > 0)
 
+// L'attribut le plus "visuel" d'une variante — celui qu'une photo différente
+// représente le plus souvent. À défaut d'un attribut nommé Couleur/Color, le
+// premier attribut de la variante sert de repli (mieux qu'une carte muette).
+const PRIMARY_ATTRIBUTE_NAMES = ['couleur', 'color', 'coloris']
+function primaryAttributeValue(variant: ProductVariantRead): string | null {
+  const preferred = variant.attributes.find((a) => PRIMARY_ATTRIBUTE_NAMES.includes(a.name.toLowerCase()))
+  return (preferred ?? variant.attributes[0])?.value ?? null
+}
+
+interface CardFrame {
+  image: string
+  /** Valeur d'attribut représentée par cette photo — null pour la photo par défaut du produit. */
+  label: string | null
+}
+
+// Une photo par variante qui a SA PROPRE image (voir ProductVariantRead.images
+// — null hérite des photos du produit, donc rien de nouveau à montrer), plus
+// la photo par défaut du produit en tête si elle existe. Dédoublonnée par nom
+// de fichier : si une variante réutilise justement la photo par défaut, elle
+// n'apparaît pas deux fois dans le défilement.
+const frames = computed<CardFrame[]>(() => {
+  const result: CardFrame[] = []
+  const seen = new Set<string>()
+  const baseImage = props.product.images[0]
+  if (baseImage) {
+    result.push({ image: baseImage, label: null })
+    seen.add(baseImage)
+  }
+  for (const variant of props.product.variants) {
+    const image = variant.images?.[0]
+    if (!image || seen.has(image)) continue
+    seen.add(image)
+    result.push({ image, label: primaryAttributeValue(variant) })
+  }
+  return result
+})
+
+const hasCarousel = computed(() => frames.value.length > 1)
+
+// Résumé compact des valeurs d'attribut disponibles (ex. "Noire · Rouge") —
+// affiché quand il y a des variantes mais rien à faire défiler (aucune n'a
+// sa propre photo), pour que l'info reste visible même sans carrousel.
+const attributeSummary = computed(() => {
+  if (!hasVariants.value) return null
+  const values: string[] = []
+  for (const variant of props.product.variants) {
+    const value = primaryAttributeValue(variant)
+    if (value && !values.includes(value)) values.push(value)
+  }
+  if (values.length === 0) return null
+  const shown = values.slice(0, 3)
+  const extra = values.length - shown.length
+  return shown.join(' · ') + (extra > 0 ? ` +${extra}` : '')
+})
+
 // Une seule ligne de caractéristique sous le prix, jamais deux : on garde une
 // hauteur de carte prévisible (voir .product-card__tags) plutôt que de
 // risquer un retour à la ligne sur les cartes étroites (grille mobile,
-// minmax 150px). Le délai de livraison est la donnée la plus utile pour
-// décider d'un achat ; "Plusieurs options" ne s'affiche qu'à défaut.
+// minmax 150px).
 const deliveryLabel = computed(() => {
   const { estimated_delivery_min, estimated_delivery_max } = props.product
   return estimated_delivery_min && estimated_delivery_max
     ? formatDeliveryEstimate(estimated_delivery_min, estimated_delivery_max)
     : null
 })
+
+// --- Carrousel synchronisé -----------------------------------------------
+// Le défilement lui-même est du CSS pur (scroll-snap) — l'observer ne sert
+// qu'à savoir QUELLE photo est visible, pour que le libellé sous le prix
+// (activeFrameLabel) suive le doigt sans code de scroll fait main.
+const carouselRef = ref<HTMLElement | null>(null)
+const frameRefs = ref<(HTMLElement | null)[]>([])
+const activeFrameIndex = ref(0)
+const activeFrameLabel = computed(() => frames.value[activeFrameIndex.value]?.label ?? null)
+
+let frameObserver: IntersectionObserver | null = null
+
+onMounted(() => {
+  if (!hasCarousel.value || !carouselRef.value) return
+  frameObserver = new IntersectionObserver(
+    (entries) => {
+      const mostVisible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
+      if (!mostVisible) return
+      const index = frameRefs.value.findIndex((el) => el === mostVisible.target)
+      if (index !== -1) activeFrameIndex.value = index
+    },
+    { root: carouselRef.value, threshold: [0.6] },
+  )
+  for (const el of frameRefs.value) {
+    if (el) frameObserver.observe(el)
+  }
+})
+
+onBeforeUnmount(() => frameObserver?.disconnect())
 
 async function quickAdd(event: MouseEvent) {
   // Un produit à variantes (couleur, taille…) ne peut pas être ajouté
@@ -62,13 +147,34 @@ async function quickAdd(event: MouseEvent) {
   <NuxtLink :to="`/produits/${product.id}`" class="product-card">
     <v-card class="product-card__card" :class="{ 'product-card__card--out': isOutOfStock }">
       <div class="product-card__image">
+        <div v-if="hasCarousel" ref="carouselRef" class="product-card__carousel">
+          <div
+            v-for="(frame, i) in frames"
+            :key="frame.image"
+            :ref="(el) => (frameRefs[i] = el as HTMLElement | null)"
+            class="product-card__frame"
+          >
+            <img :src="resolveImageUrl(frame.image, apiBase)" :alt="product.name" loading="lazy" />
+          </div>
+        </div>
         <img
-          v-if="product.images[0]"
-          :src="resolveImageUrl(product.images[0], apiBase)"
+          v-else-if="frames[0]"
+          :src="resolveImageUrl(frames[0].image, apiBase)"
           :alt="product.name"
           loading="lazy"
         />
         <PhImage v-else :size="28" weight="light" color="var(--color-neutral-500)" />
+
+        <!-- Purement informatifs (quel index est visible), jamais cliquables :
+             le défilement se pilote au doigt sur la photo elle-même. -->
+        <div v-if="hasCarousel" class="product-card__dots" aria-hidden="true">
+          <span
+            v-for="(frame, i) in frames"
+            :key="frame.image"
+            class="product-card__dot"
+            :class="{ 'product-card__dot--active': i === activeFrameIndex }"
+          />
+        </div>
 
         <span v-if="isOutOfStock" class="product-card__stock-tag product-card__stock-tag--out">Rupture de stock</span>
         <span v-else-if="isLowStock" class="product-card__stock-tag product-card__stock-tag--low">Derniers exemplaires</span>
@@ -98,15 +204,21 @@ async function quickAdd(event: MouseEvent) {
           </span>
         </div>
 
-        <!-- Hauteur réservée même vide (voir deliveryLabel plus haut) : toutes
-             les cartes gardent la même hauteur naturelle qu'une caractéristique
-             s'affiche ou non, sans dépendre du seul étirement de la grille. -->
+        <!-- Hauteur réservée même vide : toutes les cartes gardent la même
+             hauteur naturelle qu'une caractéristique s'affiche ou non, sans
+             dépendre du seul étirement de la grille. Priorité : le libellé
+             synchronisé avec la photo du carrousel affichée (ex. "Rouge"
+             pendant qu'on swipe dessus) ; à défaut le résumé des attributs
+             disponibles ; à défaut le délai de livraison. -->
         <div class="product-card__tags">
-          <span v-if="deliveryLabel" class="product-card__tag">
+          <span v-if="hasCarousel && activeFrameLabel" class="product-card__tag product-card__tag--variant">
+            {{ activeFrameLabel }}
+          </span>
+          <span v-else-if="attributeSummary" class="product-card__tag">{{ attributeSummary }}</span>
+          <span v-else-if="deliveryLabel" class="product-card__tag">
             <PhTruck :size="10" weight="bold" />
             {{ deliveryLabel }}
           </span>
-          <span v-else-if="hasVariants" class="product-card__tag">Plusieurs options</span>
         </div>
 
         <div class="product-card__shop">{{ product.vendor_shop_name }}</div>
@@ -168,18 +280,75 @@ async function quickAdd(event: MouseEvent) {
      rognée), quitte à laisser un léger fond neutre sur les côtés pour les
      photos qui ne sont pas déjà carrées. */
   object-fit: contain;
+}
+
+/* Enfant DIRECT seulement (pas ">img" dans .product-card__carousel, plus
+   bas) : l'effet de zoom au survol ne s'applique qu'à la photo unique sans
+   carrousel — combiné au scroll-snap du carrousel, un zoom simultané sur
+   toutes les photos aurait perturbé les points d'ancrage du défilement. */
+.product-card__image > img {
   transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.product-card:hover .product-card__image img {
+.product-card:hover .product-card__image > img {
   transform: scale(1.1);
 }
 
 /* :active plutôt que :hover seul : sur mobile (l'essentiel du trafic PWA,
    voir ProductGrid) il n'y a pas de survol — sans ce répondant au toucher,
    l'effet de zoom ne se verrait jamais en usage réel. */
-.product-card:active .product-card__image img {
+.product-card:active .product-card__image > img {
   transform: scale(1.04);
+}
+
+.product-card__carousel {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.product-card__carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.product-card__frame {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.product-card__dots {
+  position: absolute;
+  bottom: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 1;
+}
+
+.product-card__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.product-card__dot--active {
+  background: #fff;
+  transform: scale(1.35);
 }
 
 .product-card__stock-tag {
@@ -315,6 +484,13 @@ async function quickAdd(event: MouseEvent) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Libellé synchronisé avec la photo du carrousel affichée — distinct du gris
+   neutre des autres caractéristiques pour bien montrer que ça vient de
+   changer avec le défilement, pas juste une info statique de plus. */
+.product-card__tag--variant {
+  color: var(--color-primary);
 }
 
 .product-card__shop {
