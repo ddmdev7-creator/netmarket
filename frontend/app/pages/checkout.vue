@@ -502,6 +502,19 @@ function continueShopping() {
     display: none;
   }
 
+  /* Même relief que .checkout-summary ci-dessous (et que .profil-inner /
+     .auth-card) -- sans ça, seul le petit résumé à droite se détachait du
+     fond gris, le formulaire (adresse + paiement + récap détaillé) restait
+     collé dessus comme un oubli. Les deux colonnes forment maintenant une
+     vraie paire de cartes. */
+  .checkout-form {
+    padding: 24px 28px;
+    background: var(--color-neutral-900);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+  }
+
   .checkout-summary {
     display: block;
     position: sticky;
