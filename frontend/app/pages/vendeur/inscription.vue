@@ -48,6 +48,10 @@ async function submit() {
     toast.error('Indique un email valide — il sert à confirmer la création de la boutique.')
     return
   }
+  if (!hasPosition.value) {
+    toast.error('Indique la position de ta boutique (bouton ou carte) — elle sert à calculer les frais de livraison.')
+    return
+  }
   submitting.value = true
   try {
     await apiFetch<VendorRead>('/vendors/me', {
@@ -96,9 +100,10 @@ async function submit() {
         <label class="field-label">Email</label>
         <v-text-field v-model="email" type="email" placeholder="ex: boutique@exemple.com" class="mb-2" />
 
-        <label class="field-label">Position de la boutique (optionnel)</label>
+        <label class="field-label">Position de la boutique</label>
         <p class="text-muted mb-2" style="font-size: 11.5px">
-          Utilisée pour proposer la livraison au livreur disponible le plus proche. Modifiable plus tard.
+          Obligatoire : elle sert à calculer les frais de livraison et à proposer la livraison au livreur disponible le
+          plus proche. Modifiable plus tard.
         </p>
         <v-btn color="primary" variant="tonal" block :loading="locating" class="mb-2" @click="useCurrentPosition">
           <PhMapPin :size="17" class="mr-1" />
@@ -109,6 +114,7 @@ async function submit() {
         <div v-if="hasPosition" class="mb-4" style="font-size: 12px">
           <span class="text-muted">{{ positionLabel }}</span>
         </div>
+        <div v-else class="mb-4" style="font-size: 12px; color: var(--color-error)">Position non renseignée.</div>
 
         <v-btn type="submit" color="primary" block size="large" class="mt-2" :loading="submitting">Créer ma boutique</v-btn>
       </v-form>

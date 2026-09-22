@@ -125,7 +125,7 @@ async function submit() {
       <v-card class="pa-4 mb-4" variant="flat">
         <div class="section-title mb-3">Position de la boutique</div>
         <p class="text-muted mb-2" style="font-size: 11.5px">
-          Utilisée pour proposer la livraison au livreur disponible le plus proche.
+          Utilisée pour calculer les frais de livraison et proposer la livraison au livreur disponible le plus proche.
         </p>
         <v-btn color="primary" block :loading="locating" class="mb-2" @click="useCurrentPosition">
           <PhMapPin :size="17" class="mr-1" />
@@ -137,7 +137,8 @@ async function submit() {
           <span class="text-muted">{{ positionLabel }}</span>
         </div>
         <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-0">
-          Sans position, tu ne pourras pas rechercher automatiquement un livreur.
+          Position manquante : les frais de livraison de tes commandes sont facturés au tarif le plus élevé et tu ne
+          peux pas rechercher automatiquement un livreur. Renseigne-la puis enregistre.
         </v-alert>
       </v-card>
 

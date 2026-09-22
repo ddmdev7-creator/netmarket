@@ -6,13 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.users.models import User
 from tests.conftest import auth_headers
 
+# Position obligatoire à l'inscription (frais de livraison, dispatch livreur).
+POSITION = {"latitude": 9.6412, "longitude": -13.5784}
+
 
 async def test_register_vendor_promotes_role_and_is_pending(
     client: AsyncClient, db_session: AsyncSession, buyer_user: User
 ) -> None:
     response = await client.post(
         "/vendors/me",
-        json={"shop_name": "Ma Boutique", "zone": "Kaloum", "email": "vendeur@test.gn"},
+        json={"shop_name": "Ma Boutique", "zone": "Kaloum", "email": "vendeur@test.gn", **POSITION},
         headers=auth_headers(buyer_user),
     )
 
@@ -39,10 +42,10 @@ async def test_register_vendor_accepts_position(
 
 async def test_register_vendor_twice_fails(client: AsyncClient, buyer_user: User) -> None:
     headers = auth_headers(buyer_user)
-    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}, headers=headers)
+    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION}, headers=headers)
 
     response = await client.post(
-        "/vendors/me", json={"shop_name": "Autre Nom", "email": "vendeur@test.gn"}, headers=headers
+        "/vendors/me", json={"shop_name": "Autre Nom", "email": "vendeur@test.gn", **POSITION}, headers=headers
     )
 
     assert response.status_code == 409
@@ -58,7 +61,7 @@ async def test_new_vendor_defaults_to_one_day_preparation(
     client: AsyncClient, buyer_user: User
 ) -> None:
     response = await client.post(
-        "/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}, headers=auth_headers(buyer_user)
+        "/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION}, headers=auth_headers(buyer_user)
     )
 
     assert response.json()["preparation_days"] == 1
@@ -66,7 +69,7 @@ async def test_new_vendor_defaults_to_one_day_preparation(
 
 async def test_vendor_can_update_preparation_days(client: AsyncClient, buyer_user: User) -> None:
     headers = auth_headers(buyer_user)
-    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}, headers=headers)
+    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION}, headers=headers)
 
     response = await client.patch("/vendors/me", json={"preparation_days": 3}, headers=headers)
 
@@ -76,7 +79,7 @@ async def test_vendor_can_update_preparation_days(client: AsyncClient, buyer_use
 
 async def test_preparation_days_out_of_range_is_rejected(client: AsyncClient, buyer_user: User) -> None:
     headers = auth_headers(buyer_user)
-    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}, headers=headers)
+    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION}, headers=headers)
 
     response = await client.patch("/vendors/me", json={"preparation_days": 30}, headers=headers)
 
@@ -86,7 +89,7 @@ async def test_preparation_days_out_of_range_is_rejected(client: AsyncClient, bu
 async def test_admin_cannot_register_a_shop(client: AsyncClient, admin_user: User) -> None:
     response = await client.post(
         "/vendors/me",
-        json={"shop_name": "Boutique Admin", "email": "admin-shop@test.gn"},
+        json={"shop_name": "Boutique Admin", "email": "admin-shop@test.gn", **POSITION},
         headers=auth_headers(admin_user),
     )
 
@@ -98,7 +101,7 @@ async def test_admin_can_list_and_approve_pending_vendor(
 ) -> None:
     register_response = await client.post(
         "/vendors/me",
-        json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"},
+        json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION},
         headers=auth_headers(buyer_user),
     )
     vendor_id = register_response.json()["id"]
@@ -125,7 +128,7 @@ async def test_admin_listing_includes_the_linked_owner_account(
 ) -> None:
     await client.post(
         "/vendors/me",
-        json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn"},
+        json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION},
         headers=auth_headers(buyer_user),
     )
 
@@ -142,7 +145,7 @@ async def test_public_listing_only_shows_approved_vendors(
 ) -> None:
     register_response = await client.post(
         "/vendors/me",
-        json={"shop_name": "Boutique En Attente", "email": "vendeur@test.gn"},
+        json={"shop_name": "Boutique En Attente", "email": "vendeur@test.gn", **POSITION},
         headers=auth_headers(buyer_user),
     )
     vendor_id = register_response.json()["id"]
@@ -160,3 +163,42 @@ async def test_public_listing_only_shows_approved_vendors(
 
     detail_after = await client.get(f"/vendors/{vendor_id}")
     assert detail_after.status_code == 200
+
+
+async def test_register_vendor_requires_a_position(client: AsyncClient, buyer_user: User) -> None:
+    headers = auth_headers(buyer_user)
+    payload = {"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}
+
+    assert (await client.post("/vendors/me", json=payload, headers=headers)).status_code == 422
+    only_latitude = await client.post("/vendors/me", json={**payload, "latitude": 9.6}, headers=headers)
+    assert only_latitude.status_code == 422
+    null_position = await client.post(
+        "/vendors/me", json={**payload, "latitude": None, "longitude": None}, headers=headers
+    )
+    assert null_position.status_code == 422
+
+    # Un refus de validation ne crée ni boutique ni changement de rôle.
+    assert (await client.get("/vendors/me", headers=headers)).status_code == 404
+
+
+async def test_update_vendor_position_needs_both_coordinates(client: AsyncClient, buyer_user: User) -> None:
+    headers = auth_headers(buyer_user)
+    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION}, headers=headers)
+
+    moved = await client.patch("/vendors/me", json={"latitude": 9.5, "longitude": -13.7}, headers=headers)
+    assert moved.status_code == 200
+    assert (moved.json()["latitude"], moved.json()["longitude"]) == (9.5, -13.7)
+
+    assert (await client.patch("/vendors/me", json={"latitude": 9.4}, headers=headers)).status_code == 422
+
+
+async def test_update_vendor_cannot_erase_the_position(client: AsyncClient, buyer_user: User) -> None:
+    headers = auth_headers(buyer_user)
+    await client.post("/vendors/me", json={"shop_name": "Ma Boutique", "email": "vendeur@test.gn", **POSITION}, headers=headers)
+
+    response = await client.patch(
+        "/vendors/me", json={"shop_name": "Nouveau Nom", "latitude": None, "longitude": None}, headers=headers
+    )
+    assert response.status_code == 200
+    assert response.json()["shop_name"] == "Nouveau Nom"
+    assert (response.json()["latitude"], response.json()["longitude"]) == (POSITION["latitude"], POSITION["longitude"])

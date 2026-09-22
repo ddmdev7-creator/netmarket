@@ -3,7 +3,7 @@
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.vendors.models import VendorStatus
 
@@ -15,22 +15,35 @@ class VendorRegister(BaseModel):
     # vendor — see app/vendors/service.py::register_vendor, which uses it to
     # send the verification code gating access to the vendor dashboard.
     email: EmailStr
-    # Position de la boutique, optionnelle dès la création — voir
-    # app/orders/service.py::start_dispatch, qui en a besoin pour trier les
-    # livreurs candidats par distance. Peut aussi être renseignée/mise à
-    # jour plus tard via VendorOwnerUpdate.
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
+    # Position de la boutique, obligatoire dès l'inscription : elle sert à
+    # calculer les frais de livraison (app/delivery/service.py::compute_fee)
+    # et à trier les livreurs candidats par distance
+    # (app/orders/service.py::start_dispatch). Sans elle, la boutique serait
+    # facturée au tarif de repli le plus élevé. Les boutiques créées avant
+    # cette règle peuvent rester sans position (colonne nullable).
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 class VendorOwnerUpdate(BaseModel):
     shop_name: str | None = Field(default=None, min_length=2, max_length=150)
     zone: str | None = Field(default=None, max_length=150)
+    # Une position existante ne peut pas être effacée : null est ignoré (voir
+    # service.update_my_vendor), ce qui laisse une boutique sans position
+    # (créée avant la règle) enregistrer ses autres réglages. Les deux
+    # coordonnées vont ensemble.
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     preparation_days: int | None = Field(
         default=None, ge=0, le=14, description="Délai de préparation habituel, en jours"
     )
+
+
+    @model_validator(mode="after")
+    def _position_is_complete(self) -> "VendorOwnerUpdate":
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("La latitude et la longitude doivent être renseignées ensemble.")
+        return self
 
 
 class VendorAdminUpdate(BaseModel):
