@@ -71,7 +71,7 @@ async function submit() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4">
+    <div class="px-4 detail-card">
       <AddressForm v-model="form" />
       <v-btn color="primary" block size="large" :loading="submitting" @click="submit">Enregistrer</v-btn>
     </div>

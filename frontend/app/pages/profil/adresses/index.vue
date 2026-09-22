@@ -57,7 +57,7 @@ async function deleteAddress() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4 addresses-card">
+    <div class="px-4 detail-card">
       <v-btn color="primary" block class="mb-4" to="/profil/adresses/nouvelle">
         <PhPlus :size="18" class="mr-1" />
         Nouvelle adresse
@@ -123,23 +123,6 @@ async function deleteAddress() {
 </template>
 
 <style scoped>
-/* Même traitement que .profil-inner (voir profil/index.vue) : sur
-   ordinateur, la liste d'adresses collée en haut d'un fond gris se lisait
-   comme un oubli plutôt qu'un choix -- devient une vraie carte détachée,
-   même relief que .auth-card. Le bandeau du haut (retour + titre) reste
-   hors carte, comme un en-tête au-dessus. */
-@media (min-width: 960px) {
-  .addresses-card {
-    max-width: 640px;
-    margin: 24px auto 0;
-    padding: 32px 36px !important;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-  }
-}
-
 .address-card-link {
   display: flex;
   align-items: center;

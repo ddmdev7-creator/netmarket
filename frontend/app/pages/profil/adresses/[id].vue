@@ -121,7 +121,7 @@ async function deleteAddress() {
       <LayoutHomeLink />
     </div>
 
-    <div v-if="address" class="px-4">
+    <div v-if="address" class="px-4 detail-card">
       <AddressForm v-model="form" />
 
       <v-btn color="primary" block size="large" class="mb-3" :loading="submitting" @click="submit">

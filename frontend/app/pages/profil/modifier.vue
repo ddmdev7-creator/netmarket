@@ -57,7 +57,7 @@ async function submit() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4">
+    <div class="px-4 detail-card">
       <label class="field-label">Prénom</label>
       <v-text-field v-model="firstName" placeholder="Ex: Mamadou" class="mb-2" />
 

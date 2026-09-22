@@ -55,7 +55,12 @@ function formatDate(iso: string) {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <!-- Pas de .app-shell ici : layouts/default.vue en fournit déjà un (avec
+       app-shell--catalog pour cette route, voir ce fichier) -- un deuxième
+       wrapper imbriqué ici replafonnerait à 720px, annulant l'élargissement
+       du bandeau du haut. .detail-card (main.css) recentre LE CONTENU en
+       une carte détachée, sans replafonner LayoutTopBar avec. -->
+  <div class="detail-card pa-4" style="padding-bottom: 76px">
     <h1 class="text-h6 mb-3">Mes commandes</h1>
 
     <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-4">

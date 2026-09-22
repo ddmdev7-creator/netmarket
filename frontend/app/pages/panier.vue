@@ -42,7 +42,7 @@ function goCheckout() {
     </div>
 
     <div class="px-4 cart-page">
-        <div class="cart-list">
+        <div class="cart-list grid-card">
           <div v-if="pending">
             <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-two-line" class="mb-2" />
           </div>
@@ -105,7 +105,7 @@ function goCheckout() {
              sur mobile, le total reste inline ci-dessus et le bouton dans la
              barre collante en bas (.checkout-bar). Sans cette colonne, la
              moitié droite d'un grand écran resterait un vide inutilisé. -->
-        <aside v-if="hasItems" class="cart-summary">
+        <aside v-if="hasItems" class="cart-summary grid-card">
           <div class="cart-summary__title">Résumé</div>
           <div class="d-flex justify-space-between text-lg mb-4">
             <span>Total</span>
@@ -158,15 +158,18 @@ function goCheckout() {
     display: none;
   }
 
+  /* .grid-card (main.css) fournit le fond/bordure/ombre, partagés avec
+     .checkout-form/.checkout-summary (checkout.vue) -- les deux colonnes
+     forment une vraie paire de cartes détachées plutôt qu'une seule. */
+  .cart-list {
+    padding: 24px 28px;
+  }
+
   .cart-summary {
     display: block;
     position: sticky;
     top: 16px;
     padding: 20px;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
   }
 
   /* Redondant avec le bouton de .cart-summary à cette largeur. */

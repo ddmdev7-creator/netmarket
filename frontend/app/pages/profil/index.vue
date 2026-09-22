@@ -47,12 +47,11 @@ async function logout() {
   <!-- Pas de .app-shell ici : layouts/default.vue en fournit déjà un (avec
        app-shell--catalog pour cette route, voir ce fichier) -- un deuxième
        wrapper imbriqué ici l'aurait juste re-plafonné à 720px par défaut,
-       annulant l'élargissement du bandeau du haut au-dessus. .profil-inner
-       recentre uniquement LE CONTENU de cette page sur une largeur de menu
-       confortable (comme .form-panel dans les back-offices), sans
-       replafonner LayoutTopBar avec -- un simple menu de réglages n'a pas
-       vocation à s'étirer sur toute la largeur d'un écran 1920px. -->
-  <div class="profil-inner pa-4" style="padding-bottom: 76px">
+       annulant l'élargissement du bandeau du haut au-dessus. .detail-card
+       (voir main.css -- motif partagé avec adresses/notifications/etc.)
+       recentre LE CONTENU de cette page en une carte détachée du fond, sans
+       replafonner LayoutTopBar avec. -->
+  <div class="detail-card pa-4" style="padding-bottom: 76px">
     <h1 class="text-h6 mb-4">Profil</h1>
 
     <div class="d-flex align-center ga-3 mb-4">
@@ -144,24 +143,6 @@ async function logout() {
 </template>
 
 <style scoped>
-/* Sur ordinateur, une simple colonne recentrée (voir le commentaire dans le
-   template) se lisait comme un oubli plutôt qu'un choix -- collée en haut
-   du fond gris de la page, sans rien pour la détacher visuellement. Devient
-   une vraie carte détachée du fond, même traitement que .auth-card
-   (connexion/inscription, voir main.css) : le fond de page reste visible
-   tout autour, la carte elle-même a son propre relief. */
-@media (min-width: 960px) {
-  .profil-inner {
-    max-width: 640px;
-    margin: 32px auto;
-    padding: 32px 36px !important;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-  }
-}
-
 .avatar {
   width: 56px;
   height: 56px;

@@ -288,7 +288,7 @@ function continueShopping() {
     </div>
 
     <div class="px-4 checkout-page">
-      <div class="checkout-form">
+      <div class="checkout-form grid-card">
       <label class="field-label">Adresse de livraison</label>
       <v-radio-group v-model="selectedId" hide-details>
         <v-radio
@@ -400,7 +400,7 @@ function continueShopping() {
       <!-- Repris dans .checkout-total-inline ci-dessus sur mobile -- l'un des
            deux est toujours masqué par media query, jamais les deux à la
            fois (même pattern que .cart-summary dans panier.vue). -->
-      <aside v-if="cart" class="checkout-summary">
+      <aside v-if="cart" class="checkout-summary grid-card">
         <div class="checkout-summary__title">Résumé</div>
         <div class="d-flex justify-space-between text-lg mb-4">
           <span>Total</span>
@@ -502,17 +502,11 @@ function continueShopping() {
     display: none;
   }
 
-  /* Même relief que .checkout-summary ci-dessous (et que .profil-inner /
-     .auth-card) -- sans ça, seul le petit résumé à droite se détachait du
-     fond gris, le formulaire (adresse + paiement + récap détaillé) restait
-     collé dessus comme un oubli. Les deux colonnes forment maintenant une
-     vraie paire de cartes. */
+  /* .grid-card (main.css) fournit le fond/bordure/ombre, partagés avec
+     .cart-list/.cart-summary (panier.vue) -- les deux colonnes forment une
+     vraie paire de cartes détachées plutôt qu'une seule. */
   .checkout-form {
     padding: 24px 28px;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
   }
 
   .checkout-summary {
@@ -520,10 +514,6 @@ function continueShopping() {
     position: sticky;
     top: 16px;
     padding: 20px;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
   }
 
   /* Redondant avec le bouton de .checkout-summary à cette largeur. */
