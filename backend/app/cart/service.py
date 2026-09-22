@@ -1,6 +1,7 @@
 """Cart business logic: add/update/remove items, and the grouped-by-vendor view."""
 
 import uuid
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +10,10 @@ from app.cart.models import CartItem
 from app.cart.schemas import CartItemCreate, CartItemRead, CartItemUpdate, CartRead, VendorCartGroup
 from app.catalog import repository as catalog_repository
 from app.catalog.models import ProductStatus
+from app.common.delivery_estimate import estimate_delivery_window
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.delivery import repository as delivery_repository
+from app.delivery.service import compute_transit_days
 from app.users.models import User
 
 
@@ -58,6 +62,7 @@ async def clear_cart(db: AsyncSession, user: User) -> None:
 
 async def get_cart(db: AsyncSession, user: User) -> CartRead:
     rows = await repository.list_items_with_product_variant_and_vendor(db, user.id)
+    tiers = await delivery_repository.list_all(db)
 
     groups: dict[uuid.UUID, VendorCartGroup] = {}
     total = 0
@@ -79,7 +84,22 @@ async def get_cart(db: AsyncSession, user: User) -> CartRead:
         )
         group = groups.get(vendor.id)
         if group is None:
-            group = VendorCartGroup(vendor_id=vendor.id, shop_name=vendor.shop_name, items=[], subtotal=0)
+            # Position de livraison pas encore connue à ce stade (voir
+            # DeliveryQuoteRequest, rempli plus tard au checkout) : même
+            # repli que le catalogue, sur le palier de distance de secours.
+            estimate = estimate_delivery_window(
+                transit_days=compute_transit_days(tiers, (None, None), (None, None)),
+                preparation_days=vendor.preparation_days,
+                from_date=date.today(),
+            )
+            group = VendorCartGroup(
+                vendor_id=vendor.id,
+                shop_name=vendor.shop_name,
+                items=[],
+                subtotal=0,
+                estimated_delivery_min=estimate.min_date,
+                estimated_delivery_max=estimate.max_date,
+            )
             groups[vendor.id] = group
         group.items.append(item_read)
         group.subtotal += subtotal

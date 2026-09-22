@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhWarningCircle } from '@phosphor-icons/vue'
+import { PhImage, PhTruck, PhWarningCircle } from '@phosphor-icons/vue'
 import type { OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
@@ -25,6 +25,20 @@ const tab = ref<'ongoing' | 'done'>('ongoing')
 const ongoing = computed(() => orders.value.filter((o) => !['delivered', 'cancelled'].includes(o.status)))
 const done = computed(() => orders.value.filter((o) => ['delivered', 'cancelled'].includes(o.status)))
 const visible = computed(() => (tab.value === 'ongoing' ? ongoing.value : done.value))
+
+// Un seul délai pour toute la commande (aperçu, pas le détail — voir
+// commandes/[id].vue pour le délai par boutique) : la fourchette la plus
+// large parmi les sous-commandes pas encore livrées/annulées, même logique
+// d'exclusion que sur la page de détail.
+function orderDeliveryEstimate(order: OrderRead): string | null {
+  const pending = order.sub_orders.filter(
+    (so) => so.estimated_delivery_min && so.estimated_delivery_max && !['delivered', 'cancelled'].includes(so.status),
+  )
+  if (pending.length === 0) return null
+  const min = pending.map((so) => so.estimated_delivery_min!).sort()[0]!
+  const max = pending.map((so) => so.estimated_delivery_max!).sort().at(-1)!
+  return formatDeliveryEstimate(min, max)
+}
 
 function vendorCount(order: OrderRead) {
   return order.sub_orders.length
@@ -82,6 +96,10 @@ function formatDate(iso: string) {
         {{ formatDate(order.created_at) }} · {{ itemCount(order) }} article{{ itemCount(order) > 1 ? 's' : '' }} ·
         {{ vendorCount(order) }} boutique{{ vendorCount(order) > 1 ? 's' : '' }}
       </div>
+      <div v-if="orderDeliveryEstimate(order)" class="text-meta delivery-estimate mt-1">
+        <PhTruck :size="12" weight="bold" />
+        Livraison estimée : <strong>{{ orderDeliveryEstimate(order) }}</strong>
+      </div>
       <div class="d-flex justify-space-between mt-1">
         <span class="text-muted text-meta">Total</span>
         <span class="text-meta">{{ formatGnf(order.total) }}</span>
@@ -127,5 +145,12 @@ function formatDate(iso: string) {
   font-size: 11px;
   font-weight: 600;
   color: var(--color-neutral-400);
+}
+
+.delivery-estimate {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-neutral-300);
 }
 </style>

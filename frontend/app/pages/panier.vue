@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhX } from '@phosphor-icons/vue'
+import { PhImage, PhTruck, PhX } from '@phosphor-icons/vue'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -79,6 +79,11 @@ function goCheckout() {
                 </button>
               </div>
 
+              <div v-if="group.estimated_delivery_min && group.estimated_delivery_max" class="delivery-estimate mt-2 text-meta">
+                <PhTruck :size="12" weight="bold" />
+                Livraison estimée :
+                <strong>{{ formatDeliveryEstimate(group.estimated_delivery_min, group.estimated_delivery_max) }}</strong>
+              </div>
               <div class="d-flex justify-space-between text-muted mt-2 text-meta">
                 <span>Sous-total {{ group.shop_name }}</span>
                 <span>{{ formatGnf(group.subtotal) }}</span>
@@ -201,6 +206,13 @@ function goCheckout() {
   text-transform: uppercase;
   color: var(--color-neutral-400);
   margin-bottom: 6px;
+}
+
+.delivery-estimate {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-neutral-300);
 }
 
 .cart-row {

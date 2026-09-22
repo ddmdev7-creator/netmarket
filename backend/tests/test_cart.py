@@ -1,12 +1,14 @@
 """Tests for the cart: add/update/remove, vendor grouping, ownership."""
 
 import uuid
+from datetime import date, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.models import Category, Product
 from app.users.models import User
+from app.vendors.models import Vendor
 from tests.conftest import auth_headers, make_vendor
 
 
@@ -213,3 +215,22 @@ async def test_add_item_with_variant_id_on_product_without_variants_is_rejected(
     )
 
     assert response.status_code == 409
+
+
+async def test_cart_exposes_a_generic_delivery_estimate_per_vendor(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor: Vendor, product: Product
+) -> None:
+    vendor.preparation_days = 3
+    await db_session.flush()
+
+    response = await client.post(
+        "/cart/items", json={"product_id": str(product.id), "quantity": 1}, headers=auth_headers(buyer_user)
+    )
+
+    today = date.today()
+    group = response.json()["vendors"][0]
+    # Destination inconnue au stade du panier et aucun palier configuré ici :
+    # repli par défaut à 1 jour de trajet (voir app/cart/service.py::get_cart
+    # et app/delivery/service.py::compute_transit_days).
+    assert group["estimated_delivery_min"] == str(today + timedelta(days=4))
+    assert group["estimated_delivery_max"] == str(today + timedelta(days=5))

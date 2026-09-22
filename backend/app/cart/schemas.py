@@ -2,6 +2,7 @@
 it into one sub-order per vendor."""
 
 import uuid
+from datetime import date
 
 from pydantic import BaseModel, Field
 
@@ -33,6 +34,14 @@ class VendorCartGroup(BaseModel):
     shop_name: str
     items: list[CartItemRead]
     subtotal: int
+    # Estimation générique (même principe que ProductRead sur le catalogue,
+    # voir app/catalog/service.py::_attach_delivery_estimate) : l'adresse de
+    # livraison n'est pas encore connue au stade du panier, donc calculée
+    # sans position réelle — retombe sur le palier de repli de la grille de
+    # distance. Recalculée (et éventuellement affinée avec la vraie
+    # distance) au devis de livraison puis figée au checkout.
+    estimated_delivery_min: date | None = None
+    estimated_delivery_max: date | None = None
 
 
 class CartRead(BaseModel):

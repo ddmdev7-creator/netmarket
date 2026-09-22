@@ -209,13 +209,22 @@ async function quickAdd(event: MouseEvent) {
              dépendre du seul étirement de la grille. Priorité : le libellé
              synchronisé avec la photo du carrousel affichée (ex. "Rouge"
              pendant qu'on swipe dessus) ; à défaut le résumé des attributs
-             disponibles ; à défaut le délai de livraison. -->
+             disponibles. -->
         <div class="product-card__tags">
           <span v-if="hasCarousel && activeFrameLabel" class="product-card__tag product-card__tag--variant">
             {{ activeFrameLabel }}
           </span>
           <span v-else-if="attributeSummary" class="product-card__tag">{{ attributeSummary }}</span>
-          <span v-else-if="deliveryLabel" class="product-card__tag">
+        </div>
+
+        <!-- Ligne dédiée, toujours réservée (hauteur constante même sans
+             estimation) — distincte de .product-card__tags ci-dessus : le
+             délai de livraison ne doit pas disparaître juste parce que le
+             produit a des variantes (voir attributeSummary), c'est une info
+             utile pour tout le monde, pas seulement les produits sans
+             variante. -->
+        <div class="product-card__delivery">
+          <span v-if="deliveryLabel" class="product-card__tag">
             <PhTruck :size="10" weight="bold" />
             {{ deliveryLabel }}
           </span>
@@ -478,6 +487,12 @@ async function quickAdd(event: MouseEvent) {
 .product-card__tags {
   min-height: 1.5em;
   margin-top: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.product-card__delivery {
+  min-height: 1.5em;
   display: flex;
   align-items: center;
 }

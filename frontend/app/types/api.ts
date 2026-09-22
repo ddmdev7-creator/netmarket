@@ -458,6 +458,9 @@ export interface VendorCartGroup {
   shop_name: string
   items: CartItemRead[]
   subtotal: number
+  /** Generic estimate — buyer's delivery address unknown at the cart stage. See app/cart/service.py::get_cart. */
+  estimated_delivery_min: string | null
+  estimated_delivery_max: string | null
 }
 
 export interface CartRead {
