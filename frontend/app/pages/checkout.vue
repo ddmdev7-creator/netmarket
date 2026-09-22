@@ -278,7 +278,7 @@ function continueShopping() {
 </script>
 
 <template>
-  <div class="app-shell" style="padding-bottom: 88px">
+  <div class="app-shell checkout-inner" style="padding-bottom: 88px">
     <div class="d-flex align-center pa-2 ga-2">
       <v-btn icon variant="text" @click="router.back()">
         <PhArrowLeft :size="20" />
@@ -287,7 +287,8 @@ function continueShopping() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4">
+    <div class="px-4 checkout-page">
+      <div class="checkout-form">
       <label class="field-label">Adresse de livraison</label>
       <v-radio-group v-model="selectedId" hide-details>
         <v-radio
@@ -388,15 +389,31 @@ function continueShopping() {
           </div>
         </div>
         <v-divider class="mb-2" />
-        <div class="d-flex justify-space-between text-lg">
+        <div class="d-flex justify-space-between text-lg checkout-total-inline">
           <span>Total</span>
           <span>{{ formatGnf(quote?.total ?? cart.total) }}</span>
         </div>
         <p v-if="!quote" class="text-muted text-meta mt-1 mb-0">Les frais de livraison s’affichent une fois l’adresse choisie.</p>
       </template>
+      </div>
+
+      <!-- Repris dans .checkout-total-inline ci-dessus sur mobile -- l'un des
+           deux est toujours masqué par media query, jamais les deux à la
+           fois (même pattern que .cart-summary dans panier.vue). -->
+      <aside v-if="cart" class="checkout-summary">
+        <div class="checkout-summary__title">Résumé</div>
+        <div class="d-flex justify-space-between text-lg mb-4">
+          <span>Total</span>
+          <span>{{ formatGnf(quote?.total ?? cart.total) }}</span>
+        </div>
+        <v-btn color="primary" block size="large" :loading="submitting" @click="confirmOrder">
+          Confirmer la commande
+        </v-btn>
+        <p v-if="!quote" class="text-muted text-meta mt-2 mb-0">Les frais de livraison s’affichent une fois l’adresse choisie.</p>
+      </aside>
     </div>
 
-    <div class="checkout-bar">
+    <div class="checkout-bar checkout-bar--mobile-only">
       <v-btn color="primary" block size="large" :loading="submitting" @click="confirmOrder">
         Confirmer la commande
       </v-btn>
@@ -454,5 +471,58 @@ function continueShopping() {
 
 .address-option--selected {
   border-color: var(--color-primary);
+}
+
+/* Sur mobile, une seule colonne : .checkout-summary n'existe pas encore, le
+   total reste inline dans le récapitulatif et le bouton vit dans la barre
+   collante du bas (même pattern que panier.vue). */
+.checkout-summary {
+  display: none;
+}
+
+/* .app-shell plafonne à 720px par défaut (voir main.css) -- trop étroit
+   pour un formulaire + récapitulatif côte à côte sur ordinateur. Même
+   largeur que .cart-inner (panier.vue), ce checkout ayant une forme très
+   proche (liste + résumé fixe). */
+@media (min-width: 960px) {
+  .checkout-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+
+  .checkout-page {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    align-items: start;
+    gap: 32px;
+  }
+
+  .checkout-total-inline {
+    /* Remplacé par .checkout-summary à cette largeur. */
+    display: none;
+  }
+
+  .checkout-summary {
+    display: block;
+    position: sticky;
+    top: 16px;
+    padding: 20px;
+    background: var(--color-neutral-900);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Redondant avec le bouton de .checkout-summary à cette largeur. */
+  .checkout-bar--mobile-only {
+    display: none;
+  }
+}
+
+.checkout-summary__title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 14px;
 }
 </style>
