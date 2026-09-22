@@ -141,6 +141,10 @@ const navItems = [
 }
 
 .top-bar__role {
+  /* Repris à droite de .top-bar__identity à partir de 960px (voir plus
+     bas) : sur mobile, .top-bar__nav est masquée et il n'y a rien avant
+     .top-bar__identity, donc c'est bien .top-bar__role qui doit pousser
+     le reste (rôle/thème/cloche) à droite. */
   margin-left: auto;
   color: var(--color-neutral-400);
   font-size: 11.5px;
@@ -196,13 +200,24 @@ const navItems = [
 
 @media (min-width: 960px) {
   .top-bar__nav {
-    /* Pas de margin-right: auto ici -- .top-bar__role a déjà
-       margin-left: auto, qui suffit à pousser role/thème/cloche à droite ;
-       un deuxième auto-margin créerait un second espace flexible et
-       pousserait l'identité au centre au lieu de la laisser collée à nav. */
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  /* Sur une barre pleine largeur (voir layouts/default.vue), un seul
+     auto-margin sur .top-bar__role laissait l'identité collée à la nav à
+     gauche et tout le reste (rôle/thème/cloche) loin à droite, avec un
+     grand vide entre les deux -- mal réparti sur un écran large. L'auto-
+     margin passe ici sur .top-bar__identity : nav à gauche, identité +
+     rôle + thème + cloche groupés à droite, un seul espace flexible entre
+     les deux blocs plutôt qu'un bloc qui traîne côté gauche. */
+  .top-bar__identity {
+    margin-left: auto;
+  }
+
+  .top-bar__role {
+    margin-left: 0;
   }
 }
 

@@ -144,10 +144,21 @@ async function logout() {
 </template>
 
 <style scoped>
+/* Sur ordinateur, une simple colonne recentrée (voir le commentaire dans le
+   template) se lisait comme un oubli plutôt qu'un choix -- collée en haut
+   du fond gris de la page, sans rien pour la détacher visuellement. Devient
+   une vraie carte détachée du fond, même traitement que .auth-card
+   (connexion/inscription, voir main.css) : le fond de page reste visible
+   tout autour, la carte elle-même a son propre relief. */
 @media (min-width: 960px) {
   .profil-inner {
-    max-width: 560px;
-    margin: 0 auto;
+    max-width: 640px;
+    margin: 32px auto;
+    padding: 32px 36px !important;
+    background: var(--color-neutral-900);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
   }
 }
 
