@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhShoppingCartSimple, PhStar } from '@phosphor-icons/vue'
+import { PhImage, PhShoppingCartSimple, PhStar, PhTruck } from '@phosphor-icons/vue'
 import type { ProductRead } from '~/types/api'
 
 const props = defineProps<{ product: ProductRead }>()
@@ -16,6 +16,18 @@ const justAdded = ref(false)
 const isOutOfStock = computed(() => props.product.stock <= 0)
 const isLowStock = computed(() => props.product.stock > 0 && props.product.stock <= 5)
 const hasVariants = computed(() => props.product.variants.length > 0)
+
+// Une seule ligne de caractéristique sous le prix, jamais deux : on garde une
+// hauteur de carte prévisible (voir .product-card__tags) plutôt que de
+// risquer un retour à la ligne sur les cartes étroites (grille mobile,
+// minmax 150px). Le délai de livraison est la donnée la plus utile pour
+// décider d'un achat ; "Plusieurs options" ne s'affiche qu'à défaut.
+const deliveryLabel = computed(() => {
+  const { estimated_delivery_min, estimated_delivery_max } = props.product
+  return estimated_delivery_min && estimated_delivery_max
+    ? formatDeliveryEstimate(estimated_delivery_min, estimated_delivery_max)
+    : null
+})
 
 async function quickAdd(event: MouseEvent) {
   // Un produit à variantes (couleur, taille…) ne peut pas être ajouté
@@ -82,7 +94,19 @@ async function quickAdd(event: MouseEvent) {
           <span v-if="product.average_rating !== null" class="product-card__rating">
             <PhStar :size="10" weight="fill" color="var(--color-accent)" />
             <span>{{ product.average_rating.toFixed(1) }}</span>
+            <span v-if="product.review_count > 0" class="product-card__rating-count">({{ product.review_count }})</span>
           </span>
+        </div>
+
+        <!-- Hauteur réservée même vide (voir deliveryLabel plus haut) : toutes
+             les cartes gardent la même hauteur naturelle qu'une caractéristique
+             s'affiche ou non, sans dépendre du seul étirement de la grille. -->
+        <div class="product-card__tags">
+          <span v-if="deliveryLabel" class="product-card__tag">
+            <PhTruck :size="10" weight="bold" />
+            {{ deliveryLabel }}
+          </span>
+          <span v-else-if="hasVariants" class="product-card__tag">Plusieurs options</span>
         </div>
 
         <div class="product-card__shop">{{ product.vendor_shop_name }}</div>
@@ -144,11 +168,18 @@ async function quickAdd(event: MouseEvent) {
      rognée), quitte à laisser un léger fond neutre sur les côtés pour les
      photos qui ne sont pas déjà carrées. */
   object-fit: contain;
-  transition: transform 0.25s ease;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .product-card:hover .product-card__image img {
-  transform: scale(1.06);
+  transform: scale(1.1);
+}
+
+/* :active plutôt que :hover seul : sur mobile (l'essentiel du trafic PWA,
+   voir ProductGrid) il n'y a pas de survol — sans ce répondant au toucher,
+   l'effet de zoom ne se verrait jamais en usage réel. */
+.product-card:active .product-card__image img {
+  transform: scale(1.04);
 }
 
 .product-card__stock-tag {
@@ -217,9 +248,11 @@ async function quickAdd(event: MouseEvent) {
 }
 
 .product-card__name {
-  font-size: 12.5px;
-  line-height: 1.3;
-  min-height: 2.6em;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.32;
+  min-height: 2.64em;
+  color: var(--color-neutral-100);
 }
 
 .product-card__meta {
@@ -227,12 +260,12 @@ async function quickAdd(event: MouseEvent) {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
 .product-card__price {
   font-family: var(--font-heading);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   /* Prix en orange, seule dérogation à la charte primary (bleu) sur la
      carte — même logique que les étoiles de notation : accroche l'œil sur
@@ -245,9 +278,9 @@ async function quickAdd(event: MouseEvent) {
   align-items: center;
   gap: 2px;
   flex: none;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
-  padding: 2px 5px;
+  padding: 2px 6px;
   border-radius: 999px;
   /* Pastille : reprend l'orange des étoiles en fond très léger pour que la
      note reste identifiable au premier coup d'œil sans rivaliser avec le
@@ -256,8 +289,37 @@ async function quickAdd(event: MouseEvent) {
   color: var(--color-accent);
 }
 
+.product-card__rating-count {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* Toujours présente (même vide) pour que la caractéristique du dessous
+   (délai de livraison / variantes) ne fasse pas varier la hauteur naturelle
+   de la carte selon qu'elle s'affiche ou non — voir deliveryLabel plus haut. */
+.product-card__tags {
+  min-height: 1.5em;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.product-card__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-neutral-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .product-card__shop {
-  font-size: 10.5px;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--color-neutral-500);
   /* auto plutôt qu'une valeur fixe : pousse le nom de boutique en bas de
      .product-card__body (flex column, flex: 1), pour aligner ce repère sur
