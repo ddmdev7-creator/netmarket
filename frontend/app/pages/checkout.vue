@@ -98,6 +98,11 @@ function deliveryFeeFor(vendorId: string): number | null {
   return quote.value?.vendors.find((v) => v.vendor_id === vendorId)?.delivery_fee ?? null
 }
 
+function deliveryEstimateFor(vendorId: string): string | null {
+  const match = quote.value?.vendors.find((v) => v.vendor_id === vendorId)
+  return match ? formatDeliveryEstimate(match.estimated_delivery_min, match.estimated_delivery_max) : null
+}
+
 /**
  * zoneText() est la source unique de la zone affichée, réutilisée à la fois
  * pour le texte combiné (delivery_address, gardé pour les anciennes
@@ -348,6 +353,10 @@ function continueShopping() {
               {{ deliveryFeeFor(group.vendor_id) ? formatGnf(deliveryFeeFor(group.vendor_id)!) : 'Gratuite' }}
             </span>
             <span v-else>—</span>
+          </div>
+          <div v-if="deliveryEstimateFor(group.vendor_id)" class="d-flex justify-space-between text-meta text-muted">
+            <span>Délai estimé</span>
+            <span>{{ deliveryEstimateFor(group.vendor_id) }}</span>
           </div>
         </div>
         <v-divider class="mb-2" />

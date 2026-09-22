@@ -31,6 +31,10 @@ class DeliveryQuoteVendorRead(BaseModel):
     vendor_id: uuid.UUID
     shop_name: str
     delivery_fee: int
+    # Même calcul que celui figé au checkout (voir SubOrder.estimated_delivery_min) :
+    # l'acheteur voit ainsi le même délai avant et après avoir confirmé.
+    estimated_delivery_min: date
+    estimated_delivery_max: date
 
 
 class DeliveryQuoteRead(BaseModel):

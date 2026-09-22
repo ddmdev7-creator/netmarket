@@ -19,7 +19,7 @@ from app.core.security import InvalidTokenError, TokenType, create_delivery_toke
 from app.couriers import repository as courier_repository
 from app.couriers.models import CourierStatus
 from app.delivery import repository as delivery_repository
-from app.delivery.service import compute_fee
+from app.delivery.service import compute_fee, compute_transit_days
 from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders.models import DeliveryType, Order, OrderStatus, SubOrder
@@ -179,8 +179,22 @@ async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteReques
     items_total = 0
     for vendor_items in _group_by_vendor(rows).values():
         vendor = vendor_items[0][3]
-        fee = compute_fee(tiers, (vendor.latitude, vendor.longitude), destination)
-        vendors.append(DeliveryQuoteVendorRead(vendor_id=vendor.id, shop_name=vendor.shop_name, delivery_fee=fee))
+        origin = (vendor.latitude, vendor.longitude)
+        fee = compute_fee(tiers, origin, destination)
+        estimate = estimate_delivery_window(
+            transit_days=compute_transit_days(tiers, origin, destination),
+            preparation_days=vendor.preparation_days,
+            from_date=date.today(),
+        )
+        vendors.append(
+            DeliveryQuoteVendorRead(
+                vendor_id=vendor.id,
+                shop_name=vendor.shop_name,
+                delivery_fee=fee,
+                estimated_delivery_min=estimate.min_date,
+                estimated_delivery_max=estimate.max_date,
+            )
+        )
         items_total += _vendor_amount(vendor_items)
     delivery_total = sum(v.delivery_fee for v in vendors)
     return DeliveryQuoteRead(
@@ -239,8 +253,7 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
         # Figée au checkout — voir le commentaire sur SubOrder.estimated_delivery_min
         # dans app/orders/models.py pour pourquoi ce n'est pas recalculé à la volée.
         estimate = estimate_delivery_window(
-            vendor_zone=vendor.zone,
-            buyer_zone=data.delivery_zone,
+            transit_days=compute_transit_days(tiers, (vendor.latitude, vendor.longitude), destination),
             preparation_days=vendor.preparation_days,
             from_date=date.today(),
         )

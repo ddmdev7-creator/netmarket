@@ -10,6 +10,8 @@ class DeliveryFeeTierCreate(BaseModel):
     max_km: float | None = Field(default=None, gt=0, le=1000)
     fee: int = Field(ge=0, le=10_000_000)
     label: str | None = Field(default=None, max_length=100)
+    # Jours de trajet ajoutés à la préparation du vendeur pour ce palier.
+    transit_days: int = Field(default=1, ge=0, le=30)
 
 
 class DeliveryFeeTierUpdate(BaseModel):
@@ -18,6 +20,7 @@ class DeliveryFeeTierUpdate(BaseModel):
     max_km: float | None = Field(default=None, gt=0, le=1000)
     fee: int | None = Field(default=None, ge=0, le=10_000_000)
     label: str | None = Field(default=None, max_length=100)
+    transit_days: int | None = Field(default=None, ge=0, le=30)
 
 
 class DeliveryFeeTierRead(BaseModel):
@@ -27,3 +30,4 @@ class DeliveryFeeTierRead(BaseModel):
     max_km: float | None
     fee: int
     label: str | None
+    transit_days: int

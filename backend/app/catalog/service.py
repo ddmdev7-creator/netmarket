@@ -20,6 +20,9 @@ from app.catalog.schemas import (
 from app.common.delivery_estimate import estimate_delivery_window
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.pagination import PageParams
+from app.delivery import repository as delivery_repository
+from app.delivery.models import DeliveryFeeTier
+from app.delivery.service import compute_transit_days
 from app.reviews import repository as reviews_repository
 from app.users.models import User, UserRole
 from app.vendors import repository as vendor_repository
@@ -36,13 +39,15 @@ def _attach_rating(product: Product, summary: tuple[float, int] | None) -> Produ
     return product
 
 
-def _attach_delivery_estimate(product: Product) -> Product:
-    # Generic estimate — the buyer's delivery zone isn't known on the
-    # catalog (vs. at checkout, where the real zone gives a firmer estimate
-    # frozen onto the SubOrder, see app/orders/service.py::checkout_cart).
+def _attach_delivery_estimate(product: Product, tiers: list[DeliveryFeeTier]) -> Product:
+    # Generic estimate — the buyer's position isn't known on the catalog (vs.
+    # at checkout, where the real distance gives a firmer estimate frozen
+    # onto the SubOrder, see app/orders/service.py::checkout_cart). Unknown
+    # origin/destination makes compute_transit_days fall back to the
+    # catch-all tier (or the slowest one) — the same conservative repli the
+    # fee itself uses when a position is missing.
     estimate = estimate_delivery_window(
-        vendor_zone=product.vendor_zone,
-        buyer_zone=None,
+        transit_days=compute_transit_days(tiers, (None, None), (None, None)),
         preparation_days=product.vendor_preparation_days,
         from_date=date.today(),
     )
@@ -162,7 +167,7 @@ async def get_product(db: AsyncSession, product_id: uuid.UUID) -> Product:
         raise NotFoundError("Produit introuvable.")
     average, count = await reviews_repository.get_rating_summary(db, product.id)
     _attach_rating(product, (average, count))
-    return _attach_delivery_estimate(product)
+    return _attach_delivery_estimate(product, await delivery_repository.list_all(db))
 
 
 async def list_products(
@@ -170,9 +175,10 @@ async def list_products(
 ) -> tuple[list[Product], int]:
     products, total = await repository.list_products(db, filters=filters, params=params)
     rating_map = await reviews_repository.get_rating_summary_map(db, [p.id for p in products])
+    tiers = await delivery_repository.list_all(db)
     for product in products:
         _attach_rating(product, rating_map.get(product.id))
-        _attach_delivery_estimate(product)
+        _attach_delivery_estimate(product, tiers)
     return products, total
 
 
@@ -187,9 +193,10 @@ async def list_my_products(
     filters.vendor_id = vendor.id
     products, total = await repository.list_products(db, filters=filters, params=params, include_inactive=True)
     rating_map = await reviews_repository.get_rating_summary_map(db, [p.id for p in products])
+    tiers = await delivery_repository.list_all(db)
     for product in products:
         _attach_rating(product, rating_map.get(product.id))
-        _attach_delivery_estimate(product)
+        _attach_delivery_estimate(product, tiers)
     return products, total
 
 

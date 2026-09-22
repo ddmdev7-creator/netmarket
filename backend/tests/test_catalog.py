@@ -247,8 +247,10 @@ async def test_product_read_exposes_generic_delivery_estimate(
 
     today = date.today()
     body = response.json()
-    # Zone acheteur inconnue sur le catalogue public : hypothèse "zone
-    # différente" par défaut (voir app/catalog/service.py::_attach_delivery_estimate).
+    # Position acheteur inconnue sur le catalogue public, et aucun palier de
+    # distance configuré ici : repli par défaut à 1 jour de trajet (voir
+    # app/catalog/service.py::_attach_delivery_estimate et
+    # app/delivery/service.py::compute_transit_days).
     assert body["estimated_delivery_min"] == str(today + timedelta(days=4))
     assert body["estimated_delivery_max"] == str(today + timedelta(days=5))
 

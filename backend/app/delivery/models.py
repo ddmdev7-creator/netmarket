@@ -18,6 +18,7 @@ class DeliveryFeeTier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint("fee >= 0", name="ck_delivery_fee_tiers_fee_non_negative"),
         CheckConstraint("max_km IS NULL OR max_km > 0", name="ck_delivery_fee_tiers_max_km_positive"),
+        CheckConstraint("transit_days >= 0", name="ck_delivery_fee_tiers_transit_days_non_negative"),
         # NULL n'est jamais égal à NULL pour un unique classique : sans cet
         # index partiel, on pourrait créer plusieurs paliers "au-delà".
         Index("uq_delivery_fee_tiers_max_km", "max_km", unique=True),
@@ -35,3 +36,10 @@ class DeliveryFeeTier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # GNF, entier comme tous les montants de l'app.
     fee: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Jours de trajet supplémentaires pour ce palier, au-delà du délai de
+    # préparation du vendeur (Vendor.preparation_days) — voir
+    # app/delivery/service.py::compute_transit_days et
+    # app/common/delivery_estimate.py. Même grille que le tarif plutôt qu'une
+    # heuristique de zone séparée : la durée annoncée à l'acheteur repose
+    # ainsi sur la même distance réelle que le prix qu'il voit.
+    transit_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

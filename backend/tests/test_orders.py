@@ -108,39 +108,17 @@ async def test_checkout_pickup_point_without_a_point_selected_is_rejected(
     assert response.status_code == 409
 
 
-async def test_checkout_freezes_delivery_estimate_for_matching_zone(
+async def test_checkout_freezes_delivery_estimate_from_preparation_and_default_transit(
     client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor: Vendor, product: Product
 ) -> None:
-    vendor.zone = "Kaloum"
+    # Sans palier de distance configuré, compute_transit_days retombe sur le
+    # délai par défaut (voir app/delivery/service.py::compute_transit_days) —
+    # les cas avec grille de distance sont couverts dans test_delivery_fees.py.
     vendor.preparation_days = 2
     await db_session.flush()
 
     await _add_to_cart(client, buyer_user, product)
-    response = await client.post(
-        "/orders/checkout",
-        json={**CHECKOUT_PAYLOAD, "delivery_zone": "Kaloum"},
-        headers=auth_headers(buyer_user),
-    )
-
-    sub_order = response.json()["sub_orders"][0]
-    today = date.today()
-    assert sub_order["estimated_delivery_min"] == str(today + timedelta(days=2))
-    assert sub_order["estimated_delivery_max"] == str(today + timedelta(days=3))
-
-
-async def test_checkout_delivery_estimate_adds_a_day_for_a_different_zone(
-    client: AsyncClient, db_session: AsyncSession, buyer_user: User, vendor: Vendor, product: Product
-) -> None:
-    vendor.zone = "Kaloum"
-    vendor.preparation_days = 2
-    await db_session.flush()
-
-    await _add_to_cart(client, buyer_user, product)
-    response = await client.post(
-        "/orders/checkout",
-        json={**CHECKOUT_PAYLOAD, "delivery_zone": "Ratoma"},
-        headers=auth_headers(buyer_user),
-    )
+    response = await client.post("/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user))
 
     sub_order = response.json()["sub_orders"][0]
     today = date.today()

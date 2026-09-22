@@ -518,7 +518,13 @@ export interface VendorSubOrderRead extends SubOrderBase {
 
 /** POST /orders/delivery-quote — same computation as checkout, per vendor parcel. */
 export interface DeliveryQuoteRead {
-  vendors: { vendor_id: string; shop_name: string; delivery_fee: number }[]
+  vendors: {
+    vendor_id: string
+    shop_name: string
+    delivery_fee: number
+    estimated_delivery_min: string
+    estimated_delivery_max: string
+  }[]
   items_total: number
   delivery_total: number
   total: number
@@ -531,7 +537,18 @@ export interface DeliveryFeeTierRead {
   fee: number
   /** Free-text zone description for the admin; informational only. */
   label: string | null
+  /** Extra transit days for this tier, on top of the vendor's own preparation time. */
+  transit_days: number
 }
+
+export interface DeliveryFeeTierCreate {
+  max_km: number | null
+  fee: number
+  label: string | null
+  transit_days: number
+}
+
+export type DeliveryFeeTierUpdate = Partial<DeliveryFeeTierCreate>
 
 export interface OrderRead {
   id: string

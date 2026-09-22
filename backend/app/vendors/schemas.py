@@ -16,11 +16,12 @@ class VendorRegister(BaseModel):
     # send the verification code gating access to the vendor dashboard.
     email: EmailStr
     # Position de la boutique, obligatoire dès l'inscription : elle sert à
-    # calculer les frais de livraison (app/delivery/service.py::compute_fee)
-    # et à trier les livreurs candidats par distance
-    # (app/orders/service.py::start_dispatch). Sans elle, la boutique serait
-    # facturée au tarif de repli le plus élevé. Les boutiques créées avant
-    # cette règle peuvent rester sans position (colonne nullable).
+    # calculer les frais et le délai de livraison (app/delivery/service.py::
+    # compute_fee et compute_transit_days) et à trier les livreurs candidats
+    # par distance (app/orders/service.py::start_dispatch). Sans elle, la
+    # boutique retombe sur le palier de repli (le plus cher, le plus lent).
+    # Les boutiques créées avant cette règle peuvent rester sans position
+    # (colonne nullable).
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
 

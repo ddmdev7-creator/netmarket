@@ -1,12 +1,14 @@
 """Tests for the delivery fee grid (distance tiers), the checkout quote and
-fees frozen on sub-orders at checkout."""
+fees/delivery estimates frozen on sub-orders at checkout."""
+
+from datetime import date, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.models import Product
 from app.delivery.models import DeliveryFeeTier
-from app.delivery.service import compute_fee
+from app.delivery.service import compute_fee, compute_transit_days
 from app.pickup_points.models import PickupPoint
 from app.users.models import User
 from app.vendors.models import Vendor
@@ -18,9 +20,9 @@ NEAR_KALOUM = (9.5150, -13.7100)
 RATOMA = (9.5900, -13.6500)
 
 TIERS = [
-    DeliveryFeeTier(max_km=3, fee=10000),
-    DeliveryFeeTier(max_km=8, fee=20000),
-    DeliveryFeeTier(max_km=None, fee=35000),
+    DeliveryFeeTier(max_km=3, fee=10000, transit_days=0),
+    DeliveryFeeTier(max_km=8, fee=20000, transit_days=1),
+    DeliveryFeeTier(max_km=None, fee=35000, transit_days=3),
 ]
 
 
@@ -35,7 +37,7 @@ def test_compute_fee_falls_back_when_a_position_is_missing() -> None:
 
 
 def test_compute_fee_without_catch_all_uses_the_dearest_tier() -> None:
-    bounded = [DeliveryFeeTier(max_km=3, fee=10000), DeliveryFeeTier(max_km=8, fee=20000)]
+    bounded = [DeliveryFeeTier(max_km=3, fee=10000, transit_days=0), DeliveryFeeTier(max_km=8, fee=20000, transit_days=1)]
     assert compute_fee(bounded, KALOUM, RATOMA) == 20000
     assert compute_fee(bounded, KALOUM, (None, None)) == 20000
 
@@ -44,11 +46,31 @@ def test_compute_fee_is_free_without_any_tier() -> None:
     assert compute_fee([], KALOUM, RATOMA) == 0
 
 
+def test_compute_transit_days_picks_the_tier_covering_the_distance() -> None:
+    assert compute_transit_days(TIERS, KALOUM, NEAR_KALOUM) == 0
+    assert compute_transit_days(TIERS, KALOUM, RATOMA) == 3  # ~11 km : au-delà de 8 km
+
+
+def test_compute_transit_days_falls_back_when_a_position_is_missing() -> None:
+    assert compute_transit_days(TIERS, KALOUM, (None, None)) == 3
+    assert compute_transit_days(TIERS, (None, None), NEAR_KALOUM) == 3
+
+
+def test_compute_transit_days_without_catch_all_uses_the_slowest_tier() -> None:
+    bounded = [DeliveryFeeTier(max_km=3, fee=10000, transit_days=0), DeliveryFeeTier(max_km=8, fee=20000, transit_days=1)]
+    assert compute_transit_days(bounded, KALOUM, RATOMA) == 1
+    assert compute_transit_days(bounded, KALOUM, (None, None)) == 1
+
+
+def test_compute_transit_days_uses_the_default_without_any_tier() -> None:
+    assert compute_transit_days([], KALOUM, RATOMA) == 1
+
+
 async def _add_tiers(db_session: AsyncSession) -> None:
     db_session.add_all(
         [
-            DeliveryFeeTier(max_km=3, fee=10000),
-            DeliveryFeeTier(max_km=None, fee=35000),
+            DeliveryFeeTier(max_km=3, fee=10000, transit_days=0),
+            DeliveryFeeTier(max_km=None, fee=35000, transit_days=3),
         ]
     )
     await db_session.flush()
@@ -65,14 +87,18 @@ async def test_admin_manages_tiers(client: AsyncClient, admin_user: User) -> Non
     headers = auth_headers(admin_user)
     created = await client.post("/admin/delivery-fee-tiers", json={"max_km": 5, "fee": 15000}, headers=headers)
     assert created.status_code == 201
+    assert created.json()["transit_days"] == 1  # défaut sans le champ
     tier_id = created.json()["id"]
 
-    await client.post("/admin/delivery-fee-tiers", json={"max_km": None, "fee": 40000}, headers=headers)
+    await client.post("/admin/delivery-fee-tiers", json={"max_km": None, "fee": 40000, "transit_days": 3}, headers=headers)
     listing = await client.get("/admin/delivery-fee-tiers", headers=headers)
     assert [t["max_km"] for t in listing.json()] == [5, None]
+    assert [t["transit_days"] for t in listing.json()] == [1, 3]
 
-    patched = await client.patch(f"/admin/delivery-fee-tiers/{tier_id}", json={"fee": 18000}, headers=headers)
-    assert patched.status_code == 200 and patched.json()["fee"] == 18000
+    patched = await client.patch(
+        f"/admin/delivery-fee-tiers/{tier_id}", json={"fee": 18000, "transit_days": 0}, headers=headers
+    )
+    assert patched.status_code == 200 and patched.json()["fee"] == 18000 and patched.json()["transit_days"] == 0
 
     deleted = await client.delete(f"/admin/delivery-fee-tiers/{tier_id}", headers=headers)
     assert deleted.status_code == 200
@@ -119,6 +145,14 @@ async def test_quote_and_checkout_charge_a_fee_per_vendor_parcel(
     assert body["delivery_total"] == 45000
     assert body["total"] == 645000
 
+    # Même grille que les frais : boutique proche (palier 3 km, 0 jour de
+    # trajet) contre boutique éloignée (palier « au-delà », 3 jours) —
+    # préparation à 1 jour pour les deux vendeurs (défaut, voir Vendor.preparation_days).
+    today = date.today()
+    estimates = {v["shop_name"]: (v["estimated_delivery_min"], v["estimated_delivery_max"]) for v in body["vendors"]}
+    assert estimates["Boutique Test"] == (str(today + timedelta(days=1)), str(today + timedelta(days=2)))
+    assert estimates["Autre Boutique"] == (str(today + timedelta(days=4)), str(today + timedelta(days=5)))
+
     checkout = await client.post(
         "/orders/checkout",
         json={"delivery_address": "Kaloum, près du marché", **destination},
@@ -130,7 +164,9 @@ async def test_quote_and_checkout_charge_a_fee_per_vendor_parcel(
     by_shop = {so["shop_name"]: so for so in order["sub_orders"]}
     assert by_shop["Boutique Test"]["delivery_fee"] == 10000
     assert by_shop["Boutique Test"]["amount"] == 500000
+    assert by_shop["Boutique Test"]["estimated_delivery_min"] == str(today + timedelta(days=1))
     assert by_shop["Autre Boutique"]["delivery_fee"] == 35000
+    assert by_shop["Autre Boutique"]["estimated_delivery_min"] == str(today + timedelta(days=4))
 
 
 async def test_commission_ignores_the_delivery_fee(
@@ -210,6 +246,15 @@ async def test_tier_can_become_catch_all_and_conflicts_are_kept_on_update(
 
     beyond = await client.patch(f"/admin/delivery-fee-tiers/{second['id']}", json={"max_km": None}, headers=headers)
     assert beyond.status_code == 200 and beyond.json()["max_km"] is None
+
+
+async def test_tier_transit_days_cannot_be_cleared(client: AsyncClient, admin_user: User) -> None:
+    headers = auth_headers(admin_user)
+    tier = (await client.post("/admin/delivery-fee-tiers", json={"max_km": 5, "fee": 1000}, headers=headers)).json()
+    cleared = await client.patch(
+        f"/admin/delivery-fee-tiers/{tier['id']}", json={"transit_days": None}, headers=headers
+    )
+    assert cleared.status_code == 409
 
 
 async def test_unknown_tier_update_and_delete_are_404(client: AsyncClient, admin_user: User) -> None:
