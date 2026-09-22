@@ -301,6 +301,12 @@ export interface CategoryCreate {
   parent_id?: string | null
 }
 
+/** PATCH /categories/{id} — parent_id null moves the category back to the root; omit a key to leave it unchanged. */
+export interface CategoryUpdate {
+  name?: string
+  parent_id?: string | null
+}
+
 export interface ProductVariantAttributeRead {
   name: string
   value: string

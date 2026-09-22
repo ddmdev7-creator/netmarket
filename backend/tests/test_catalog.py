@@ -20,6 +20,53 @@ async def test_create_and_list_categories(client: AsyncClient, admin_user: User)
     assert any(c["name"] == "Mode" for c in list_response.json())
 
 
+async def test_admin_renames_and_moves_a_category(client: AsyncClient, admin_user: User) -> None:
+    headers = auth_headers(admin_user)
+    parent = (await client.post("/categories", json={"name": "Mode"}, headers=headers)).json()
+    child = (await client.post("/categories", json={"name": "Chaussure"}, headers=headers)).json()
+
+    renamed = await client.patch(f"/categories/{child['id']}", json={"name": "  Chaussures  "}, headers=headers)
+    assert renamed.status_code == 200 and renamed.json()["name"] == "Chaussures"
+    assert renamed.json()["parent_id"] is None  # non fourni : inchangé
+
+    moved = await client.patch(f"/categories/{child['id']}", json={"parent_id": parent["id"]}, headers=headers)
+    assert moved.json()["parent_id"] == parent["id"]
+    assert moved.json()["name"] == "Chaussures"
+
+    back_to_root = await client.patch(f"/categories/{child['id']}", json={"parent_id": None}, headers=headers)
+    assert back_to_root.json()["parent_id"] is None
+
+
+async def test_category_cannot_become_its_own_descendant(client: AsyncClient, admin_user: User) -> None:
+    headers = auth_headers(admin_user)
+    a = (await client.post("/categories", json={"name": "A"}, headers=headers)).json()
+    b = (await client.post("/categories", json={"name": "B", "parent_id": a["id"]}, headers=headers)).json()
+    c = (await client.post("/categories", json={"name": "C", "parent_id": b["id"]}, headers=headers)).json()
+
+    itself = await client.patch(f"/categories/{a['id']}", json={"parent_id": a["id"]}, headers=headers)
+    assert itself.status_code == 409
+    under_grandchild = await client.patch(f"/categories/{a['id']}", json={"parent_id": c["id"]}, headers=headers)
+    assert under_grandchild.status_code == 409
+
+    unchanged = [x for x in (await client.get("/categories")).json() if x["id"] == a["id"]][0]
+    assert unchanged["parent_id"] is None
+
+
+async def test_update_category_errors_and_permissions(
+    client: AsyncClient, admin_user: User, buyer_user: User, category: Category
+) -> None:
+    missing = "00000000-0000-0000-0000-000000000000"
+    assert (await client.patch(f"/categories/{missing}", json={"name": "X"}, headers=auth_headers(admin_user))).status_code == 404
+    bad_parent = await client.patch(
+        f"/categories/{category.id}", json={"parent_id": missing}, headers=auth_headers(admin_user)
+    )
+    assert bad_parent.status_code == 404
+    blank = await client.patch(f"/categories/{category.id}", json={"name": "   "}, headers=auth_headers(admin_user))
+    assert blank.status_code == 409
+    forbidden = await client.patch(f"/categories/{category.id}", json={"name": "X"}, headers=auth_headers(buyer_user))
+    assert forbidden.status_code == 403
+
+
 async def test_create_product_requires_vendor_role(
     client: AsyncClient, buyer_user: User, category: Category
 ) -> None:

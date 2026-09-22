@@ -10,6 +10,7 @@ from app.catalog import repository
 from app.catalog.models import Category, Product, ProductVariant, ProductVariantAttribute
 from app.catalog.schemas import (
     CategoryCreate,
+    CategoryUpdate,
     ProductCreate,
     ProductFilters,
     ProductUpdate,
@@ -72,6 +73,39 @@ async def create_category(db: AsyncSession, data: CategoryCreate) -> Category:
     if data.parent_id is not None and await repository.get_category_by_id(db, data.parent_id) is None:
         raise NotFoundError("Catégorie parente introuvable.")
     category = await repository.create_category(db, name=data.name, parent_id=data.parent_id)
+    await db.commit()
+    await db.refresh(category)
+    return category
+
+
+async def update_category(db: AsyncSession, category_id: uuid.UUID, data: CategoryUpdate) -> Category:
+    category = await repository.get_category_by_id(db, category_id)
+    if category is None:
+        raise NotFoundError("Catégorie introuvable.")
+
+    fields = data.model_dump(exclude_unset=True)
+    if "name" in fields:
+        if fields["name"] is None or not fields["name"].strip():
+            raise ConflictError("Le nom de la catégorie est obligatoire.")
+        category.name = fields["name"].strip()
+
+    if "parent_id" in fields:
+        new_parent_id = fields["parent_id"]
+        if new_parent_id is not None:
+            # Remonter la chaîne des ancêtres du futur parent : si on retombe sur
+            # cette catégorie (ou si c'est elle-même), la déplacer créerait une boucle.
+            ancestor_id = new_parent_id
+            seen: set[uuid.UUID] = set()
+            while ancestor_id is not None and ancestor_id not in seen:
+                if ancestor_id == category.id:
+                    raise ConflictError("Une catégorie ne peut pas devenir sa propre sous-catégorie.")
+                seen.add(ancestor_id)
+                ancestor = await repository.get_category_by_id(db, ancestor_id)
+                if ancestor is None:
+                    raise NotFoundError("Catégorie parente introuvable.")
+                ancestor_id = ancestor.parent_id
+        category.parent_id = new_parent_id
+
     await db.commit()
     await db.refresh(category)
     return category

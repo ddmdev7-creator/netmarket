@@ -9,6 +9,7 @@ from app.catalog import service
 from app.catalog.schemas import (
     CategoryCreate,
     CategoryRead,
+    CategoryUpdate,
     ProductCreate,
     ProductFilters,
     ProductRead,
@@ -37,6 +38,17 @@ router = APIRouter(tags=["catalog"])
 )
 async def create_category(payload: CategoryCreate, db: AsyncSession = Depends(get_db)) -> CategoryRead:
     return await service.create_category(db, payload)
+
+
+@router.patch(
+    "/categories/{category_id}",
+    response_model=CategoryRead,
+    dependencies=[Depends(require_role(UserRole.ADMIN))],
+)
+async def update_category(
+    category_id: uuid.UUID, payload: CategoryUpdate, db: AsyncSession = Depends(get_db)
+) -> CategoryRead:
+    return await service.update_category(db, category_id, payload)
 
 
 @router.get("/categories", response_model=list[CategoryRead])
