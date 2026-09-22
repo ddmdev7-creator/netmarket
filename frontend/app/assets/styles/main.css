@@ -237,21 +237,31 @@ h1, h2, h3, h4, h5, h6,
 
 /* Carte détachée du fond gris pour les pages "détail" à une seule colonne
    (profil, adresses, notifications, modifier le profil, détail d'une
-   commande...) sur ordinateur -- au lieu de chaque page dupliquant les
-   mêmes 6 déclarations, ce motif partagé (repris de .auth-card) s'applique
-   simplement en ajoutant la classe au conteneur de contenu (généralement
-   celui qui porte déjà .px-4). Le bandeau retour/titre au-dessus reste hors
-   carte. La police de lecture (.text-body/.text-meta/.field-label) gagne
-   aussi quelques pixels : une carte à 640px sur grand écran n'a plus besoin
-   de rester aussi dense qu'un écran de téléphone. */
+   commande...) -- au lieu de chaque page dupliquant les mêmes déclarations,
+   ce motif partagé (repris de .auth-card) s'applique simplement en ajoutant
+   la classe au conteneur de contenu (remplace .px-4/.pa-4 sur ces pages :
+   .detail-card impose son propre padding). Le bandeau retour/titre
+   au-dessus reste hors carte. Actif à toutes les tailles d'écran -- sur
+   mobile aussi, un léger retrait (margin) laisse le fond gris visible tout
+   autour, pour la même sensation de carte détachée qu'sur grand écran. */
+.detail-card {
+  margin: 12px 10px 0;
+  padding: 18px 16px !important;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Sur grand écran, la carte se recentre sur une largeur de lecture
+   confortable plutôt que de rester collée aux bords, et la police
+   (.text-body/.text-meta/.field-label) gagne quelques pixels : elle n'a
+   plus besoin de rester aussi dense qu'un écran de téléphone. */
 @media (min-width: 960px) {
   .detail-card {
     max-width: 640px;
     margin: 24px auto 0;
     padding: 32px 36px !important;
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
   }
 
@@ -269,17 +279,20 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Variante pour les pages à deux colonnes (liste + résumé collant : panier,
-   checkout) -- même relief que .detail-card mais sans plafond ni padding
-   imposés (chacune des deux colonnes garde sa propre largeur de grille et
-   son propre padding), pour que les deux cartes d'une même paire (liste +
-   résumé) se détachent ensemble du fond plutôt qu'une seule des deux. */
-@media (min-width: 960px) {
-  .grid-card {
-    background: var(--color-neutral-900);
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
-  }
+   checkout) -- même relief que .detail-card mais sans plafond ni marge
+   propre (le conteneur parent, déjà en .px-4, fournit le retrait qui laisse
+   le fond gris visible autour ; chacune des deux colonnes garde sa propre
+   largeur de grille), pour que les deux cartes d'une même paire (liste +
+   résumé) se détachent ensemble du fond plutôt qu'une seule des deux. Actif
+   à toutes les tailles -- sur mobile, seule la colonne liste est visible
+   (le résumé collant n'existe qu'à partir de 960px, voir panier.vue et
+   checkout.vue), elle devient déjà une carte à elle seule. */
+.grid-card {
+  padding: 16px;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 /* Connexion/inscription/mot de passe oublié : sur desktop, un formulaire de

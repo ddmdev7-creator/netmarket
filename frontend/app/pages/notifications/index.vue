@@ -83,7 +83,7 @@ function formatDate(iso: string) {
       <LayoutHomeLink v-else />
     </div>
 
-    <div class="px-4 detail-card">
+    <div class="detail-card">
       <CommonEmptyState
         v-if="notifications.items.length === 0"
         message="Aucune notification pour l'instant."

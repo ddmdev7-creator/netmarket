@@ -50,8 +50,10 @@ async function logout() {
        annulant l'élargissement du bandeau du haut au-dessus. .detail-card
        (voir main.css -- motif partagé avec adresses/notifications/etc.)
        recentre LE CONTENU de cette page en une carte détachée du fond, sans
-       replafonner LayoutTopBar avec. -->
-  <div class="detail-card pa-4" style="padding-bottom: 76px">
+       replafonner LayoutTopBar avec -- impose son propre padding (plus de
+       .pa-4 ici), la marge sous la bottom nav mobile vient déjà de
+       .buyer-shell (layouts/default.vue). -->
+  <div class="detail-card">
     <h1 class="text-h6 mb-4">Profil</h1>
 
     <div class="d-flex align-center ga-3 mb-4">

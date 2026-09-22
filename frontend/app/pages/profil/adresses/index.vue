@@ -57,7 +57,7 @@ async function deleteAddress() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4 detail-card">
+    <div class="detail-card">
       <v-btn color="primary" block class="mb-4" to="/profil/adresses/nouvelle">
         <PhPlus :size="18" class="mr-1" />
         Nouvelle adresse

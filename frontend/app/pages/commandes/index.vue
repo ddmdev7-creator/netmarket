@@ -59,8 +59,10 @@ function formatDate(iso: string) {
        app-shell--catalog pour cette route, voir ce fichier) -- un deuxième
        wrapper imbriqué ici replafonnerait à 720px, annulant l'élargissement
        du bandeau du haut. .detail-card (main.css) recentre LE CONTENU en
-       une carte détachée, sans replafonner LayoutTopBar avec. -->
-  <div class="detail-card pa-4" style="padding-bottom: 76px">
+       une carte détachée, sans replafonner LayoutTopBar avec -- impose son
+       propre padding (plus de .pa-4 ici), la marge sous la bottom nav
+       mobile vient déjà de .buyer-shell (layouts/default.vue). -->
+  <div class="detail-card">
     <h1 class="text-h6 mb-3">Mes commandes</h1>
 
     <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-4">

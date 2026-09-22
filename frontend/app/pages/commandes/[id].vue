@@ -80,7 +80,7 @@ function shortId(id: string) {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4 detail-card">
+    <div class="detail-card">
       <div v-for="sub in order.sub_orders" :key="sub.id" class="mb-6">
         <div class="d-flex justify-space-between align-center mb-3">
           <span class="text-meta" style="font-weight: 600">{{ sub.shop_name }}</span>
