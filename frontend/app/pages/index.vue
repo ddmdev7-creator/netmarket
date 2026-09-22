@@ -90,7 +90,7 @@ watch(page, () => refresh())
 </script>
 
 <template>
-  <div class="px-3 py-4">
+  <div class="home-page">
     <div class="d-flex align-center ga-2 mb-3">
       <v-text-field
         v-model="search"
@@ -175,6 +175,20 @@ watch(page, () => refresh())
 </template>
 
 <style scoped>
+/* Reprend px-3 py-4 (12px/16px, l'ancien padding Vuetify utilitaire) sur
+   mobile, élargi sur ordinateur maintenant que .app-shell--catalog n'est
+   plus plafonné (voir main.css) — sans ça, le contenu resterait collé aux
+   bords de la fenêtre sur un grand écran malgré la largeur disponible. */
+.home-page {
+  padding: 16px 12px;
+}
+
+@media (min-width: 960px) {
+  .home-page {
+    padding: 24px 32px;
+  }
+}
+
 /* Champ de recherche mis en avant : fond blanc plein (variant="solo") avec
    une ombre légère plutôt que le gris plat "solo-filled" précédent, qui se
    fondait presque dans le fond de page — c'est la première action de la
@@ -185,6 +199,16 @@ watch(page, () => refresh())
 
 .search-field :deep(.v-field__input) {
   font-size: 14px;
+}
+
+/* Plafonné sur ordinateur : sans ça, le champ (qui grandit pour occuper
+   l'espace flex disponible) s'étirerait sur toute la largeur de la fenêtre
+   maintenant que .app-shell--catalog n'est plus plafonné — démesuré pour un
+   simple champ de recherche. */
+@media (min-width: 960px) {
+  .search-field {
+    max-width: 440px;
+  }
 }
 
 /* Bouton filtre : toujours visible comme un vrai bouton (bordure) plutôt

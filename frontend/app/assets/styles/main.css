@@ -214,12 +214,16 @@ h1, h2, h3, h4, h5, h6,
 }
 
 /* Page d'accueil (catalogue) : seule page avec une vraie grille produits --
-   profite d'une largeur bien plus généreuse pour afficher plusieurs
-   colonnes (voir .product-grid, qui s'adapte automatiquement à cette
-   largeur via auto-fill). */
+   pleine largeur de la fenêtre sur ordinateur plutôt qu'une colonne plafonnée
+   (comme .dashboard-shell des back-offices, mais sans plafond ici : plus la
+   fenêtre est large, plus .product-grid ajoute de colonnes automatiquement
+   via auto-fill, donc rien ne "flotte" au milieu d'un grand écran). Le bandeau
+   du haut (LayoutTopBar, imbriqué dans .app-shell) devient ainsi lui aussi
+   une bande pleine largeur, cohérent avec les back-offices (admin/vendeur)
+   où il l'est déjà. */
 @media (min-width: 960px) {
   .app-shell--catalog {
-    max-width: 1120px;
+    max-width: 100%;
   }
 }
 
