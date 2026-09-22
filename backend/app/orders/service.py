@@ -309,6 +309,12 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
         raise NotFoundError("Commande introuvable.")
     payment = await payments_repository.get_by_order_id(db, order.id)
     _attach_payment_status(order, payment.status if payment else None)
+    # Affiché tant que le remboursement n'est pas confirmé — voir
+    # cancel_order et payments_service.initiate_refund.
+    order.refund_delay_hours = None
+    if payment is not None and payment.status == PaymentStatus.REFUND_PENDING:
+        refund_settings = await payments_service.get_refund_settings(db)
+        order.refund_delay_hours = refund_settings.refund_delay_hours
     await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
     for sub_order in order.sub_orders:
         await _attach_product_images(db, sub_order)
@@ -347,6 +353,22 @@ async def cancel_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Ord
             "Cette commande ne peut plus être annulée : un vendeur a déjà commencé à la traiter."
         )
 
+    # Un paiement en ligne déjà capturé n'est pas rendu par la seule
+    # annulation de la commande — on déclenche un remboursement (payout
+    # Djomy vers le compte du payeur, voir payments_service.initiate_refund)
+    # avant de toucher quoi que ce soit d'autre : si Djomy refuse (solde
+    # marchand insuffisant, etc.), toute la commande doit rester intacte
+    # plutôt que d'annuler sans que l'argent ne revienne.
+    payment = await payments_repository.get_by_order_id(db, order.id)
+    refund_initiated = False
+    if payment is not None and payment.method == PaymentMethod.ONLINE and payment.status == PaymentStatus.PAID:
+        buyer = await user_repository.get_by_id(db, order.user_id)
+        beneficiary_name = " ".join(filter(None, [buyer.first_name, buyer.last_name])).strip() or "Client netmarket"
+        await payments_service.initiate_refund(
+            db, payment, order_reference=str(order.id), beneficiary_name=beneficiary_name
+        )
+        refund_initiated = True
+
     for sub_order in order.sub_orders:
         sub_order.status = OrderStatus.CANCELLED
         for item in sub_order.items:
@@ -362,7 +384,8 @@ async def cancel_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Ord
                     variant.stock += item.quantity
 
     order.status = OrderStatus.CANCELLED
-    await payments_service.mark_cancelled(db, order.id)
+    if not refund_initiated:
+        await payments_service.mark_cancelled(db, order.id)
     await db.commit()
     return await get_order(db, user, order_id)
 

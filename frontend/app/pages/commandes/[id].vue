@@ -140,7 +140,18 @@ function shortId(id: string) {
       />
 
       <h3 class="text-subtitle-2 text-muted mb-1">Paiement</h3>
-      <p class="mb-4 text-meta">{{ paymentLabels[order.payment_method] }}</p>
+      <div class="mb-4">
+        <p class="mb-0 text-meta">{{ paymentLabels[order.payment_method] }}</p>
+        <p v-if="order.payment_status === 'refund_pending'" class="mb-0 text-meta refund-note">
+          Remboursement en cours{{ order.refund_delay_hours != null ? ` — estimé sous ${order.refund_delay_hours}h` : '' }}.
+        </p>
+        <p v-else-if="order.payment_status === 'refunded'" class="mb-0 text-meta refund-note refund-note--done">
+          Remboursement effectué.
+        </p>
+        <p v-else-if="order.payment_status === 'refund_failed'" class="mb-0 text-meta refund-note refund-note--failed">
+          Le remboursement a échoué — contacte le support, ta commande est déjà annulée.
+        </p>
+      </div>
 
       <div class="d-flex justify-space-between text-lg">
         <span>Total</span>
@@ -205,6 +216,18 @@ function shortId(id: string) {
 .amount--total {
   font-size: 17px;
   font-weight: 700;
+}
+
+.refund-note {
+  color: var(--color-warning, #e0822e);
+}
+
+.refund-note--done {
+  color: var(--color-success);
+}
+
+.refund-note--failed {
+  color: var(--color-error);
 }
 
 .qr-block {

@@ -19,7 +19,7 @@ export type OrderStatus =
   | 'delivered'
   | 'cancelled'
 export type PaymentMethod = 'cash_on_delivery' | 'online'
-export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled'
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled' | 'refund_pending' | 'refunded' | 'refund_failed'
 export type DeliveryType = 'home_delivery' | 'pickup_point'
 export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled'
 
@@ -550,6 +550,15 @@ export interface DeliveryFeeTierCreate {
 
 export type DeliveryFeeTierUpdate = Partial<DeliveryFeeTierCreate>
 
+/** GET/PATCH /admin/payment-settings — informational delay shown to the buyer after a refund is initiated (see PaymentStatus 'refund_pending'). */
+export interface PaymentSettingsRead {
+  refund_delay_hours: number
+}
+
+export interface PaymentSettingsUpdate {
+  refund_delay_hours: number
+}
+
 export interface OrderRead {
   id: string
   status: OrderStatus
@@ -564,6 +573,8 @@ export interface OrderRead {
   payment_status: PaymentStatus | null
   /** Only set right after POST /orders/checkout for an online payment — redirect the buyer here immediately. */
   payment_redirect_url: string | null
+  /** Only set while payment_status === 'refund_pending' — admin-configured estimate. */
+  refund_delay_hours: number | null
   total: number
   created_at: string
   sub_orders: SubOrderRead[]

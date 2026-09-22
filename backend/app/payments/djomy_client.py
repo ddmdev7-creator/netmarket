@@ -125,6 +125,43 @@ async def get_payment_status(transaction_id: str) -> dict:
         return response.json()["data"]
 
 
+async def create_refund_payout(
+    *, amount: int, account_number: str, provider_code: str, beneficiary_name: str, reference: str, message: str
+) -> str:
+    """Refunds are modelled as an outbound payout to the payer's own mobile
+    money account (POST /v1/payout-orders) — Djomy has no dedicated "reverse
+    this transaction" endpoint. Requires the merchant's Djomy balance to
+    cover the amount (see PayoutBalanceInfo.isTopupRequired in the response;
+    not checked here, a 4xx/insufficient-balance error propagates like any
+    other). Returns the payout item's id, to match against the
+    `payout.success`/`payout.failed` webhook's `data.payout.payoutId`."""
+    headers = await _authenticated_headers()
+    payload = {
+        "description": message,
+        "items": [
+            {
+                "message": message,
+                "amount": amount,
+                "itemMerchantReference": reference,
+                "beneficiary": {"name": beneficiary_name},
+                "destination": {
+                    "type": "WALLET",
+                    "countryCode": "GN",
+                    "currencyCode": "GNF",
+                    "account": {"accountNumber": account_number, "providerCode": provider_code},
+                },
+            }
+        ],
+    }
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.post(f"{settings.djomy_base_url}/v1/payout-orders", headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()["data"]
+
+    return data["payoutItems"][0]["itemId"]
+
+
 def verify_webhook_signature(raw_body: bytes, signature_header: str | None) -> bool:
     """Webhooks are signed with the merchant's clientSecret (not the access
     token) — header format is `v1:<hex hmac-sha256 of the raw JSON body>`.

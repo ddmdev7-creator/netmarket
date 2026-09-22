@@ -240,6 +240,10 @@ class OrderRead(BaseModel):
     # jamais réaffiché sur un GET /orders/{id} ultérieur : un lien Djomy déjà
     # utilisé ou expiré n'a plus de sens à representer.
     payment_redirect_url: str | None = None
+    # Rempli quand payment_status == "refund_pending" — délai estimé
+    # (réglage admin, voir app/payments/router.py::admin_router) affiché à
+    # l'acheteur après une annulation avec remboursement en cours.
+    refund_delay_hours: int | None = None
     total: int
     created_at: datetime
     sub_orders: list[SubOrderRead]
