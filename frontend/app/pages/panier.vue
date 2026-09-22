@@ -30,12 +30,12 @@ function goCheckout() {
 </script>
 
 <template>
-  <div class="app-shell" style="padding-bottom: 88px">
+  <div class="app-shell app-shell--wide" style="padding-bottom: 88px">
     <div class="pa-3">
       <h1 class="text-h6">Mon panier ({{ itemCount }} article{{ itemCount > 1 ? 's' : '' }})</h1>
     </div>
 
-    <div class="px-4">
+    <div class="px-4 cart-list">
       <div v-if="pending">
         <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-two-line" class="mb-2" />
       </div>
@@ -86,13 +86,25 @@ function goCheckout() {
       </template>
     </div>
 
-    <div v-if="hasItems" class="checkout-bar">
+    <div v-if="hasItems" class="checkout-bar checkout-bar--wide">
       <v-btn color="primary" block size="large" @click="goCheckout">Passer à la commande</v-btn>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* La page utilise .app-shell--wide (960px, voir main.css) pour ne plus
+   flotter en colonne étroite sur desktop, mais chaque ligne d'article garde
+   une largeur de lecture confortable (comme .form-panel dans les
+   back-offices) -- sans ce plafond, le sélecteur de quantité et le prix de
+   chaque ligne se retrouveraient à des centaines de pixels l'un de l'autre,
+   avec un grand vide entre les deux. */
+@media (min-width: 960px) {
+  .cart-list {
+    max-width: 600px;
+  }
+}
+
 /* This page keeps the default layout's bottom nav (unlike checkout/produit
    which use the blank layout), so the shared .checkout-bar — normally flush
    with the screen bottom — has to sit above it instead of underneath it.
