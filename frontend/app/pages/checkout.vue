@@ -6,6 +6,7 @@ import type { AddressRead, DeliveryQuoteRead, OrderRead } from '~/types/api'
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
 const cartStore = useCartStore()
+const auth = useAuthStore()
 const router = useRouter()
 const { apiFetch } = useApi()
 const toast = useToastStore()
@@ -51,6 +52,11 @@ const saveNewAddress = ref(true)
 
 const submitting = ref(false)
 const confirmedOrder = ref<OrderRead | null>(null)
+
+// "cash_on_delivery" par défaut — le paiement en ligne reste un choix actif,
+// pas la valeur de repli si l'acheteur ne remplit rien.
+const paymentMethod = ref<'cash_on_delivery' | 'online'>('cash_on_delivery')
+const payerPhone = ref(auth.user?.phone ?? '')
 
 const cart = computed(() => cartStore.cart)
 
@@ -171,6 +177,11 @@ async function confirmOrder() {
     }
   }
 
+  if (paymentMethod.value === 'online' && !payerPhone.value.trim()) {
+    toast.error('Indique le numéro qui va payer (mobile money ou carte).')
+    return
+  }
+
   submitting.value = true
   try {
     let deliveryAddress: string
@@ -223,7 +234,7 @@ async function confirmOrder() {
       recipientPhone = selected.recipient_phone
     }
 
-    confirmedOrder.value = await apiFetch<OrderRead>('/orders/checkout', {
+    const order = await apiFetch<OrderRead>('/orders/checkout', {
       method: 'POST',
       body: {
         delivery_address: deliveryAddress,
@@ -235,10 +246,21 @@ async function confirmOrder() {
         delivery_instructions: deliveryInstructions ?? undefined,
         recipient_name: recipientName ?? undefined,
         recipient_phone: recipientPhone ?? undefined,
-        payment_method: 'cash_on_delivery',
+        payment_method: paymentMethod.value,
+        payer_phone: paymentMethod.value === 'online' ? payerPhone.value.trim() : undefined,
       },
     })
     cartStore.reset()
+
+    // Paiement en ligne : le panier est vidé et la commande existe déjà
+    // (statut de paiement "pending"), mais l'argent n'a pas encore bougé —
+    // direction le portail Djomy plutôt que la modale "commande confirmée",
+    // qui suppose à tort que tout est réglé.
+    if (order.payment_redirect_url) {
+      window.location.href = order.payment_redirect_url
+      return
+    }
+    confirmedOrder.value = order
   } catch (error) {
     toast.error(apiErrorMessage(error, 'Impossible de finaliser la commande.'))
   } finally {
@@ -324,15 +346,21 @@ function continueShopping() {
       <v-divider class="mb-4 mt-2" />
 
       <h3 class="section-title">Paiement</h3>
-      <v-radio-group model-value="cod" hide-details class="mb-4">
-        <v-radio label="Paiement à la livraison" value="cod" color="primary" />
-        <v-radio value="nimbapay" disabled>
-          <template #label>
-            <span class="text-muted">NimbaPay</span>
-            <v-chip size="x-small" variant="tonal" class="ml-2">Bientôt disponible</v-chip>
-          </template>
-        </v-radio>
+      <v-radio-group v-model="paymentMethod" hide-details class="mb-2">
+        <v-radio label="Paiement à la livraison" value="cash_on_delivery" color="primary" />
+        <v-radio label="Payer en ligne" value="online" color="primary" />
       </v-radio-group>
+      <div v-if="paymentMethod === 'online'" class="mb-4">
+        <v-text-field
+          v-model="payerPhone"
+          label="Numéro qui paie (mobile money ou carte)"
+          placeholder="Ex. 622000000"
+          hide-details="auto"
+        />
+        <p class="text-muted text-meta mt-1 mb-0">
+          Tu seras redirigé vers le portail de paiement pour finaliser (Orange Money, MTN MoMo, carte…).
+        </p>
+      </div>
 
       <v-divider class="mb-4" />
 

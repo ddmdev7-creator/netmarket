@@ -31,6 +31,20 @@ class Settings(BaseSettings):
     brevo_sender_name: str = "Marketplace Guinée"
     brevo_sender_email: str = "no-reply@netmarket.ndjouri.com"
 
+    # Base du frontend, pour construire les URLs de retour transmises aux
+    # prestataires de paiement externes (returnUrl Djomy, voir
+    # app/payments/provider.py::DjomyProvider) — jamais utilisée pour un appel
+    # serveur, seulement pour composer un lien renvoyé au navigateur.
+    frontend_url: str = "https://netmarket.ndjouri.com"
+
+    # Paiement en ligne via Djomy (https://developers.djomy.africa) — voir
+    # app/payments/djomy_client.py. Sans clé, seul CashOnDeliveryProvider
+    # reste enregistré (app/payments/provider.py), aucun compte externe requis
+    # pour développer/tester le reste de l'app.
+    djomy_client_id: str | None = None
+    djomy_client_secret: str | None = None
+    djomy_base_url: str = "https://sandbox-api.djomy.africa"
+
     # Stockage objet (MinIO en dev, S3-compatible) pour les images produit —
     # voir app/core/storage.py. Uniquement le réseau docker interne : l'API
     # est la seule à parler à MinIO directement, le navigateur passe par

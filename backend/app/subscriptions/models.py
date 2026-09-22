@@ -1,10 +1,10 @@
 """Vendor subscription ORM models.
 
-No real online payment gateway exists yet (see app/payments/provider.py —
-only cash on delivery is wired up, NimbaPay pending merchant docs), so a
-subscription request starts PENDING and is confirmed manually by an admin
-once the vendor has paid off-platform (mobile money), the same stopgap the
-rest of the app already lives with for payments.
+Subscriptions aren't wired to the Djomy provider yet (see
+app/payments/provider.py, used by orders/ checkout) — a subscription
+request starts PENDING and is confirmed manually by an admin once the
+vendor has paid off-platform (mobile money), a stopgap until this module
+also goes through DjomyProvider.
 """
 
 import uuid
@@ -54,9 +54,9 @@ class VendorSubscription(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Référence transaction chez le prestataire externe une fois NimbaPay
-    # branché — même rôle que Payment.provider_reference, toujours None
-    # aujourd'hui (confirmation manuelle par un admin).
+    # Référence transaction chez le prestataire externe une fois Djomy
+    # branché ici aussi — même rôle que Payment.provider_reference, toujours
+    # None aujourd'hui (confirmation manuelle par un admin).
     payment_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     plan: Mapped["SubscriptionPlan"] = relationship()

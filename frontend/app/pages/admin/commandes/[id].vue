@@ -48,7 +48,7 @@ function formatDate(iso: string) {
         <div>
           <div class="text-muted text-fine">Paiement</div>
           <div style="font-weight: 600">
-            {{ order.payment_method === 'cash_on_delivery' ? 'À la livraison' : order.payment_method }}
+            {{ order.payment_method === 'cash_on_delivery' ? 'À la livraison' : 'En ligne' }}
             · {{ order.payment_status ?? '—' }}
           </div>
         </div>

@@ -3,7 +3,6 @@ import {
   PhBell,
   PhCaretRight,
   PhChartBar,
-  PhCreditCard,
   PhMapPin,
   PhMotorcycle,
   PhPackage,
@@ -111,12 +110,6 @@ async function logout() {
       <span>Espace admin</span>
       <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
     </NuxtLink>
-
-    <div class="list-item list-item--disabled">
-      <PhCreditCard :size="18" color="var(--color-neutral-400)" />
-      <span>Paiement</span>
-      <v-chip size="x-small" variant="tonal" class="ml-auto">NimbaPay bientôt</v-chip>
-    </div>
 
     <NuxtLink to="/notifications" class="list-item">
       <PhBell :size="18" color="var(--color-neutral-400)" />

@@ -2,8 +2,8 @@
 provider that handles it.
 
 Kept as its own table (rather than fields on Order) so a real gateway
-(NimbaPay) has somewhere to store its own transaction reference once
-integrated, without touching the orders module — see provider.py.
+(Djomy) has somewhere to store its own transaction reference, without
+touching the orders module — see provider.py.
 """
 
 import uuid
@@ -40,5 +40,5 @@ class Payment(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         default=PaymentStatus.PENDING,
         nullable=False,
     )
-    # Référence transaction chez le prestataire externe (ex. NimbaPay) — toujours None pour cash on delivery.
+    # Référence transaction chez le prestataire externe (ex. Djomy) — toujours None pour cash on delivery.
     provider_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)

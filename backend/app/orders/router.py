@@ -197,3 +197,12 @@ async def cancel_order(
     db: AsyncSession = Depends(get_db),
 ) -> OrderRead:
     return await service.cancel_order(db, current_user, order_id)
+
+
+@router.post("/{order_id}/payment/sync", response_model=OrderRead)
+async def sync_payment(
+    order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OrderRead:
+    return await service.sync_payment(db, current_user, order_id)

@@ -55,6 +55,11 @@ class CheckoutRequest(DeliveryQuoteRequest):
     recipient_name: str | None = Field(default=None, max_length=150)
     recipient_phone: str | None = Field(default=None, max_length=20)
     payment_method: PaymentMethod = PaymentMethod.CASH_ON_DELIVERY
+    # Numéro mobile money/carte qui paie — pertinent seulement pour ONLINE.
+    # Absent : retombe sur le téléphone du compte acheteur (voir
+    # service.checkout_cart) — le payeur mobile money n'est pas forcément
+    # l'acheteur lui-même, d'où ce champ séparé plutôt que réutiliser User.phone.
+    payer_phone: str | None = Field(default=None, max_length=20)
 
 
 class SubOrderStatusUpdate(BaseModel):
@@ -230,6 +235,11 @@ class OrderRead(BaseModel):
     pickup_point_contacts: list[PickupPointContactRead] = []
     payment_method: PaymentMethod
     payment_status: PaymentStatus | None = None
+    # Rempli uniquement sur la réponse de POST /orders/checkout quand le
+    # paiement est en ligne (voir service.checkout_cart) — jamais persisté,
+    # jamais réaffiché sur un GET /orders/{id} ultérieur : un lien Djomy déjà
+    # utilisé ou expiré n'a plus de sens à representer.
+    payment_redirect_url: str | None = None
     total: int
     created_at: datetime
     sub_orders: list[SubOrderRead]

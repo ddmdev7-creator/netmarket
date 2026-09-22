@@ -17,6 +17,20 @@ const { data: order, error, refresh: refreshOrder } = await useAsyncData(`order-
   apiFetch<OrderRead>(`/orders/${orderId}`),
 )
 
+// Retour du portail Djomy (voir checkout.vue et payments/router.py) : le
+// webhook a pu ne pas encore atteindre l'API à cet instant (délai réseau,
+// ou en dev où Djomy ne peut pas nous joindre) — une resynchronisation
+// explicite ici évite d'afficher "en attente" alors que le paiement a déjà
+// réussi. Une seule fois : le paramètre est retiré de l'URL juste après.
+if (route.query.djomy === 'return') {
+  try {
+    order.value = await apiFetch<OrderRead>(`/orders/${orderId}/payment/sync`, { method: 'POST' })
+  } catch {
+    // Le statut affiché reste celui du GET initial — pas bloquant.
+  }
+  router.replace({ query: {} })
+}
+
 // Une notification de changement de statut poussée en direct pendant que
 // l'acheteur est déjà sur cette page ne doit pas rester lettre morte : sans
 // ça, la page reste figée sur l'ancien statut tant qu'elle n'est pas
@@ -33,7 +47,7 @@ const cancelling = ref(false)
 
 const canCancel = computed(() => order.value?.status === 'pending')
 
-const paymentLabels: Record<string, string> = { cash_on_delivery: 'Paiement à la livraison' }
+const paymentLabels: Record<string, string> = { cash_on_delivery: 'Paiement à la livraison', online: 'Payé en ligne' }
 
 async function cancelOrder() {
   if (!order.value) return

@@ -4,13 +4,13 @@ Marketplace e-commerce multi-vendeurs pour le marché guinéen (type Wildberries
 
 État actuel : socle technique + gestion complète des vendeurs + catalogue +
 panier multi-vendeurs + commandes avec split par vendeur + paiement (cash on
-delivery, interface `PaymentProvider` prête pour NimbaPay) + tableaux de bord
-vendeur/admin + avis produits + signalement/modération (produits et avis) +
-notifications email et in-app temps réel (WebSocket) + filtres catalogue
-(catégorie, prix, stock, tri) + estimation de livraison (règle simple, sans
-transporteur réel). Frontend Nuxt/PWA acheteur, vendeur et admin
-opérationnel. Intégration NimbaPay réelle et SMS restent à construire (voir
-« Prochaines étapes »).
+delivery et paiement en ligne via Djomy, interface `PaymentProvider`) +
+tableaux de bord vendeur/admin + avis produits + signalement/modération
+(produits et avis) + notifications email et in-app temps réel (WebSocket) +
+filtres catalogue (catégorie, prix, stock, tri) + estimation de livraison
+(règle simple, sans transporteur réel). Frontend Nuxt/PWA acheteur, vendeur
+et admin opérationnel. Remboursement automatique (paiement en ligne annulé
+avant traitement) et SMS restent à construire (voir « Prochaines étapes »).
 
 ## Stack
 
@@ -122,7 +122,7 @@ netmarket/
     │   ├── cart/              # panier multi-vendeurs (vue groupée par boutique)
     │   ├── orders/            # checkout, split en sous-commandes, suivi de statut
     │   ├── addresses/         # carnet d'adresses/points de retrait de l'acheteur, réutilisables au checkout
-    │   ├── payments/          # interface PaymentProvider, cash on delivery (NimbaPay à venir)
+    │   ├── payments/          # interface PaymentProvider : cash on delivery + Djomy (en ligne)
     │   ├── uploads/           # upload d'images produit vers MinIO (vendeur) + proxy public de lecture
     │   ├── reviews/           # avis produits (note 1-5 + commentaire), après livraison uniquement
     │   ├── notifications/     # email à l'acheteur sur les changements de statut de commande
@@ -320,20 +320,32 @@ d'erreur français propre lors du durcissement (étape 8).
 - `GET /admin/orders?status=...` (admin) — vue globale paginée de toutes les
   commandes, tous acheteurs confondus.
 
-## Paiement (NimbaPay)
+## Paiement (Djomy)
 
 Le module `payments/` existe : chaque commande crée un enregistrement
 `Payment` (statut `pending` / `paid` / `failed` / `cancelled`, référence
 transaction externe) via une interface abstraite `PaymentProvider`
-(`app/payments/provider.py`). Seule `CashOnDeliveryProvider` est branchée
-pour l'instant — `Order.payment_method` n'accepte que `cash_on_delivery`
-(tout autre choix est rejeté par la validation Pydantic). Le paiement passe
-à `paid` dès que toutes les sous-commandes d'une commande sont livrées (c'est
-le moment où l'argent change réellement de main en paiement à la livraison),
-et à `cancelled` si l'acheteur annule. `NimbaPayProvider` viendra s'ajouter
-au registre de `provider.py` dès que la documentation technique marchand
-aura été obtenue auprès de la Guinéenne de Monétique (GuiM) / BCRG — aucun
-autre module n'aura besoin de changer.
+(`app/payments/provider.py`). Deux providers sont branchés :
+
+- `CashOnDeliveryProvider` : paiement à la livraison, l'argent change
+  vraiment de main à ce moment-là, donc le paiement ne passe à `paid` que
+  lorsque toutes les sous-commandes d'une commande sont livrées (voir
+  `app/orders/service.py::update_sub_order_status`).
+- `DjomyProvider` : paiement en ligne (mobile money, carte...) via
+  [Djomy](https://developers.djomy.africa). Le checkout redirige l'acheteur
+  vers le portail de paiement Djomy (`POST /v1/payments/gateway`,
+  `app/payments/djomy_client.py`) ; le statut est ensuite mis à jour par
+  webhook (`POST /payments/webhooks/djomy`, signature HMAC-SHA256
+  vérifiée), avec une resynchronisation de repli au retour de l'acheteur
+  (`POST /orders/{id}/payment/sync`) si le webhook n'est pas encore arrivé.
+  Contrairement au paiement à la livraison, la livraison du colis ne
+  modifie jamais le statut d'un paiement en ligne — seul le webhook (ou la
+  resynchronisation) fait foi.
+
+`Order.payment_method` accepte `cash_on_delivery` ou `online` ; le paiement
+passe à `cancelled` si l'acheteur annule avant tout traitement vendeur. Le
+remboursement automatique d'un paiement en ligne annulé avant traitement
+(via l'API payout de Djomy) reste à construire.
 
 ## Avis produits
 
@@ -410,7 +422,8 @@ n'impacte que `notifications/service.py`.
 2. ~~Catalogue & vendeurs~~ (itération 1 + 2)
 3. ~~Panier & commande~~ (itération 2)
 4. ~~Paiement~~ : interface `PaymentProvider` en place (itération 4 — cash on
-   delivery ; NimbaPay branché dès la doc marchand obtenue auprès de GuiM/BCRG)
+   delivery, puis paiement en ligne via Djomy) ; remboursement automatique
+   d'un paiement en ligne annulé avant traitement reste à construire
 5. ~~Tableaux de bord vendeur puis admin~~ (itération 3 — statistiques, vue
    globale des commandes)
 5bis. ~~Avis produits~~ (note + commentaire après livraison, moyenne exposée
@@ -428,5 +441,5 @@ n'impacte que `notifications/service.py`.
    de zone, figée par sous-commande au checkout — voir « Estimation de
    livraison » ci-dessus. Amélioration possible plus tard avec de vraies
    données de trajet une fois assez d'historique de livraisons accumulé.
-8. Tests (159 tests backend passent), durcissement sécurité, préparation
-   déploiement (litiges acheteur/vendeur, intégration NimbaPay réelle, SMS)
+8. Tests backend, durcissement sécurité, préparation déploiement (litiges
+   acheteur/vendeur, remboursement automatique Djomy, SMS)

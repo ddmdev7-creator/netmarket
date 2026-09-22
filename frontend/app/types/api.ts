@@ -18,7 +18,7 @@ export type OrderStatus =
   | 'arrived_at_pickup_point'
   | 'delivered'
   | 'cancelled'
-export type PaymentMethod = 'cash_on_delivery'
+export type PaymentMethod = 'cash_on_delivery' | 'online'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled'
 export type DeliveryType = 'home_delivery' | 'pickup_point'
 export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled'
@@ -562,6 +562,8 @@ export interface OrderRead {
   pickup_point_contacts: PickupPointContactRead[]
   payment_method: PaymentMethod
   payment_status: PaymentStatus | null
+  /** Only set right after POST /orders/checkout for an online payment — redirect the buyer here immediately. */
+  payment_redirect_url: string | null
   total: number
   created_at: string
   sub_orders: SubOrderRead[]

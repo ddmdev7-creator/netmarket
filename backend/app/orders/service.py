@@ -22,7 +22,7 @@ from app.delivery import repository as delivery_repository
 from app.delivery.service import compute_fee, compute_transit_days
 from app.notifications import service as notifications_service
 from app.orders import repository
-from app.orders.models import DeliveryType, Order, OrderStatus, SubOrder
+from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder
 from app.orders.schemas import (
     CheckoutRequest,
     CourierAssignRequest,
@@ -239,7 +239,9 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
         recipient_name=None if is_pickup else data.recipient_name,
         recipient_phone=None if is_pickup else data.recipient_phone,
     )
-    await payments_service.create_payment_for_order(db, order)
+    redirect_url = await payments_service.create_payment_for_order(
+        db, order, payer_phone=data.payer_phone or user.phone
+    )
 
     # Capturé ici (plutôt que relu après coup) pour notifier chaque vendeur
     # une fois la commande commitée, sans dépendre d'objets déjà chargés
@@ -295,7 +297,10 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
             db, vendor_user_id=vendor_user_id, shop_name=shop_name, order_id=order.id, item_count=item_count, amount=amount
         )
 
-    return await get_order(db, user, order.id)
+    final_order = await get_order(db, user, order.id)
+    # Transitoire : jamais une colonne, voir OrderRead.payment_redirect_url.
+    final_order.payment_redirect_url = redirect_url
+    return final_order
 
 
 async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
@@ -308,6 +313,19 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
     for sub_order in order.sub_orders:
         await _attach_product_images(db, sub_order)
     return _attach_delivery_tokens(order)
+
+
+async def sync_payment(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
+    """Reconciles an online payment still PENDING against Djomy — called by
+    the buyer's browser right after returning from the Djomy portal, as a
+    fallback for a webhook that hasn't arrived yet (or, in dev, never will —
+    Djomy can't reach a local machine). No-op otherwise (see
+    payments_service.sync_pending_payment)."""
+    order = await repository.get_order_by_id(db, order_id)
+    if order is None or (order.user_id != user.id and user.role != UserRole.ADMIN):
+        raise NotFoundError("Commande introuvable.")
+    await payments_service.sync_pending_payment(db, order)
+    return await get_order(db, user, order_id)
 
 
 async def list_my_orders(db: AsyncSession, user: User) -> list[Order]:
@@ -614,9 +632,12 @@ async def update_sub_order_status(
 
     order = await repository.get_order_by_id(db, sub_order.order_id)
     order.status = _compute_order_status(order.sub_orders)
-    if order.status == OrderStatus.DELIVERED:
+    if order.status == OrderStatus.DELIVERED and order.payment_method == PaymentMethod.CASH_ON_DELIVERY:
         # Cash on delivery: money only actually changes hands once every
-        # vendor in the order has delivered — see payments/provider.py.
+        # vendor in the order has delivered — see payments/provider.py. For
+        # an online payment, the Djomy webhook is the only source of truth
+        # on whether it actually succeeded — delivery must never overwrite a
+        # FAILED/CANCELLED payment to PAID just because the parcel arrived.
         await payments_service.mark_paid(db, order.id)
 
     await db.commit()

@@ -32,9 +32,12 @@ class OrderStatus(StrEnum):
 
 
 class PaymentMethod(StrEnum):
-    # NimbaPay sera ajouté ici une fois les spécifications techniques obtenues
-    # auprès de la Guinéenne de Monétique (GuiM), via le futur module payments/.
     CASH_ON_DELIVERY = "cash_on_delivery"
+    # Paiement en ligne (mobile money, carte...) via Djomy — voir
+    # app/payments/provider.py::DjomyProvider. Une seule valeur générique
+    # plutôt que "djomy" : le moyen réel (OM/MOMO/carte...) est choisi par
+    # l'acheteur sur le portail de paiement, pas figé côté commande.
+    ONLINE = "online"
 
 
 class DeliveryType(StrEnum):
