@@ -224,7 +224,7 @@ async function quickAdd(event: MouseEvent) {
              utile pour tout le monde, pas seulement les produits sans
              variante. -->
         <div class="product-card__delivery">
-          <span v-if="deliveryLabel" class="product-card__tag">
+          <span v-if="deliveryLabel" class="product-card__tag product-card__tag--delivery">
             <PhTruck :size="10" weight="bold" />
             {{ deliveryLabel }}
           </span>
@@ -518,6 +518,16 @@ async function quickAdd(event: MouseEvent) {
    changer avec le défilement, pas juste une info statique de plus. */
 .product-card__tag--variant {
   color: var(--color-primary);
+}
+
+/* Vert plutôt que le gris neutre des autres caractéristiques : reprend
+   --color-success déjà utilisé ailleurs dans l'app (coche "ajouté au
+   panier"...) au lieu d'introduire une couleur ad hoc — un délai de
+   livraison est une info rassurante, pas neutre, et ce vert la distingue
+   au premier coup d'œil du gris de l'attribut juste au-dessus tout en
+   restant sobre à côté de l'orange du prix. */
+.product-card__tag--delivery {
+  color: var(--color-success);
 }
 
 .product-card__shop {
