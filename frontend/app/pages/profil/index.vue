@@ -44,7 +44,15 @@ async function logout() {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <!-- Pas de .app-shell ici : layouts/default.vue en fournit déjà un (avec
+       app-shell--catalog pour cette route, voir ce fichier) -- un deuxième
+       wrapper imbriqué ici l'aurait juste re-plafonné à 720px par défaut,
+       annulant l'élargissement du bandeau du haut au-dessus. .profil-inner
+       recentre uniquement LE CONTENU de cette page sur une largeur de menu
+       confortable (comme .form-panel dans les back-offices), sans
+       replafonner LayoutTopBar avec -- un simple menu de réglages n'a pas
+       vocation à s'étirer sur toute la largeur d'un écran 1920px. -->
+  <div class="profil-inner pa-4" style="padding-bottom: 76px">
     <h1 class="text-h6 mb-4">Profil</h1>
 
     <div class="d-flex align-center ga-3 mb-4">
@@ -136,6 +144,13 @@ async function logout() {
 </template>
 
 <style scoped>
+@media (min-width: 960px) {
+  .profil-inner {
+    max-width: 560px;
+    margin: 0 auto;
+  }
+}
+
 .avatar {
   width: 56px;
   height: 56px;

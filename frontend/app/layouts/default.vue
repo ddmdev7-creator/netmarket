@@ -13,11 +13,14 @@ onMounted(() => {
     <v-main>
       <!-- app-shell--catalog (pas de plafond, voir main.css) pour les pages
            qui recentrent elles-mêmes leur contenu à l'intérieur (accueil :
-           .home-page ; panier : .cart-inner) -- sans ça, LayoutTopBar (ici,
-           dans ce même wrapper) resterait plafonné à 720px sur desktop même
-           si la page elle-même s'étire, un bandeau du haut plus étroit que
-           le contenu en dessous. -->
-      <div class="app-shell buyer-shell" :class="{ 'app-shell--catalog': ['/', '/panier'].includes(route.path) }">
+           .home-page ; panier : .cart-inner ; profil : .profil-inner) --
+           sans ça, LayoutTopBar (ici, dans ce même wrapper) resterait
+           plafonné à 720px sur desktop même si la page elle-même s'étire,
+           un bandeau du haut plus étroit que le contenu en dessous. -->
+      <div
+        class="app-shell buyer-shell"
+        :class="{ 'app-shell--catalog': ['/', '/panier', '/profil'].includes(route.path) }"
+      >
         <LayoutTopBar show-nav />
         <slot />
       </div>
