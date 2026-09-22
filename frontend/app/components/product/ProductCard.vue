@@ -421,18 +421,26 @@ async function quickAdd(event: MouseEvent) {
   font-weight: 500;
   line-height: 1.32;
   min-height: 2.64em;
-  color: var(--color-neutral-100);
+  /* 200 = ton "texte fort" de l'échelle neutre (voir main.css) — la valeur
+     "100" utilisée ici avant n'existe pas dans l'échelle (900→200 seulement),
+     donc ce texte, le plus important de la carte après le prix, dépendait
+     par erreur d'une couleur de repli du framework plutôt que du thème. */
+  color: var(--color-neutral-200);
 }
 
 .product-card__meta {
-  display: flex;
+  display: grid;
+  /* Colonnes symétriques (1fr / auto / 1fr) plutôt qu'un simple flex : le
+     prix reste au centre EXACT de la rangée, avec ou sans pastille de note,
+     au lieu de se décaler vers la gauche dès qu'elle apparaît. */
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
   margin-top: 5px;
 }
 
 .product-card__price {
+  grid-column: 2;
+  text-align: center;
   font-family: var(--font-heading);
   font-size: 15px;
   font-weight: 700;
@@ -443,10 +451,11 @@ async function quickAdd(event: MouseEvent) {
 }
 
 .product-card__rating {
+  grid-column: 3;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 2px;
-  flex: none;
   font-size: 10.5px;
   font-weight: 600;
   padding: 2px 6px;
@@ -480,7 +489,10 @@ async function quickAdd(event: MouseEvent) {
   min-width: 0;
   font-size: 10px;
   font-weight: 600;
-  color: var(--color-neutral-400);
+  /* 300 plutôt que 400 : cette ligne porte une vraie info utile à l'achat
+     (couleur, délai) — elle doit se lire aussi facilement que le nom de
+     boutique juste en dessous, pas se fondre dans le fond. */
+  color: var(--color-neutral-300);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -496,7 +508,9 @@ async function quickAdd(event: MouseEvent) {
 .product-card__shop {
   font-size: 11px;
   font-weight: 500;
-  color: var(--color-neutral-500);
+  /* 400 plutôt que 500 : reste clairement secondaire (nom de boutique, pas
+     l'info principale) tout en restant lisible sans plisser les yeux. */
+  color: var(--color-neutral-400);
   /* auto plutôt qu'une valeur fixe : pousse le nom de boutique en bas de
      .product-card__body (flex column, flex: 1), pour aligner ce repère sur
      toute une rangée même quand les noms de produit font 1 ou 2 lignes. */
