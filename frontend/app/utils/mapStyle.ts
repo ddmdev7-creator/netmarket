@@ -67,6 +67,53 @@ export function getMapRasterStyle(theme: AppThemeName): MapLibreGL.StyleSpecific
   return theme === 'dark' ? MAP_RASTER_STYLE_DARK : MAP_RASTER_STYLE_LIGHT
 }
 
+/**
+ * Imagerie satellite Esri ("World_Imagery"), même service ArcGIS que les
+ * fonds clair/sombre ci-dessus — gratuit, sans clé API. Couche
+ * "Reference/World_Boundaries_and_Places" par-dessus pour les noms de lieux/
+ * routes (l'imagerie seule ne porte aucun libellé). `maxzoom: 19` : vérifié
+ * par échantillonnage sur Conakry (tuiles réelles, pas le placeholder "Map
+ * data not yet available" rencontré sur le fond clair/sombre au-delà de 16 —
+ * la couverture n'est pas la même selon le service Esri).
+ */
+function esriImageryStyle(): MapLibreGL.StyleSpecification {
+  const imagery = 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+  const reference =
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+  return {
+    version: 8,
+    sources: {
+      'esri-imagery': {
+        type: 'raster',
+        tiles: [imagery],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: 'Esri, Maxar, Earthstar Geographics',
+      },
+      'esri-imagery-reference': {
+        type: 'raster',
+        tiles: [reference],
+        tileSize: 256,
+        maxzoom: 19,
+      },
+    },
+    layers: [
+      { id: 'esri-imagery', type: 'raster', source: 'esri-imagery' },
+      { id: 'esri-imagery-reference', type: 'raster', source: 'esri-imagery-reference' },
+    ],
+  }
+}
+
+const MAP_RASTER_STYLE_SATELLITE = esriImageryStyle()
+
+export type MapLayerKind = 'plan' | 'satellite'
+
+/** Comme getMapRasterStyle, plus le choix plan/satellite (voir OverviewMap.vue). */
+export function getMapStyle(theme: AppThemeName, layer: MapLayerKind): MapLibreGL.StyleSpecification {
+  if (layer === 'satellite') return MAP_RASTER_STYLE_SATELLITE
+  return getMapRasterStyle(theme)
+}
+
 // Conakry — centre par défaut tant qu'aucune position/point n'oriente encore
 // la carte.
 export const MAP_DEFAULT_CENTER: [number, number] = [-13.5784, 9.6412]

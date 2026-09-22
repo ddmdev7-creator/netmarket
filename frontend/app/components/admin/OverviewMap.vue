@@ -19,8 +19,8 @@
  */
 import type * as MapLibreGL from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { PhArrowSquareOut, PhCopy, PhNavigationArrow, PhX } from '@phosphor-icons/vue'
-import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, getMapRasterStyle } from '~/utils/mapStyle'
+import { PhArrowSquareOut, PhCopy, PhNavigationArrow, PhStackSimple, PhX } from '@phosphor-icons/vue'
+import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, getMapStyle, type MapLayerKind } from '~/utils/mapStyle'
 import { MAP_PIN_META, createClusterPin, createPin, type MapPinKind, type PinHandle } from '~/utils/mapPins'
 
 export interface OverviewMapItem {
@@ -57,6 +57,9 @@ const toast = useToastStore()
 const wrap = ref<HTMLDivElement | null>(null)
 const mapContainer = ref<HTMLDivElement | null>(null)
 const mapFailed = ref(false)
+// Plan (clair/sombre selon le thème) par défaut ; satellite sur demande via
+// le bouton .om-layer-toggle — voir utils/mapStyle.ts::getMapStyle.
+const layerKind = ref<MapLayerKind>('plan')
 
 let maplibregl: typeof MapLibreGL | null = null
 let map: MapLibreGL.Map | null = null
@@ -171,7 +174,7 @@ onMounted(async () => {
   try {
     map = new maplibregl.Map({
       container: mapContainer.value,
-      style: getMapRasterStyle(theme.value),
+      style: getMapStyle(theme.value, layerKind.value),
       center: MAP_DEFAULT_CENTER,
       zoom: MAP_DEFAULT_ZOOM,
       attributionControl: { compact: true },
@@ -218,9 +221,17 @@ watch(
 // Le contenu d'un élément peut changer sans que la liste d'ids change (statut).
 watch(() => props.items, rebuildMarkers, { deep: false })
 
-watch(theme, (value) => {
-  map?.setStyle(getMapRasterStyle(value))
+// Un seul style à la fois dépend des deux (voir getMapStyle) : la satellite
+// n'a pas de variante claire/sombre, mais garder theme dans le tableau
+// couvre aussi le cas où l'admin change de thème pendant qu'il est en
+// satellite (rien à faire, un simple recalcul suffit).
+watch([theme, layerKind], ([themeValue, layerValue]) => {
+  map?.setStyle(getMapStyle(themeValue, layerValue))
 })
+
+function toggleLayer() {
+  layerKind.value = layerKind.value === 'plan' ? 'satellite' : 'plan'
+}
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
@@ -259,6 +270,18 @@ const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) =>
     <div class="om-search">
       <CommonMapSearchBox @select="onSearchSelect" />
     </div>
+
+    <button
+      type="button"
+      class="om-layer-toggle"
+      :aria-pressed="layerKind === 'satellite'"
+      :aria-label="layerKind === 'plan' ? 'Passer en vue satellite' : 'Revenir au plan'"
+      :title="layerKind === 'plan' ? 'Vue satellite' : 'Revenir au plan'"
+      @click="toggleLayer"
+    >
+      <PhStackSimple :size="16" weight="bold" />
+      {{ layerKind === 'plan' ? 'Satellite' : 'Plan' }}
+    </button>
 
     <ul class="om-legend" aria-label="Légende">
       <li v-for="entry in legend" :key="entry.kind">
@@ -349,15 +372,44 @@ const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) =>
 .om-search {
   position: absolute;
   top: 12px;
-  left: 12px;
-  right: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
   max-width: 420px;
   z-index: 2;
 }
 
+.om-layer-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--color-neutral-200);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.om-layer-toggle:hover {
+  background: var(--color-neutral-800);
+}
+
+.om-layer-toggle[aria-pressed='true'] {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
 .om-legend {
   position: absolute;
-  top: 64px;
+  top: 12px;
   left: 12px;
   z-index: 2;
   list-style: none;
@@ -563,6 +615,13 @@ const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) =>
 
 @media (max-width: 599px) {
   .om-legend {
+    display: none;
+  }
+
+  /* Pas assez de place à côté de la recherche centrée sur un petit écran —
+     la vue satellite reste accessible en agrandissant la fenêtre plutôt que
+     de faire chevaucher les deux. */
+  .om-layer-toggle {
     display: none;
   }
 
