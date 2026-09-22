@@ -57,7 +57,7 @@ async function resend() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4 pt-4 d-flex flex-column align-center text-center">
+    <div class="detail-card d-flex flex-column align-center text-center">
       <PhEnvelopeSimple :size="40" weight="light" color="var(--color-primary)" class="mb-3" />
       <p class="text-muted mb-6 text-meta" style="max-width: 300px">
         Un code à 5 chiffres a été envoyé à <strong>{{ auth.user?.email }}</strong

@@ -182,7 +182,7 @@ async function submit() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4 pt-2" style="padding-bottom: 32px">
+    <div class="detail-card">
       <p class="text-muted mb-5" style="font-size: 13px">
         Inscris-toi comme livreur pour recevoir des sous-commandes à livrer. Tu manipuleras des colis payés
         cash à la livraison — pour la sécurité des vendeurs et acheteurs, ton identité et ton engin doivent

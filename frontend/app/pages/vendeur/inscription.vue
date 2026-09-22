@@ -84,7 +84,7 @@ async function submit() {
       <LayoutHomeLink />
     </div>
 
-    <div class="px-4 pt-2">
+    <div class="detail-card">
       <p class="text-muted mb-5" style="font-size: 13px">
         Crée ta boutique pour publier des produits sur la marketplace. Un code de vérification te sera envoyé par
         email, puis elle devra être validée par un administrateur avant que tu puisses vendre.

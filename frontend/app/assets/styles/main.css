@@ -249,6 +249,7 @@ h1, h2, h3, h4, h5, h6,
   padding: 18px 16px !important;
   background: var(--color-neutral-900);
   border: 1px solid var(--color-divider);
+  border-top: 3px solid var(--color-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
@@ -291,8 +292,20 @@ h1, h2, h3, h4, h5, h6,
   padding: 16px;
   background: var(--color-neutral-900);
   border: 1px solid var(--color-divider);
+  border-top: 3px solid var(--color-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+}
+
+/* Le résumé/récapitulatif (contient le bouton d'action principal) se
+   distingue du reste par un liseré orange (--color-accent) plutôt que le
+   bleu de contenu -- un repère visuel de plus vers la carte "prochaine
+   étape" quand liste et résumé sont côte à côte. Voir panier.vue et
+   checkout.vue, qui appliquent .grid-card à .cart-summary/.checkout-summary
+   en plus de .cart-list/.checkout-form. */
+.cart-summary.grid-card,
+.checkout-summary.grid-card {
+  border-top-color: var(--color-accent);
 }
 
 /* Connexion/inscription/mot de passe oublié : sur desktop, un formulaire de
