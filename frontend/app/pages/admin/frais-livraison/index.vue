@@ -18,18 +18,28 @@ const hasCatchAll = computed(() => tiers.value.some((t) => t.max_km === null))
 // Un seul formulaire pour créer et modifier : editingId === null = création.
 const dialogOpen = ref(false)
 const editingId = ref<string | null>(null)
-const form = ref<{ beyond: boolean; max_km: string; fee: string }>({ beyond: false, max_km: '', fee: '' })
+const form = ref<{ beyond: boolean; max_km: string; fee: string; label: string }>({
+  beyond: false,
+  max_km: '',
+  fee: '',
+  label: '',
+})
 const saving = ref(false)
 
 function openCreate() {
   editingId.value = null
-  form.value = { beyond: !hasCatchAll.value && tiers.value.length > 0, max_km: '', fee: '' }
+  form.value = { beyond: !hasCatchAll.value && tiers.value.length > 0, max_km: '', fee: '', label: '' }
   dialogOpen.value = true
 }
 
 function openEdit(tier: DeliveryFeeTierRead) {
   editingId.value = tier.id
-  form.value = { beyond: tier.max_km === null, max_km: tier.max_km === null ? '' : String(tier.max_km), fee: String(tier.fee) }
+  form.value = {
+    beyond: tier.max_km === null,
+    max_km: tier.max_km === null ? '' : String(tier.max_km),
+    fee: String(tier.fee),
+    label: tier.label ?? '',
+  }
   dialogOpen.value = true
 }
 
@@ -46,7 +56,7 @@ async function save() {
   }
   saving.value = true
   try {
-    const body = { max_km: maxKm, fee }
+    const body = { max_km: maxKm, fee, label: form.value.label.trim() || null }
     if (editingId.value) {
       await apiFetch(`/admin/delivery-fee-tiers/${editingId.value}`, { method: 'PATCH', body })
     } else {
@@ -62,13 +72,22 @@ async function save() {
   }
 }
 
-async function remove(tier: DeliveryFeeTierRead) {
+const tierToDelete = ref<DeliveryFeeTierRead | null>(null)
+const deleting = ref(false)
+
+async function confirmRemove() {
+  const tier = tierToDelete.value
+  if (!tier) return
+  deleting.value = true
   try {
     await apiFetch(`/admin/delivery-fee-tiers/${tier.id}`, { method: 'DELETE' })
+    tierToDelete.value = null
     await refresh()
     toast.success('Palier supprimé.')
   } catch (e) {
     toast.error(apiErrorMessage(e, 'Impossible de supprimer ce palier.'))
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -100,13 +119,14 @@ function tierLabel(tier: DeliveryFeeTierRead, index: number): string {
       <div class="d-flex justify-space-between align-center">
         <div>
           <div style="font-weight: 600">{{ tierLabel(tier, index) }}</div>
+          <div v-if="tier.label" class="text-muted" style="font-size: 12.5px">{{ tier.label }}</div>
           <div class="text-muted" style="font-size: 12.5px">{{ formatGnf(tier.fee) }}</div>
         </div>
         <div class="d-flex ga-1">
           <v-btn icon variant="text" size="small" aria-label="Modifier" @click="openEdit(tier)">
             <PhPencilSimple :size="18" />
           </v-btn>
-          <v-btn icon variant="text" size="small" color="error" aria-label="Supprimer" @click="remove(tier)">
+          <v-btn icon variant="text" size="small" color="error" aria-label="Supprimer" @click="tierToDelete = tier">
             <PhTrash :size="18" />
           </v-btn>
         </div>
@@ -126,9 +146,32 @@ function tierLabel(tier: DeliveryFeeTierRead, index: number): string {
           hide-details="auto"
         />
         <v-text-field v-model="form.fee" label="Tarif (GNF)" inputmode="numeric" class="mt-3" hide-details="auto" />
+        <v-text-field
+          v-model="form.label"
+          label="Zone couverte (optionnel)"
+          placeholder="Ex. Grand Conakry — Coyah, Dubréka"
+          maxlength="100"
+          class="mt-3"
+          hide-details="auto"
+        />
         <div class="d-flex ga-2 mt-4">
           <v-btn variant="outlined" class="flex-grow-1" @click="dialogOpen = false">Annuler</v-btn>
           <v-btn color="primary" class="flex-grow-1" :loading="saving" @click="save">Enregistrer</v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog :model-value="!!tierToDelete" max-width="340" @update:model-value="tierToDelete = null">
+      <v-card v-if="tierToDelete" class="pa-4">
+        <div class="text-h6 mb-2">Supprimer ce palier ?</div>
+        <p class="text-muted mb-4" style="font-size: 13px">
+          {{ tierToDelete.max_km === null ? 'Palier « au-delà »' : `Jusqu’à ${tierToDelete.max_km} km` }} —
+          {{ formatGnf(tierToDelete.fee) }}. Les commandes déjà passées gardent leurs frais ; les prochaines seront
+          recalculées avec les paliers restants.
+        </p>
+        <div class="d-flex ga-2">
+          <v-btn variant="outlined" class="flex-grow-1" @click="tierToDelete = null">Annuler</v-btn>
+          <v-btn color="error" class="flex-grow-1" :loading="deleting" @click="confirmRemove">Supprimer</v-btn>
         </div>
       </v-card>
     </v-dialog>

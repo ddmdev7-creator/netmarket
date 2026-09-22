@@ -55,7 +55,8 @@ async def _ensure_max_km_free(db: AsyncSession, max_km: float | None, *, ignore_
 
 async def create_tier(db: AsyncSession, data: DeliveryFeeTierCreate) -> DeliveryFeeTier:
     await _ensure_max_km_free(db, data.max_km)
-    tier = await repository.create(db, max_km=data.max_km, fee=data.fee)
+    label = (data.label or "").strip() or None
+    tier = await repository.create(db, max_km=data.max_km, fee=data.fee, label=label)
     await db.commit()
     return tier
 
@@ -69,6 +70,8 @@ async def update_tier(db: AsyncSession, tier_id: uuid.UUID, data: DeliveryFeeTie
         raise ConflictError("Le tarif du palier est obligatoire.")
     if "max_km" in fields:
         await _ensure_max_km_free(db, fields["max_km"], ignore_id=tier.id)
+    if "label" in fields:
+        fields["label"] = (fields["label"] or "").strip() or None
     for field, value in fields.items():
         setattr(tier, field, value)
     await db.commit()

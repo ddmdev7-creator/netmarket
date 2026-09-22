@@ -178,3 +178,42 @@ async def test_quote_requires_a_point_for_pickup_and_a_non_empty_cart(
         "/orders/delivery-quote", json={"delivery_type": "pickup_point"}, headers=auth_headers(buyer_user)
     )
     assert no_point.status_code == 409
+
+
+async def test_tier_label_is_optional_trimmed_and_editable(client: AsyncClient, admin_user: User) -> None:
+    headers = auth_headers(admin_user)
+    created = await client.post(
+        "/admin/delivery-fee-tiers", json={"max_km": 25, "fee": 50000, "label": "  Périphérie de Conakry  "}, headers=headers
+    )
+    assert created.status_code == 201
+    assert created.json()["label"] == "Périphérie de Conakry"
+    tier_id = created.json()["id"]
+
+    # Modifier le tarif seul ne touche pas au libellé ; un libellé vide l'efface.
+    kept = await client.patch(f"/admin/delivery-fee-tiers/{tier_id}", json={"fee": 55000}, headers=headers)
+    assert kept.json()["label"] == "Périphérie de Conakry"
+    cleared = await client.patch(f"/admin/delivery-fee-tiers/{tier_id}", json={"label": "   "}, headers=headers)
+    assert cleared.json()["label"] is None
+
+
+async def test_tier_can_become_catch_all_and_conflicts_are_kept_on_update(
+    client: AsyncClient, admin_user: User
+) -> None:
+    headers = auth_headers(admin_user)
+    first = (await client.post("/admin/delivery-fee-tiers", json={"max_km": 5, "fee": 1000}, headers=headers)).json()
+    second = (await client.post("/admin/delivery-fee-tiers", json={"max_km": 10, "fee": 2000}, headers=headers)).json()
+
+    clash = await client.patch(f"/admin/delivery-fee-tiers/{second['id']}", json={"max_km": 5}, headers=headers)
+    assert clash.status_code == 409
+    same = await client.patch(f"/admin/delivery-fee-tiers/{first['id']}", json={"max_km": 5, "fee": 1500}, headers=headers)
+    assert same.status_code == 200 and same.json()["fee"] == 1500
+
+    beyond = await client.patch(f"/admin/delivery-fee-tiers/{second['id']}", json={"max_km": None}, headers=headers)
+    assert beyond.status_code == 200 and beyond.json()["max_km"] is None
+
+
+async def test_unknown_tier_update_and_delete_are_404(client: AsyncClient, admin_user: User) -> None:
+    headers = auth_headers(admin_user)
+    missing = "00000000-0000-0000-0000-000000000000"
+    assert (await client.patch(f"/admin/delivery-fee-tiers/{missing}", json={"fee": 1}, headers=headers)).status_code == 404
+    assert (await client.delete(f"/admin/delivery-fee-tiers/{missing}", headers=headers)).status_code == 404

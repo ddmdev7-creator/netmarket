@@ -523,6 +523,8 @@ export interface DeliveryFeeTierRead {
   id: string
   max_km: number | null
   fee: number
+  /** Free-text zone description for the admin; informational only. */
+  label: string | null
 }
 
 export interface OrderRead {
