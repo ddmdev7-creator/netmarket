@@ -200,11 +200,14 @@ const visible = computed(() => {
           <span class="delivery-card__code">{{ shortId(so.order_id) }}</span>
           <StatusBadge :status="so.status" />
         </div>
-        <div class="text-muted mb-2 text-body">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
+        <div class="mb-2">
+          <span class="delivery-card__shop">{{ so.shop_name }}</span>
+          <span class="delivery-card__date"> · {{ formatDate(so.created_at) }}</span>
+        </div>
 
         <div class="delivery-card__items mb-3">
           {{ so.items.length }} article{{ so.items.length > 1 ? 's' : '' }}
-          <span class="text-muted"> — {{ itemsSummary(so) }}</span>
+          <span class="delivery-card__items-list"> — {{ itemsSummary(so) }}</span>
         </div>
 
         <OrderDeliveryDetails
@@ -256,8 +259,9 @@ const visible = computed(() => {
           <span class="delivery-card__code">{{ shortId(so.order_id) }}</span>
           <StatusBadge :status="so.status" />
         </div>
-        <div class="text-muted text-meta mt-1">
-          {{ so.shop_name }} · {{ formatDate(so.created_at) }} · {{ so.items.length }} article{{ so.items.length > 1 ? 's' : '' }}
+        <div class="mt-1">
+          <span class="delivery-card__shop delivery-card__shop--compact">{{ so.shop_name }}</span>
+          <span class="delivery-card__date"> · {{ formatDate(so.created_at) }} · {{ so.items.length }} article{{ so.items.length > 1 ? 's' : '' }}</span>
         </div>
       </div>
     </div>
@@ -305,12 +309,73 @@ const visible = computed(() => {
   padding: 12px 14px;
 }
 
+/* Échelle de taille propre à cette page (plus généreuse que le reste de
+   l'app) -- un livreur lit souvent son téléphone en extérieur, en plein
+   soleil ou en mouvement : mieux vaut un texte trop grand que trop petit.
+   Chaque rôle (numéro de commande / boutique / date / articles) a aussi sa
+   propre couleur plutôt qu'un bloc de texte uniforme, pour repérer
+   l'information voulue d'un coup d'œil. */
 .delivery-card__code {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 15px;
+  font-size: 16px;
   letter-spacing: 0.01em;
   color: var(--color-primary-300);
+}
+
+.delivery-card__shop {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-accent);
+}
+
+.delivery-card__shop--compact {
+  font-size: 13.5px;
+}
+
+.delivery-card__date {
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+.delivery-card__items {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-success);
+}
+
+.delivery-card__items-list {
+  font-family: var(--font-body);
+  font-weight: 400;
+  color: var(--color-neutral-400);
+}
+
+@media (min-width: 960px) {
+  .delivery-card__code {
+    font-size: 19px;
+  }
+
+  .delivery-card__shop {
+    font-size: 17px;
+  }
+
+  .delivery-card__shop--compact {
+    font-size: 14.5px;
+  }
+
+  .delivery-card__date {
+    font-size: 14.5px;
+  }
+
+  .delivery-card__items {
+    font-size: 17px;
+  }
+
+  .delivery-card__items-list {
+    font-size: 14.5px;
+  }
 }
 
 .delivery-card__items {
