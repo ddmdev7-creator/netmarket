@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhMagnifyingGlass, PhPlus, PhScales } from '@phosphor-icons/vue'
+import { PhImage, PhMagnifyingGlass, PhPlus, PhScales, PhUserCircle } from '@phosphor-icons/vue'
 import type { CourierAdminCreate, CourierDetailRead, CourierStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -89,6 +89,28 @@ function confirmReject() {
 const expandedId = ref<string | null>(null)
 const documentUrls = reactive<Record<string, string>>({})
 const loadingDocuments = ref<string | null>(null)
+
+// Vignette de profil affichée directement dans la liste pour les livreurs
+// approuvés (voir <img> dans le template) -- chargée à part, pas au clic
+// comme le reste des documents (toggleDocuments/openCompare plus bas) : sans
+// ça, l'admin ne verrait jamais un visage tant qu'il n'a pas déplié "Voir les
+// documents" sur chaque ligne. Réutilise le même cache documentUrls : si
+// l'admin déplie ensuite les documents de ce livreur, la photo est déjà là.
+watch(
+  couriers,
+  async (list) => {
+    for (const c of list) {
+      if (c.status !== 'approved' || !c.face_photo_key || documentUrls[c.face_photo_key]) continue
+      try {
+        const blob = await apiFetchBlob(`/couriers/${c.id}/documents/${c.face_photo_key}`)
+        documentUrls[c.face_photo_key] = URL.createObjectURL(blob)
+      } catch {
+        // Pas grave — la ligne retombe sur l'icône générique.
+      }
+    }
+  },
+  { immediate: true },
+)
 
 interface DocEntry {
   label: string
@@ -276,7 +298,17 @@ async function createCourier() {
     <div class="couriers-grid">
     <v-card v-for="courier in visibleCouriers" :key="courier.id" class="mb-3 pa-3">
       <div class="d-flex justify-space-between align-center mb-1">
-        <span style="font-weight: 600">{{ courier.full_name ?? courier.phone }}</span>
+        <div class="d-flex align-center ga-2" style="min-width: 0">
+          <div class="courier-avatar">
+            <img
+              v-if="courier.face_photo_key && documentUrls[courier.face_photo_key]"
+              :src="documentUrls[courier.face_photo_key]"
+              alt=""
+            />
+            <PhUserCircle v-else :size="18" color="var(--color-neutral-500)" />
+          </div>
+          <span style="font-weight: 600">{{ courier.full_name ?? courier.phone }}</span>
+        </div>
         <v-chip :color="statusMeta[courier.status].color" size="small" variant="tonal">
           {{ statusMeta[courier.status].label }}
         </v-chip>
@@ -482,6 +514,24 @@ async function createCourier() {
     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
     gap: 0 16px;
   }
+}
+
+.courier-avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--color-neutral-800);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.courier-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .doc-toggle {

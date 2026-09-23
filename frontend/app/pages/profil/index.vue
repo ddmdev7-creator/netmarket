@@ -11,6 +11,7 @@ import {
   PhSignOut,
   PhStorefront,
 } from '@phosphor-icons/vue'
+import type { CourierDetailRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -18,8 +19,36 @@ const auth = useAuthStore()
 const cartStore = useCartStore()
 const notifications = useNotificationStore()
 const router = useRouter()
+const { apiFetch, apiFetchBlob } = useApi()
 
 await useAsyncData('profil-me', () => auth.fetchMe())
+
+// Photo de vérification du livreur (voir CourierDetailRead.face_photo_key),
+// réutilisée comme photo de profil plutôt que les initiales par défaut --
+// mais seulement une fois son compte approuvé : avant ça, cette photo n'est
+// qu'une pièce de vérification en cours d'examen, pas encore "sa" photo de
+// profil. Chargée à part (pas de blocage du rendu de la page si l'appel
+// échoue) : /couriers/{id}/documents/{key} n'est jamais public, contrairement
+// aux photos produit (voir resolveImageUrl), donc pas de simple <img src>.
+const courierPhotoUrl = ref<string | null>(null)
+if (auth.user?.role === 'courier') {
+  apiFetch<CourierDetailRead>('/couriers/me')
+    .then((courier) => {
+      if (courier.status === 'approved' && courier.face_photo_key) {
+        return apiFetchBlob(`/couriers/${courier.id}/documents/${courier.face_photo_key}`)
+      }
+      return null
+    })
+    .then((blob) => {
+      if (blob) courierPhotoUrl.value = URL.createObjectURL(blob)
+    })
+    .catch(() => {
+      // Pas grave — l'avatar retombe sur les initiales.
+    })
+}
+onBeforeUnmount(() => {
+  if (courierPhotoUrl.value) URL.revokeObjectURL(courierPhotoUrl.value)
+})
 
 const initials = computed(() => {
   const u = auth.user
@@ -57,7 +86,10 @@ async function logout() {
     <h1 class="text-h6 mb-4">Profil</h1>
 
     <div class="d-flex align-center ga-3 mb-4">
-      <div class="avatar">{{ initials }}</div>
+      <div class="avatar">
+        <img v-if="courierPhotoUrl" :src="courierPhotoUrl" alt="Photo de profil" class="avatar__photo" />
+        <template v-else>{{ initials }}</template>
+      </div>
       <div>
         <div class="text-body">{{ displayName }}</div>
         <div class="text-muted text-meta">{{ auth.user?.phone }}</div>
@@ -148,14 +180,22 @@ async function logout() {
 .avatar {
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: var(--color-primary-800);
   color: var(--color-primary-100);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   font-family: var(--font-heading);
   font-size: 18px;
+}
+
+.avatar__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .list-item {

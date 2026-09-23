@@ -95,11 +95,20 @@ function formatDate(iso: string) {
 </script>
 
 <template>
-  <div class="app-shell pa-4" style="padding-bottom: 76px">
+  <!-- Pas de .app-shell ici : layouts/livreur.vue en fournit déjà un (avec
+       app-shell--catalog, voir ce fichier) -- un deuxième wrapper imbriqué
+       ici replafonnerait à 720px, annulant l'élargissement du bandeau du
+       haut. .detail-card (main.css) recentre LE CONTENU en une carte
+       détachée, sans replafonner LayoutTopBar avec -- impose son propre
+       padding (plus de .pa-4 ici). Chaque livraison est un bloc séparé par
+       une ligne (comme les boutiques d'une commande sur commandes/[id].vue)
+       plutôt qu'une v-card imbriquée dans la carte détachée, pour éviter un
+       effet "carte dans la carte". -->
+  <div class="detail-card">
     <div class="d-flex justify-space-between align-center mb-3">
       <h1 class="text-h6 mb-0">Mes livraisons</h1>
       <div class="d-flex align-center ga-2">
-        <span class="text-muted" style="font-size: 12.5px">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
+        <span class="text-muted text-meta">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
         <v-switch
           :model-value="isOnline"
           color="primary"
@@ -114,14 +123,14 @@ function formatDate(iso: string) {
 
     <CommonEmptyState v-if="!pending && deliveries.length === 0" message="Aucune livraison assignée pour le moment." />
 
-    <v-card v-for="so in deliveries" :key="so.id" class="mb-3 pa-3">
+    <div v-for="so in deliveries" :key="so.id" class="mb-6">
       <div class="d-flex justify-space-between align-center mb-2">
         <span class="order-code">{{ shortId(so.order_id) }}</span>
         <StatusBadge :status="so.status" />
       </div>
-      <div class="text-muted mb-2" style="font-size: 12px">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
+      <div class="text-muted mb-2 text-meta">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
 
-      <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1" style="font-size: 13px">
+      <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1 text-body">
         <span
           >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
           {{ item.quantity }}</span
@@ -140,14 +149,12 @@ function formatDate(iso: string) {
         :note="so.delivery_type === 'pickup_point' ? 'À déposer sur place — le client viendra le récupérer.' : null"
       />
 
-      <v-divider class="mb-3" />
-
       <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
         <div v-if="so.pickup_dropoff_token" class="d-flex flex-column align-center mb-3">
-          <p class="text-muted mb-2" style="font-size: 12px">Le gestionnaire du point scanne ce code à la réception</p>
+          <p class="text-muted mb-2 text-meta">Le gestionnaire du point scanne ce code à la réception</p>
           <OrderDeliveryQrCode :token="so.pickup_dropoff_token" />
         </div>
-        <p class="text-muted mb-0 text-center" style="font-size: 12px">
+        <p class="text-muted mb-0 text-center text-meta">
           C'est le gestionnaire du point de retrait qui confirme la réception — rien à faire ici de votre côté.
         </p>
       </template>
@@ -167,7 +174,9 @@ function formatDate(iso: string) {
           Marquer livrée
         </v-btn>
       </div>
-    </v-card>
+
+      <v-divider class="mt-4" />
+    </div>
 
     <VendorQrScannerDialog v-model="scannerOpen" @decode="handleDecode" />
   </div>
