@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhShoppingCartSimple, PhStar, PhTruck } from '@phosphor-icons/vue'
+import { PhImage, PhShoppingCartSimple, PhStar, PhStorefront, PhTruck } from '@phosphor-icons/vue'
 import type { ProductRead, ProductVariantRead } from '~/types/api'
 
 const props = defineProps<{ product: ProductRead }>()
@@ -82,6 +82,16 @@ const deliveryLabel = computed(() => {
     ? formatDeliveryEstimate(estimated_delivery_min, estimated_delivery_max)
     : null
 })
+
+// Note affichée en étoiles fractionnaires (4,3 → 4 pleines + 30 % de la
+// cinquième) : une rangée d'étoiles vides, et par-dessus la même rangée
+// pleine, rognée à la largeur de la note.
+const hasRating = computed(() => props.product.average_rating !== null && props.product.review_count > 0)
+const ratingPct = computed(() => ((props.product.average_rating ?? 0) / 5) * 100)
+// Montant et devise séparés : « GNF » en plus petit libère la place de la
+// note sur la même ligne, même sur une carte de téléphone.
+const priceAmount = computed(() => formatGnf(props.product.price).replace(/\s*GNF$/, ''))
+const ratingLabel = computed(() => (props.product.average_rating ?? 0).toFixed(1).replace('.', ','))
 
 // --- Carrousel synchronisé -----------------------------------------------
 // Le défilement lui-même est du CSS pur (scroll-snap) — l'observer ne sert
@@ -192,24 +202,44 @@ async function quickAdd(event: MouseEvent) {
           <span v-else class="product-card__quick-add-check">✓</span>
         </button>
       </div>
-      <v-card-text class="pa-2 product-card__body">
-        <div class="product-card__name">{{ product.name }}</div>
+      <div class="product-card__body">
+        <div class="product-card__name" :title="product.name">{{ product.name }}</div>
 
+        <!-- Prix à gauche, note à droite : les deux infos d'achat sur une
+             seule ligne. Un prix très long passe la note à la ligne (wrap)
+             plutôt que de se faire tronquer sur les cartes étroites. -->
         <div class="product-card__meta">
-          <span class="product-card__price">{{ formatGnf(product.price) }}</span>
-          <span v-if="product.average_rating !== null" class="product-card__rating">
-            <PhStar :size="10" weight="fill" color="var(--color-accent)" />
-            <span>{{ product.average_rating.toFixed(1) }}</span>
-            <span v-if="product.review_count > 0" class="product-card__rating-count">({{ product.review_count }})</span>
+          <span class="product-card__price" :class="{ 'product-card__price--long': priceAmount.length > 7 }">{{ priceAmount }}<span class="product-card__currency">GNF</span></span>
+          <span
+            v-if="hasRating"
+            class="product-card__rating"
+            :aria-label="`Noté ${ratingLabel} sur 5 (${product.review_count} avis)`"
+          >
+            <span class="stars" aria-hidden="true">
+              <span class="stars__row stars__row--empty">
+                <PhStar v-for="n in 5" :key="n" :size="12" weight="fill" />
+              </span>
+              <span class="stars__row stars__row--full" :style="{ width: `${ratingPct}%` }">
+                <PhStar v-for="n in 5" :key="n" :size="12" weight="fill" />
+              </span>
+            </span>
+            <span class="product-card__rating-value">{{ ratingLabel }}</span>
+            <span class="product-card__rating-count">({{ product.review_count }})</span>
+          </span>
+          <span v-else class="product-card__rating product-card__rating--none" title="Pas encore d'avis">
+            <span class="stars" aria-hidden="true">
+              <span class="stars__row stars__row--empty">
+                <PhStar v-for="n in 5" :key="n" :size="12" weight="fill" />
+              </span>
+            </span>
           </span>
         </div>
 
         <!-- Hauteur réservée même vide : toutes les cartes gardent la même
-             hauteur naturelle qu'une caractéristique s'affiche ou non, sans
-             dépendre du seul étirement de la grille. Priorité : le libellé
-             synchronisé avec la photo du carrousel affichée (ex. "Rouge"
-             pendant qu'on swipe dessus) ; à défaut le résumé des attributs
-             disponibles. -->
+             hauteur qu'une caractéristique s'affiche ou non. Priorité : le
+             libellé synchronisé avec la photo du carrousel affichée (ex.
+             "Rouge" pendant qu'on swipe dessus) ; à défaut le résumé des
+             attributs disponibles. -->
         <div class="product-card__tags">
           <span v-if="hasCarousel && activeFrameLabel" class="product-card__tag product-card__tag--variant">
             {{ activeFrameLabel }}
@@ -217,21 +247,20 @@ async function quickAdd(event: MouseEvent) {
           <span v-else-if="attributeSummary" class="product-card__tag">{{ attributeSummary }}</span>
         </div>
 
-        <!-- Ligne dédiée, toujours réservée (hauteur constante même sans
-             estimation) — distincte de .product-card__tags ci-dessus : le
-             délai de livraison ne doit pas disparaître juste parce que le
-             produit a des variantes (voir attributeSummary), c'est une info
-             utile pour tout le monde, pas seulement les produits sans
-             variante. -->
+        <!-- Ligne dédiée, toujours réservée : le délai de livraison ne doit
+             pas disparaître juste parce que le produit a des variantes. -->
         <div class="product-card__delivery">
           <span v-if="deliveryLabel" class="product-card__tag product-card__tag--delivery">
-            <PhTruck :size="10" weight="bold" />
+            <PhTruck :size="12" weight="bold" />
             {{ deliveryLabel }}
           </span>
         </div>
 
-        <div class="product-card__shop">{{ product.vendor_shop_name }}</div>
-      </v-card-text>
+        <div class="product-card__shop">
+          <PhStorefront :size="12" weight="bold" />
+          <span>{{ product.vendor_shop_name }}</span>
+        </div>
+      </div>
     </v-card>
   </NuxtLink>
 </template>
@@ -253,14 +282,17 @@ async function quickAdd(event: MouseEvent) {
   height: 100%;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: var(--shadow-sm) !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .product-card:hover .product-card__card {
   transform: translateY(-3px);
   box-shadow: var(--shadow-lg) !important;
+  border-color: var(--color-divider-strong);
 }
 
 .product-card__card--out {
@@ -276,7 +308,9 @@ async function quickAdd(event: MouseEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, var(--color-neutral-800) 0%, var(--color-neutral-700) 100%);
+  /* Fond uni et clair : la plupart des photos produit sont détourées sur
+     blanc, un dégradé gris les faisait paraître « posées » sur un bloc. */
+  background: var(--color-neutral-800);
   overflow: hidden;
   padding: 8px;
   box-sizing: border-box;
@@ -420,79 +454,150 @@ async function quickAdd(event: MouseEvent) {
   display: flex;
   flex-direction: column;
   /* Comble le reste de la carte étirée par la grille, pour que le nom de
-     boutique s'aligne en bas d'une rangée même quand les noms de produit
-     font 1 ou 2 lignes selon la fiche. */
+     boutique s'aligne en bas d'une rangée quelle que soit la longueur du nom. */
   flex: 1;
+  padding: 10px 9px 9px;
+  /* Les règles @container plus bas adaptent la ligne prix/note à la largeur
+     réelle de la carte (2 colonnes sur téléphone, 4-6 sur desktop). */
+  container-type: inline-size;
 }
 
 .product-card__name {
   font-size: 13.5px;
-  font-weight: 500;
-  line-height: 1.32;
-  min-height: 2.64em;
-  /* 200 = ton "texte fort" de l'échelle neutre (voir main.css) — la valeur
-     "100" utilisée ici avant n'existe pas dans l'échelle (900→200 seulement),
-     donc ce texte, le plus important de la carte après le prix, dépendait
-     par erreur d'une couleur de repli du framework plutôt que du thème. */
+  font-weight: 600;
+  line-height: 1.35;
+  /* 2 lignes maximum, hauteur toujours réservée pour 2 : prix et note
+     tombent à la même hauteur sur toute une rangée. */
+  min-height: 2.7em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   color: var(--color-neutral-200);
 }
 
 .product-card__meta {
-  display: grid;
-  /* Colonnes symétriques (1fr / auto / 1fr) plutôt qu'un simple flex : le
-     prix reste au centre EXACT de la rangée, avec ou sans pastille de note,
-     au lieu de se décaler vers la gauche dès qu'elle apparaît. */
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  margin-top: 5px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-top: 8px;
 }
 
 .product-card__price {
-  grid-column: 2;
-  text-align: center;
   font-family: var(--font-heading);
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
   /* Prix en orange, seule dérogation à la charte primary (bleu) sur la
-     carte — même logique que les étoiles de notation : accroche l'œil sur
-     ce qui doit se voir en premier, comme sur une fiche produit Ozon. */
+     carte — même logique que les étoiles : accroche l'œil sur ce qui doit
+     se voir en premier. */
   color: var(--color-accent);
 }
 
 .product-card__rating {
-  grid-column: 3;
-  justify-self: end;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 999px;
-  /* Pastille : reprend l'orange des étoiles en fond très léger pour que la
-     note reste identifiable au premier coup d'œil sans rivaliser avec le
-     prix, qui doit rester l'élément le plus fort de la carte. */
-  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  gap: 4px;
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.product-card__rating--none {
+  opacity: 0.55;
+}
+
+.stars {
+  position: relative;
+  display: inline-flex;
+}
+
+.stars__row {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.stars__row--empty {
+  color: var(--color-neutral-600);
+}
+
+.stars__row--full {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
   color: var(--color-accent);
+}
+
+.stars__row svg {
+  flex: none;
+}
+
+.product-card__rating-value {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  color: var(--color-neutral-200);
 }
 
 .product-card__rating-count {
   font-weight: 500;
-  opacity: 0.8;
+  color: var(--color-neutral-400);
 }
 
-/* Toujours présente (même vide) pour que la caractéristique du dessous
-   (délai de livraison / variantes) ne fasse pas varier la hauteur naturelle
-   de la carte selon qu'elle s'affiche ou non — voir deliveryLabel plus haut. */
+.product-card__currency {
+  margin-left: 3px;
+  font-size: 0.68em;
+  font-weight: 700;
+}
+
+/* Carte étroite (2 colonnes sur téléphone) : étoiles et note restent sur la
+   ligne du prix, en plus compact ; seul le nombre d'avis s'efface. */
+@container (max-width: 200px) {
+  .product-card__rating-count {
+    display: none;
+  }
+
+  .product-card__price {
+    font-size: 15px;
+  }
+
+  /* Montant à 7 chiffres et plus (« 1 250 000 ») : un cran plus petit pour
+     laisser la note sur la même ligne. */
+  .product-card__price--long {
+    font-size: 13.5px;
+  }
+
+  .product-card__rating {
+    gap: 3px;
+    font-size: 11px;
+  }
+
+  .stars__row {
+    gap: 0;
+  }
+
+  .stars__row svg {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* Toujours présente (même vide) pour que la hauteur de la carte ne varie
+   pas selon qu'une caractéristique s'affiche ou non. */
 .product-card__tags {
-  min-height: 1.5em;
-  margin-top: 4px;
+  min-height: 1.6em;
+  margin-top: 6px;
   display: flex;
   align-items: center;
 }
 
 .product-card__delivery {
-  min-height: 1.5em;
+  min-height: 1.6em;
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
 }
@@ -500,13 +605,10 @@ async function quickAdd(event: MouseEvent) {
 .product-card__tag {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 600;
-  /* 300 plutôt que 400 : cette ligne porte une vraie info utile à l'achat
-     (couleur, délai) — elle doit se lire aussi facilement que le nom de
-     boutique juste en dessous, pas se fondre dans le fond. */
   color: var(--color-neutral-300);
   white-space: nowrap;
   overflow: hidden;
@@ -514,35 +616,39 @@ async function quickAdd(event: MouseEvent) {
 }
 
 /* Libellé synchronisé avec la photo du carrousel affichée — distinct du gris
-   neutre des autres caractéristiques pour bien montrer que ça vient de
-   changer avec le défilement, pas juste une info statique de plus. */
+   neutre pour bien montrer qu'il vient de changer avec le défilement. */
 .product-card__tag--variant {
   color: var(--color-primary);
 }
 
-/* Vert plutôt que le gris neutre des autres caractéristiques : reprend
-   --color-success déjà utilisé ailleurs dans l'app (coche "ajouté au
-   panier"...) au lieu d'introduire une couleur ad hoc — un délai de
-   livraison est une info rassurante, pas neutre, et ce vert la distingue
-   au premier coup d'œil du gris de l'attribut juste au-dessus tout en
-   restant sobre à côté de l'orange du prix. */
+/* Un délai de livraison est une info rassurante : vert (--color-success,
+   déjà utilisé pour « ajouté au panier »), sobre à côté de l'orange du prix. */
 .product-card__tag--delivery {
   color: var(--color-success);
 }
 
 .product-card__shop {
-  font-size: 11px;
-  font-weight: 500;
-  /* 400 plutôt que 500 : reste clairement secondaire (nom de boutique, pas
-     l'info principale) tout en restant lisible sans plisser les yeux. */
-  color: var(--color-neutral-400);
-  /* auto plutôt qu'une valeur fixe : pousse le nom de boutique en bas de
-     .product-card__body (flex column, flex: 1), pour aligner ce repère sur
-     toute une rangée même quand les noms de produit font 1 ou 2 lignes. */
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  /* Poussé en bas de la carte (flex column) et séparé du reste par un filet :
+     repère aligné sur toute la rangée. */
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-neutral-400);
+  min-width: 0;
+}
+
+.product-card__shop span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.product-card__shop svg {
+  flex: none;
 }
 </style>
