@@ -38,6 +38,9 @@ class PaymentMethod(StrEnum):
     # plutôt que "djomy" : le moyen réel (OM/MOMO/carte...) est choisi par
     # l'acheteur sur le portail de paiement, pas figé côté commande.
     ONLINE = "online"
+    # Solde NdjouriBank de l'acheteur (app/wallets/buyer_service.py) : débité
+    # au checkout, le paiement est confirmé immédiatement.
+    WALLET = "wallet"
 
 
 class DeliveryType(StrEnum):

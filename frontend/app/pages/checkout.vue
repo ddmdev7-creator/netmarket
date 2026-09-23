@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhCheckCircle, PhPlus, PhStar } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhCheckCircle, PhPlus, PhStar, PhWallet } from '@phosphor-icons/vue'
 import type { AddressFormValues } from '~/components/address/AddressForm.vue'
-import type { AddressRead, DeliveryQuoteRead, OrderRead } from '~/types/api'
+import type { AddressRead, BuyerWalletRead, DeliveryQuoteRead, OrderRead, PaymentMethod } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
@@ -55,8 +55,23 @@ const confirmedOrder = ref<OrderRead | null>(null)
 
 // "cash_on_delivery" par défaut — le paiement en ligne reste un choix actif,
 // pas la valeur de repli si l'acheteur ne remplit rien.
-const paymentMethod = ref<'cash_on_delivery' | 'online'>('cash_on_delivery')
+const paymentMethod = ref<PaymentMethod>('cash_on_delivery')
 const payerPhone = ref(auth.user?.phone ?? '')
+
+// Solde NdjouriBank : option proposée si le service est ouvert ou s'il reste
+// un solde à dépenser. Chargé sans bloquer la page (l'option n'apparaît
+// simplement pas si l'appel échoue).
+const buyerWallet = ref<BuyerWalletRead | null>(null)
+onMounted(async () => {
+  try {
+    buyerWallet.value = await apiFetch<BuyerWalletRead>('/ndjouribank')
+  } catch {
+    buyerWallet.value = null
+  }
+})
+const showWalletOption = computed(
+  () => !!buyerWallet.value && (buyerWallet.value.enabled || buyerWallet.value.balance > 0),
+)
 
 const cart = computed(() => cartStore.cart)
 
@@ -99,6 +114,16 @@ watch(
   },
   { immediate: true, deep: true },
 )
+
+const orderTotal = computed(() => quote.value?.total ?? cart.value?.total ?? 0)
+const walletShortfall = computed(() =>
+  buyerWallet.value ? Math.max(orderTotal.value - buyerWallet.value.balance, 0) : 0,
+)
+// Solde devenu insuffisant (frais de livraison ajoutés au devis) : on ne
+// laisse pas l'option sélectionnée.
+watch(walletShortfall, (shortfall) => {
+  if (shortfall > 0 && paymentMethod.value === 'wallet') paymentMethod.value = 'cash_on_delivery'
+})
 
 function deliveryFeeFor(vendorId: string): number | null {
   return quote.value?.vendors.find((v) => v.vendor_id === vendorId)?.delivery_fee ?? null
@@ -175,6 +200,11 @@ async function confirmOrder() {
       toast.error('Cette adresse n’a pas de point de retrait valide — modifie-la ou choisis-en une autre.')
       return
     }
+  }
+
+  if (paymentMethod.value === 'wallet' && (!quote.value || walletShortfall.value > 0)) {
+    toast.error('Solde NdjouriBank insuffisant pour cette commande.')
+    return
   }
 
   if (paymentMethod.value === 'online' && !payerPhone.value.trim()) {
@@ -350,7 +380,30 @@ function continueShopping() {
       <v-radio-group v-model="paymentMethod" hide-details class="mb-2">
         <v-radio label="Paiement à la livraison" value="cash_on_delivery" color="primary" />
         <v-radio label="Payer en ligne" value="online" color="primary" />
+        <v-radio
+          v-if="showWalletOption && buyerWallet"
+          value="wallet"
+          color="primary"
+          :disabled="walletShortfall > 0 || !quote"
+        >
+          <template #label>
+            <span class="wallet-option">
+              <span class="wallet-option__title"><PhWallet :size="16" weight="fill" /> Payer avec mon solde NdjouriBank</span>
+              <span class="wallet-option__meta">
+                Solde : {{ formatGnf(buyerWallet.balance) }}
+                <template v-if="quote && walletShortfall > 0"> · il manque {{ formatGnf(walletShortfall) }}</template>
+              </span>
+            </span>
+          </template>
+        </v-radio>
       </v-radio-group>
+      <p v-if="showWalletOption && buyerWallet?.enabled && walletShortfall > 0 && quote" class="text-meta mb-3">
+        <NuxtLink to="/ndjouribank" class="wallet-topup-link">Recharger mon solde NdjouriBank</NuxtLink>
+      </p>
+      <p v-if="paymentMethod === 'wallet' && buyerWallet" class="text-muted text-meta mb-4">
+        {{ formatGnf(orderTotal) }} seront débités tout de suite. Nouveau solde :
+        {{ formatGnf(buyerWallet.balance - orderTotal) }}.
+      </p>
       <div v-if="paymentMethod === 'online'" class="mb-4">
         <v-text-field
           v-model="payerPhone"
@@ -424,7 +477,8 @@ function continueShopping() {
         <PhCheckCircle :size="44" weight="fill" color="var(--color-success)" style="margin: 0 auto" />
         <div class="text-h6 mt-3">Commande confirmée</div>
         <div class="text-muted mt-2 text-meta">
-          Commande #{{ confirmedOrder.id.slice(0, 8).toUpperCase() }} · Paiement à la livraison<br />
+          Commande #{{ confirmedOrder.id.slice(0, 8).toUpperCase() }} ·
+          {{ PAYMENT_METHOD_LABELS[confirmedOrder.payment_method].paid }}<br />
           Vous serez contacté avant la livraison.
         </div>
         <div v-if="confirmedOrder.sub_orders.length" class="text-left mt-4">
@@ -449,6 +503,28 @@ function continueShopping() {
 </template>
 
 <style scoped>
+.wallet-option {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.wallet-option__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wallet-option__meta {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.wallet-topup-link {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
 .recap-shop-label {
   font-size: 11px;
   font-weight: 700;

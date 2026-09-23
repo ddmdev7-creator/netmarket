@@ -1,8 +1,16 @@
 /**
- * Libellés partagés des portefeuilles (components/wallet/WalletDashboard.vue)
- * et du compte principal admin (pages/admin/finance).
+ * Libellés partagés des portefeuilles (components/wallet/WalletDashboard.vue),
+ * du solde NdjouriBank acheteur (pages/ndjouribank.vue) et du compte
+ * principal admin (pages/admin/finance).
  */
-import type { LedgerAccountKind, LedgerTransactionKind, PayoutProvider, WithdrawalStatus } from '~/types/api'
+import type {
+  LedgerAccountKind,
+  LedgerTransactionKind,
+  PaymentMethod,
+  PayoutProvider,
+  TopUpStatus,
+  WithdrawalStatus,
+} from '~/types/api'
 
 export const PAYOUT_PROVIDERS: { value: PayoutProvider; title: string }[] = [
   { value: 'OM', title: 'Orange Money' },
@@ -32,6 +40,9 @@ export const TRANSACTION_KIND_LABELS: Record<LedgerTransactionKind, string> = {
   withdrawal_requested: 'Retrait demandé',
   withdrawal_reversed: 'Retrait annulé',
   withdrawal_paid: 'Retrait versé',
+  wallet_topup: 'Recharge',
+  wallet_payment: 'Paiement de commande',
+  refund_to_wallet: 'Remboursement',
 }
 
 export const ACCOUNT_KIND_LABELS: Record<LedgerAccountKind, string> = {
@@ -42,4 +53,20 @@ export const ACCOUNT_KIND_LABELS: Record<LedgerAccountKind, string> = {
   vendor: 'Boutique',
   courier: 'Livreur',
   pickup_point: 'Point de retrait',
+  buyer: 'NdjouriBank',
+}
+
+export const TOPUP_STATUS_META: Record<TopUpStatus, { label: string; color: string }> = {
+  pending: { label: 'En attente de paiement', color: 'warning' },
+  paid: { label: 'Créditée', color: 'success' },
+  failed: { label: 'Échouée', color: 'error' },
+  cancelled: { label: 'Annulée', color: 'secondary' },
+}
+
+// --- Moyens de paiement d'une commande ---------------------------------------------
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, { paid: string; short: string }> = {
+  cash_on_delivery: { paid: 'Paiement à la livraison', short: 'À la livraison' },
+  online: { paid: 'Payé en ligne', short: 'En ligne' },
+  wallet: { paid: 'Payé avec NdjouriBank', short: 'NdjouriBank' },
 }

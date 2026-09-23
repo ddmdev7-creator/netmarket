@@ -20,7 +20,7 @@ onMounted(() => {
            contenu en dessous. -->
       <div
         class="app-shell buyer-shell"
-        :class="{ 'app-shell--catalog': ['/', '/panier', '/profil', '/commandes'].includes(route.path) }"
+        :class="{ 'app-shell--catalog': ['/', '/panier', '/profil', '/commandes', '/ndjouribank'].includes(route.path) }"
       >
         <LayoutTopBar show-nav />
         <slot />

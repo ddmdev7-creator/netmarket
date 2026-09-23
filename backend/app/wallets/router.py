@@ -1,4 +1,5 @@
-"""Portefeuilles des bénéficiaires (/wallets) et compte principal admin (/admin/finance)."""
+"""Portefeuilles des bénéficiaires (/wallets), solde NdjouriBank des acheteurs
+(/ndjouribank) et compte principal admin (/admin/finance)."""
 
 import uuid
 
@@ -8,16 +9,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db, require_role
 from app.core.pagination import Page, PageParams, pagination_params
 from app.users.models import User, UserRole
-from app.wallets import service
+from app.wallets import buyer_service, service
 from app.wallets.models import WithdrawalStatus
 from app.wallets.schemas import (
     AdminFinanceOverview,
+    BuyerWalletRead,
     AdminWalletRead,
     AdminWithdrawalRead,
     EarningsSettingsRead,
     EarningsSettingsUpdate,
     LedgerTransactionRead,
     PayoutMethodUpdate,
+    TopUpCreate,
+    TopUpRead,
+    TopUpStarted,
     WalletEntryRead,
     WalletRead,
     WithdrawalCreate,
@@ -26,6 +31,7 @@ from app.wallets.schemas import (
 )
 
 router = APIRouter(prefix="/wallets", tags=["wallets"])
+buyer_router = APIRouter(prefix="/ndjouribank", tags=["ndjouribank"])
 admin_router = APIRouter(
     prefix="/admin/finance", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))]
 )
@@ -83,6 +89,50 @@ async def cancel_my_withdrawal(
     withdrawal_id: uuid.UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> WithdrawalRead:
     return await service.cancel_my_withdrawal(db, current_user, withdrawal_id)
+
+
+# --- NdjouriBank (acheteurs) ------------------------------------------------------
+
+
+@buyer_router.get("", response_model=BuyerWalletRead)
+async def get_my_buyer_wallet(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> BuyerWalletRead:
+    return await buyer_service.get_my_wallet(db, current_user)
+
+
+@buyer_router.get("/entries", response_model=Page[WalletEntryRead])
+async def list_my_buyer_entries(
+    params: PageParams = Depends(pagination_params),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Page[WalletEntryRead]:
+    items, total = await buyer_service.list_my_entries(db, current_user, params)
+    return Page.create(items=items, total=total, params=params)
+
+
+@buyer_router.get("/topups", response_model=list[TopUpRead])
+async def list_my_topups(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> list[TopUpRead]:
+    return await buyer_service.list_my_topups(db, current_user)
+
+
+@buyer_router.post("/topups", response_model=TopUpStarted, status_code=201)
+async def create_topup(
+    payload: TopUpCreate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> TopUpStarted:
+    """Démarre une recharge : renvoie l'URL du portail Djomy où envoyer l'acheteur."""
+    topup, redirect_url = await buyer_service.create_topup(db, current_user, payload.amount, payload.payer_phone)
+    return TopUpStarted(topup=TopUpRead.model_validate(topup), redirect_url=redirect_url)
+
+
+@buyer_router.post("/topups/{topup_id}/sync", response_model=TopUpRead)
+async def sync_topup(
+    topup_id: uuid.UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> TopUpRead:
+    """Au retour du portail Djomy : relit le statut si le webhook n'est pas encore arrivé."""
+    return await buyer_service.sync_topup(db, current_user, topup_id)
 
 
 # --- Admin ----------------------------------------------------------------------

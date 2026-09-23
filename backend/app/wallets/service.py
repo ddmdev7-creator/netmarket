@@ -15,7 +15,9 @@ fonction ne commit, sauf celles appelées directement par un routeur
 transaction de l'appelant.
 
 Les commandes payées à la livraison (espèces) restent hors du grand livre
-pour l'instant (phase 4 du chantier).
+pour l'instant (phase 4 du chantier). Le solde NdjouriBank des acheteurs
+(recharges, paiement avec le solde, remboursements) est dans
+buyer_service.py et s'appuie sur les mêmes écritures.
 """
 
 import logging
@@ -35,6 +37,7 @@ from app.payments import repository as payments_repository
 from app.payments.models import PaymentStatus
 from app.pickup_point_managers import repository as managers_repository
 from app.pickup_points import repository as pickup_points_repository
+from app.users import repository as users_repository
 from app.users.models import User
 from app.vendors import repository as vendors_repository
 from app.wallets import repository
@@ -81,6 +84,9 @@ def _short(order_id: uuid.UUID) -> str:
 
 
 Line = tuple[LedgerAccount, int, datetime | None]
+
+# Moyens de paiement dont l'argent passe par le séquestre du grand livre.
+SEQUESTERED_METHODS = (PaymentMethod.ONLINE, PaymentMethod.WALLET)
 
 
 async def _post(
@@ -152,10 +158,11 @@ async def _post_capture(db: AsyncSession, order: Order) -> None:
 
 
 async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) -> None:
-    """Sous-commande livrée et payée en ligne : le séquestre (montant +
-    frais de livraison) est réparti. Les gains des bénéficiaires ne sont
-    retirables qu'après le délai de sécurité réglé par l'admin."""
-    if order.payment_method != PaymentMethod.ONLINE or sub_order.status != OrderStatus.DELIVERED:
+    """Sous-commande livrée et payée en ligne ou avec le solde NdjouriBank :
+    le séquestre (montant + frais de livraison) est réparti. Les gains des
+    bénéficiaires ne sont retirables qu'après le délai de sécurité réglé par
+    l'admin."""
+    if order.payment_method not in SEQUESTERED_METHODS or sub_order.status != OrderStatus.DELIVERED:
         return
     if await repository.transaction_exists(db, f"settle:{sub_order.id}"):
         return
@@ -164,8 +171,11 @@ async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) 
         # Paiement pas (encore) confirmé : la répartition se fera à la
         # capture (record_payment_captured).
         return
-    # Paiement confirmé avant la mise en place du grand livre : on rattrape la capture.
-    await _post_capture(db, order)
+    if order.payment_method == PaymentMethod.ONLINE:
+        # Paiement confirmé avant la mise en place du grand livre : on rattrape
+        # la capture. (Payé avec le solde : le séquestre a été alimenté au
+        # checkout, voir buyer_service.pay_order.)
+        await _post_capture(db, order)
 
     settings_row = await payments_repository.get_settings(db)
     escrow = await _system(db, AccountKind.ORDER_ESCROW)
@@ -256,6 +266,11 @@ async def _owner_label(db: AsyncSession, account: LedgerAccount) -> str:
     if account.kind == AccountKind.COURIER:
         courier = await couriers_repository.get_by_id(db, account.owner_id)
         return (courier.full_name or courier.phone) if courier else "Livreur supprimé"
+    if account.kind == AccountKind.BUYER:
+        buyer = await users_repository.get_by_id(db, account.owner_id)
+        if buyer is None:
+            return "Acheteur supprimé"
+        return " ".join(filter(None, [buyer.first_name, buyer.last_name])).strip() or buyer.phone
     point = await pickup_points_repository.get_by_id(db, account.owner_id)
     return point.name if point else "Point de retrait supprimé"
 
@@ -569,13 +584,15 @@ async def apply_withdrawal_payout_event(
 async def admin_overview(db: AsyncSession) -> AdminFinanceOverview:
     system = {kind: await _system(db, kind) for kind in SYSTEM_LABELS}
     beneficiaries = await repository.list_accounts(db, BENEFICIARY_KINDS)
-    balances = await _balances(db, [*system.values(), *beneficiaries])
+    buyers = await repository.list_accounts(db, (AccountKind.BUYER,))
+    balances = await _balances(db, [*system.values(), *beneficiaries, *buyers])
 
     def bal(kind: AccountKind) -> int:
         return balances[system[kind].id].total
 
     ben_available = sum(balances[a.id].available for a in beneficiaries)
     ben_total = sum(balances[a.id].total for a in beneficiaries)
+    buyers_total = sum(balances[a.id].total for a in buyers)
     treasury_moves = await repository.sum_by_transaction_kind(db, system[AccountKind.DJOMY_TREASURY].id)
     stats = await repository.withdrawal_stats(db)
     pending = stats.get(WithdrawalStatus.PENDING, (0, 0))
@@ -596,8 +613,11 @@ async def admin_overview(db: AsyncSession) -> AdminFinanceOverview:
         beneficiaries_total=ben_total,
         withdrawals_reserved=reserved,
         platform_revenue=revenue,
-        is_balanced=treasury == escrow + ben_total + reserved + revenue,
+        buyer_wallets_total=buyers_total,
+        buyer_wallets_count=sum(1 for a in buyers if balances[a.id].total),
+        is_balanced=treasury == escrow + ben_total + reserved + revenue + buyers_total,
         total_captured=treasury_moves.get(TransactionKind.PAYMENT_CAPTURED.value, 0),
+        total_topped_up=treasury_moves.get(TransactionKind.WALLET_TOPUP.value, 0),
         total_refunded=-treasury_moves.get(TransactionKind.REFUND_COMPLETED.value, 0),
         total_paid_out=-treasury_moves.get(TransactionKind.WITHDRAWAL_PAID.value, 0),
         withdrawals_pending_count=pending[0],
@@ -608,7 +628,7 @@ async def admin_overview(db: AsyncSession) -> AdminFinanceOverview:
 
 
 async def admin_list_wallets(db: AsyncSession) -> list[AdminWalletRead]:
-    accounts = await repository.list_accounts(db, BENEFICIARY_KINDS)
+    accounts = await repository.list_accounts(db, (*BENEFICIARY_KINDS, AccountKind.BUYER))
     balances = await _balances(db, accounts)
     in_progress = await _in_progress_by_account(db, {a.id for a in accounts})
     return [
@@ -659,7 +679,8 @@ async def get_earnings_settings(db: AsyncSession):
 
 async def update_earnings_settings(db: AsyncSession, data: EarningsSettingsUpdate):
     settings_row = await payments_repository.get_settings(db)
-    for field, value in data.model_dump().items():
+    # Champs NdjouriBank optionnels : absents = inchangés.
+    for field, value in data.model_dump(exclude_none=True).items():
         setattr(settings_row, field, value)
     await db.commit()
     return settings_row

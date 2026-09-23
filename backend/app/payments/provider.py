@@ -51,9 +51,19 @@ class DjomyProvider(PaymentProvider):
         return PaymentStatus.PENDING, transaction_id, redirect_url
 
 
+class WalletProvider(PaymentProvider):
+    """Solde NdjouriBank : le débit est écrit au grand livre par
+    service.create_payment_for_order (buyer_service.pay_order), dans la même
+    transaction que la commande — le paiement est donc acquis d'emblée."""
+
+    async def initiate(self, order: Order, *, payer_phone: str) -> tuple[PaymentStatus, str | None, str | None]:
+        return PaymentStatus.PAID, None, None
+
+
 _PROVIDERS: dict[PaymentMethod, PaymentProvider] = {
     PaymentMethod.CASH_ON_DELIVERY: CashOnDeliveryProvider(),
     PaymentMethod.ONLINE: DjomyProvider(),
+    PaymentMethod.WALLET: WalletProvider(),
 }
 
 

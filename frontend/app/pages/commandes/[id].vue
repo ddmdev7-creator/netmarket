@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhChatCircle, PhCheckCircle, PhImage, PhStar } from '@phosphor-icons/vue'
-import type { OrderItemRead, OrderRead, ReviewRead } from '~/types/api'
+import { PhArrowLeft, PhChatCircle, PhCheckCircle, PhImage, PhStar, PhWallet } from '@phosphor-icons/vue'
+import type { BuyerWalletRead, OrderItemRead, OrderRead, ReviewRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
@@ -47,14 +47,42 @@ const cancelling = ref(false)
 
 const canCancel = computed(() => order.value?.status === 'pending')
 
-const paymentLabels: Record<string, string> = { cash_on_delivery: 'Paiement à la livraison', online: 'Payé en ligne' }
+
+// Annulation : confirmée dans un dialogue qui, pour une commande déjà
+// payée, dit où revient l'argent — et, pour un paiement en ligne, laisse
+// choisir le solde NdjouriBank (immédiat) plutôt que le mobile money.
+const cancelOpen = ref(false)
+const refundTo = ref<'original' | 'wallet'>('wallet')
+const walletEnabled = ref(false)
+const isPaid = computed(() => order.value?.payment_status === 'paid')
+const canChooseWallet = computed(() => isPaid.value && order.value?.payment_method === 'online' && walletEnabled.value)
+
+async function openCancel() {
+  cancelOpen.value = true
+  if (isPaid.value && order.value?.payment_method === 'online') {
+    try {
+      walletEnabled.value = (await apiFetch<BuyerWalletRead>('/ndjouribank')).enabled
+    } catch {
+      walletEnabled.value = false
+    }
+    refundTo.value = walletEnabled.value ? 'wallet' : 'original'
+  }
+}
 
 async function cancelOrder() {
   if (!order.value) return
   cancelling.value = true
   try {
-    order.value = await apiFetch<OrderRead>(`/orders/${orderId}/cancel`, { method: 'POST' })
-    toast.success('Commande annulée.')
+    order.value = await apiFetch<OrderRead>(`/orders/${orderId}/cancel`, {
+      method: 'POST',
+      body: { refund_to: canChooseWallet.value ? refundTo.value : 'original' },
+    })
+    cancelOpen.value = false
+    toast.success(
+      order.value.wallet_refunded_amount
+        ? `Commande annulée — ${formatGnf(order.value.wallet_refunded_amount)} recrédités sur ton solde NdjouriBank.`
+        : 'Commande annulée.',
+    )
   } catch (e) {
     toast.error(apiErrorMessage(e, "Impossible d'annuler cette commande."))
   } finally {
@@ -261,9 +289,14 @@ function ratePickupPoint(pointId: string) {
 
       <h3 class="text-subtitle-2 text-muted mb-1">Paiement</h3>
       <div class="mb-4">
-        <p class="mb-0 text-meta">{{ paymentLabels[order.payment_method] }}</p>
+        <p class="mb-0 text-meta">{{ PAYMENT_METHOD_LABELS[order.payment_method].paid }}</p>
         <p v-if="order.payment_status === 'refund_pending'" class="mb-0 text-meta refund-note">
           Remboursement en cours{{ order.refund_delay_hours != null ? ` — estimé sous ${order.refund_delay_hours}h` : '' }}.
+        </p>
+        <p v-if="order.wallet_refunded_amount > 0" class="mb-0 text-meta refund-note refund-note--done">
+          <PhWallet :size="14" weight="fill" class="mr-1" />
+          {{ formatGnf(order.wallet_refunded_amount) }} remboursés sur ton
+          <NuxtLink to="/ndjouribank" class="refund-link">solde NdjouriBank</NuxtLink>.
         </p>
         <p v-else-if="order.payment_status === 'refunded'" class="mb-0 text-meta refund-note refund-note--done">
           Remboursement effectué.
@@ -278,9 +311,47 @@ function ratePickupPoint(pointId: string) {
         <span class="amount amount--total">{{ formatGnf(order.total) }}</span>
       </div>
 
-      <v-btn v-if="canCancel" variant="outlined" color="error" block class="mt-6" :loading="cancelling" @click="cancelOrder">
+      <v-btn v-if="canCancel" variant="outlined" color="error" block class="mt-6" :loading="cancelling" @click="openCancel">
         Annuler la commande
       </v-btn>
+
+      <v-dialog v-model="cancelOpen" max-width="420">
+        <v-card class="pa-5">
+          <h2 class="cancel-title">Annuler cette commande ?</h2>
+          <template v-if="canChooseWallet">
+            <p class="text-meta mb-2">Où veux-tu récupérer tes {{ formatGnf(order.total) }} ?</p>
+            <v-radio-group v-model="refundTo" hide-details class="mb-2">
+              <v-radio value="wallet" color="primary">
+                <template #label>
+                  <span class="refund-choice">
+                    <strong>Sur mon solde NdjouriBank</strong>
+                    <span class="text-muted text-fine">Immédiat, utilisable pour tes prochains achats</span>
+                  </span>
+                </template>
+              </v-radio>
+              <v-radio value="original" color="primary">
+                <template #label>
+                  <span class="refund-choice">
+                    <strong>Sur le compte qui a payé</strong>
+                    <span class="text-muted text-fine">Versement mobile money, sous quelques jours</span>
+                  </span>
+                </template>
+              </v-radio>
+            </v-radio-group>
+          </template>
+          <p v-else-if="isPaid && order.payment_method === 'wallet'" class="text-meta mb-2">
+            {{ formatGnf(order.total) }} seront recrédités tout de suite sur ton solde NdjouriBank.
+          </p>
+          <p v-else-if="isPaid" class="text-meta mb-2">
+            Tu seras remboursé sur le compte qui a payé (mobile money), sous quelques jours.
+          </p>
+          <p v-else class="text-meta mb-2">Les vendeurs seront prévenus et les articles remis en stock.</p>
+          <div class="d-flex justify-end ga-2 mt-3">
+            <v-btn variant="text" @click="cancelOpen = false">Garder ma commande</v-btn>
+            <v-btn color="error" :loading="cancelling" @click="cancelOrder">Annuler la commande</v-btn>
+          </div>
+        </v-card>
+      </v-dialog>
 
       <v-btn variant="text" block class="mt-3">
         <PhChatCircle :size="18" class="mr-1" />
@@ -309,6 +380,24 @@ function ratePickupPoint(pointId: string) {
 </template>
 
 <style scoped>
+.cancel-title {
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.refund-choice {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.refund-link {
+  color: inherit;
+  font-weight: 700;
+}
+
 .item-review {
   display: flex;
   align-items: center;

@@ -46,7 +46,7 @@ const { data: overview, refresh: refreshOverview } = await useAsyncData(
 const tab = ref<'withdrawals' | 'wallets' | 'journal' | 'settings'>('withdrawals')
 
 // --- Composition de la trésorerie ------------------------------------------------
-// Barre empilée unique (part d'un tout) : 4 catégories, couleurs catégorielles
+// Barre empilée unique (part d'un tout) : 5 catégories, couleurs catégorielles
 // validées (clair/sombre) avec libellés + montants toujours visibles.
 
 const segments = computed(() => {
@@ -57,6 +57,7 @@ const segments = computed(() => {
     { key: 'beneficiaries', label: 'Dû aux vendeurs, livreurs et points', value: o.beneficiaries_total, color: 'var(--fin-2)' },
     { key: 'reserved', label: 'Retraits en cours', value: o.withdrawals_reserved, color: 'var(--fin-3)' },
     { key: 'revenue', label: 'Revenus Ndjouri', value: o.platform_revenue, color: 'var(--fin-4)' },
+    { key: 'buyers', label: 'Soldes NdjouriBank des acheteurs', value: o.buyer_wallets_total, color: 'var(--fin-5)' },
   ]
 })
 const positiveTotal = computed(() => segments.value.reduce((sum, s) => sum + Math.max(0, s.value), 0))
@@ -112,6 +113,7 @@ async function act(withdrawal: AdminWithdrawalRead, action: 'approve' | 'reject'
 
 const wallets = ref<AdminWalletRead[]>([])
 const walletSearch = ref('')
+const walletScope = ref<'beneficiaries' | 'buyers'>('beneficiaries')
 const journal = ref<LedgerTransactionRead[]>([])
 const journalPage = ref(1)
 const journalPages = ref(1)
@@ -132,6 +134,7 @@ async function loadJournal(reset = true) {
 const visibleWallets = computed(() => {
   const term = walletSearch.value.trim().toLowerCase()
   return wallets.value
+    .filter((w) => (walletScope.value === 'buyers') === (w.kind === 'buyer'))
     .filter((w) => !term || w.owner_label.toLowerCase().includes(term))
     .sort((a, b) => b.balance.total - a.balance.total)
 })
@@ -144,6 +147,10 @@ const settings = reactive<EarningsSettings>({
   earnings_hold_days: 3,
   withdrawal_fee_percent: 0,
   min_withdrawal_amount: 10000,
+  buyer_wallet_enabled: false,
+  wallet_topup_min: 5000,
+  wallet_topup_max: 2_000_000,
+  wallet_max_balance: 5_000_000,
 })
 const savingSettings = ref(false)
 
@@ -153,7 +160,9 @@ async function loadSettings() {
 async function saveSettings() {
   savingSettings.value = true
   try {
-    const body = Object.fromEntries(Object.entries(settings).map(([k, v]) => [k, Number(v)]))
+    const body = Object.fromEntries(
+      Object.entries(settings).map(([k, v]) => [k, typeof v === 'boolean' ? v : Number(v)]),
+    )
     Object.assign(settings, await apiFetch<EarningsSettings>('/admin/finance/settings', { method: 'PUT', body }))
     toast.success('Règles enregistrées — elles s’appliquent aux prochaines livraisons et demandes de retrait.')
   } catch (e) {
@@ -228,6 +237,11 @@ function shortId(id: string) {
 
       <div class="kpis">
         <div class="kpi"><div class="kpi__label">Total encaissé</div><div class="kpi__value">{{ formatGnf(overview.total_captured) }}</div></div>
+        <div class="kpi">
+          <div class="kpi__label">Rechargé sur NdjouriBank</div>
+          <div class="kpi__value">{{ formatGnf(overview.total_topped_up) }}</div>
+          <div class="kpi__sub">{{ overview.buyer_wallets_count }} acheteur(s) avec un solde</div>
+        </div>
         <div class="kpi"><div class="kpi__label">Remboursé aux acheteurs</div><div class="kpi__value">{{ formatGnf(overview.total_refunded) }}</div></div>
         <div class="kpi"><div class="kpi__label">Versé aux bénéficiaires</div><div class="kpi__value">{{ formatGnf(overview.total_paid_out) }}</div></div>
         <div class="kpi kpi--accent">
@@ -299,8 +313,33 @@ function shortId(id: string) {
 
     <!-- Portefeuilles -->
     <section v-else-if="tab === 'wallets'">
-      <v-text-field v-model="walletSearch" placeholder="Rechercher un bénéficiaire…" density="compact" hide-details clearable class="mb-3" style="max-width: 360px" />
-      <CommonEmptyState v-if="!visibleWallets.length" message="Aucun portefeuille pour l'instant — ils apparaissent à la première livraison payée en ligne." />
+      <div class="d-flex flex-wrap align-center ga-3 mb-3">
+        <v-btn-toggle v-model="walletScope" mandatory density="compact" divided variant="outlined">
+          <v-btn value="beneficiaries" size="small">Bénéficiaires</v-btn>
+          <v-btn value="buyers" size="small">Acheteurs NdjouriBank</v-btn>
+        </v-btn-toggle>
+        <v-text-field v-model="walletSearch" placeholder="Rechercher…" density="compact" hide-details clearable style="max-width: 360px" />
+      </div>
+      <CommonEmptyState
+        v-if="!visibleWallets.length"
+        :message="walletScope === 'buyers' ? 'Aucun solde acheteur pour l\'instant.' : 'Aucun portefeuille pour l\'instant — ils apparaissent à la première livraison payée en ligne.'"
+      />
+      <div v-else-if="walletScope === 'buyers'" class="card table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Acheteur</th>
+              <th class="num">Solde</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="w in visibleWallets" :key="w.id">
+              <td class="strong">{{ w.owner_label }}</td>
+              <td class="num strong">{{ formatGnf(w.balance.total) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div v-else class="card table-wrap">
         <table class="table">
           <thead>
@@ -371,6 +410,24 @@ function shortId(id: string) {
         <v-text-field v-model="settings.withdrawal_fee_percent" label="Frais d'envoi facturés" suffix="%" type="number" step="0.1" variant="outlined" hint="À caler sur la grille Djomy — l'écart est absorbé par Ndjouri." persistent-hint />
         <v-text-field v-model="settings.min_withdrawal_amount" label="Montant minimum" suffix="GNF" type="number" variant="outlined" />
       </div>
+      <h2 class="settings__title mt-4">NdjouriBank (acheteurs)</h2>
+      <p class="text-muted text-meta mb-2">
+        Solde rechargé via Djomy et dépensé sur Ndjouri uniquement, jamais retirable. Fermé, plus aucune recharge ni
+        remboursement « au choix » sur le solde — un solde existant reste utilisable pour payer.
+      </p>
+      <v-switch
+        v-model="settings.buyer_wallet_enabled"
+        color="primary"
+        inset
+        hide-details
+        :label="settings.buyer_wallet_enabled ? 'Ouvert aux acheteurs' : 'Fermé (en attente de validation de conformité)'"
+        class="mb-2"
+      />
+      <div class="settings__grid">
+        <v-text-field v-model="settings.wallet_topup_min" label="Recharge minimum" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.wallet_topup_max" label="Recharge maximum" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.wallet_max_balance" label="Plafond du solde" suffix="GNF" type="number" variant="outlined" />
+      </div>
       <v-btn color="primary" class="mt-4" :loading="savingSettings" @click="saveSettings">Enregistrer les règles</v-btn>
     </section>
 
@@ -421,6 +478,7 @@ function shortId(id: string) {
   --fin-2: #eb6834;
   --fin-3: #1baf7a;
   --fin-4: #eda100;
+  --fin-5: #e87ba4;
 }
 
 :root[data-theme='dark'] .finance {
@@ -428,6 +486,7 @@ function shortId(id: string) {
   --fin-2: #d95926;
   --fin-3: #199e70;
   --fin-4: #c98500;
+  --fin-5: #d55181;
 }
 
 .finance__head {

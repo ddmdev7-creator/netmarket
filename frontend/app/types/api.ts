@@ -18,7 +18,7 @@ export type OrderStatus =
   | 'arrived_at_pickup_point'
   | 'delivered'
   | 'cancelled'
-export type PaymentMethod = 'cash_on_delivery' | 'online'
+export type PaymentMethod = 'cash_on_delivery' | 'online' | 'wallet'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled' | 'refund_pending' | 'refunded' | 'refund_failed'
 export type DeliveryType = 'home_delivery' | 'pickup_point'
 export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled'
@@ -668,6 +668,8 @@ export interface OrderRead {
   payment_redirect_url: string | null
   /** Only set while payment_status === 'refund_pending' — admin-configured estimate. */
   refund_delay_hours: number | null
+  /** Déjà remboursé sur le solde NdjouriBank (commande ou sous-commandes annulées). */
+  wallet_refunded_amount: number
   total: number
   created_at: string
   sub_orders: SubOrderRead[]
@@ -856,7 +858,13 @@ export interface NotificationList {
 // --- Portefeuilles et compte principal (backend app/wallets) ---------------------
 
 export type WalletKind = 'vendor' | 'courier' | 'pickup_point'
-export type LedgerAccountKind = WalletKind | 'djomy_treasury' | 'order_escrow' | 'platform_revenue' | 'withdrawals_pending'
+export type LedgerAccountKind =
+  | WalletKind
+  | 'buyer'
+  | 'djomy_treasury'
+  | 'order_escrow'
+  | 'platform_revenue'
+  | 'withdrawals_pending'
 export type PayoutProvider = 'OM' | 'MOMO' | 'PAYCARD' | 'SOUTRA_MONEY' | 'KULU'
 export type LedgerTransactionKind =
   | 'payment_captured'
@@ -865,6 +873,9 @@ export type LedgerTransactionKind =
   | 'withdrawal_requested'
   | 'withdrawal_reversed'
   | 'withdrawal_paid'
+  | 'wallet_topup'
+  | 'wallet_payment'
+  | 'refund_to_wallet'
 export type WithdrawalStatus = 'pending' | 'processing' | 'paid' | 'rejected' | 'cancelled' | 'failed'
 
 export interface WalletBalance {
@@ -945,8 +956,12 @@ export interface AdminFinanceOverview {
   beneficiaries_total: number
   withdrawals_reserved: number
   platform_revenue: number
+  /** Soldes NdjouriBank des acheteurs (non retirables). */
+  buyer_wallets_total: number
+  buyer_wallets_count: number
   is_balanced: boolean
   total_captured: number
+  total_topped_up: number
   total_refunded: number
   total_paid_out: number
   withdrawals_pending_count: number
@@ -957,7 +972,7 @@ export interface AdminFinanceOverview {
 
 export interface AdminWalletRead {
   id: string
-  kind: WalletKind
+  kind: WalletKind | 'buyer'
   owner_id: string | null
   owner_label: string
   balance: WalletBalance
@@ -984,4 +999,37 @@ export interface EarningsSettings {
   earnings_hold_days: number
   withdrawal_fee_percent: number
   min_withdrawal_amount: number
+  buyer_wallet_enabled: boolean
+  wallet_topup_min: number
+  wallet_topup_max: number
+  wallet_max_balance: number
+}
+
+// --- NdjouriBank (solde acheteur, backend app/wallets/buyer_service.py) ----------
+
+export type TopUpStatus = 'pending' | 'paid' | 'failed' | 'cancelled'
+
+/** GET /ndjouribank */
+export interface BuyerWalletRead {
+  /** Recharges ouvertes (réglage admin) — un solde existant reste toujours utilisable. */
+  enabled: boolean
+  balance: number
+  topup_min: number
+  topup_max: number
+  max_balance: number
+}
+
+export interface TopUpRead {
+  id: string
+  amount: number
+  status: TopUpStatus
+  payer_phone: string
+  created_at: string
+  confirmed_at: string | null
+}
+
+/** POST /ndjouribank/topups */
+export interface TopUpStarted {
+  topup: TopUpRead
+  redirect_url: string
 }

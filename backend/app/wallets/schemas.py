@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.wallets.models import AccountKind, PayoutProvider, TransactionKind, WithdrawalStatus
+from app.wallets.models import AccountKind, PayoutProvider, TopUpStatus, TransactionKind, WithdrawalStatus
 
 
 class WalletBalance(BaseModel):
@@ -93,7 +93,7 @@ class WithdrawalReject(BaseModel):
 class AdminFinanceOverview(BaseModel):
     """Le compte principal : ce qui est chez Djomy, et à qui cela revient.
     treasury == escrow + beneficiaries_total + withdrawals_reserved + platform_revenue
-    (vrai par construction, affiché comme contrôle de cohérence)."""
+    + buyer_wallets_total (vrai par construction, affiché comme contrôle de cohérence)."""
 
     treasury: int
     escrow: int
@@ -102,9 +102,13 @@ class AdminFinanceOverview(BaseModel):
     beneficiaries_total: int
     withdrawals_reserved: int
     platform_revenue: int
+    # Soldes NdjouriBank des acheteurs (non retirables, dépensables sur Ndjouri).
+    buyer_wallets_total: int
+    buyer_wallets_count: int
     is_balanced: bool
     # Cumuls depuis le début.
     total_captured: int
+    total_topped_up: int
     total_refunded: int
     total_paid_out: int
     withdrawals_pending_count: int
@@ -150,6 +154,10 @@ class EarningsSettingsRead(BaseModel):
     earnings_hold_days: int
     withdrawal_fee_percent: float
     min_withdrawal_amount: int
+    buyer_wallet_enabled: bool
+    wallet_topup_min: int
+    wallet_topup_max: int
+    wallet_max_balance: int
 
 
 class EarningsSettingsUpdate(BaseModel):
@@ -158,3 +166,44 @@ class EarningsSettingsUpdate(BaseModel):
     earnings_hold_days: int = Field(ge=0, le=60)
     withdrawal_fee_percent: float = Field(ge=0, le=20)
     min_withdrawal_amount: int = Field(ge=1000, le=100_000_000)
+    # NdjouriBank acheteurs — optionnels (absents = inchangés).
+    buyer_wallet_enabled: bool | None = None
+    wallet_topup_min: int | None = Field(default=None, ge=100, le=100_000_000)
+    wallet_topup_max: int | None = Field(default=None, ge=100, le=100_000_000)
+    wallet_max_balance: int | None = Field(default=None, ge=100, le=1_000_000_000)
+
+
+# --- NdjouriBank (acheteurs) ------------------------------------------------------
+
+
+class BuyerWalletRead(BaseModel):
+    # Recharges et remboursements sur le solde ouverts (réglage admin). Un
+    # solde existant reste utilisable pour payer même désactivé.
+    enabled: bool
+    balance: int
+    topup_min: int
+    topup_max: int
+    max_balance: int
+
+
+class TopUpCreate(BaseModel):
+    amount: int = Field(gt=0)
+    # Numéro mobile money qui paie ; absent = téléphone du compte.
+    payer_phone: str | None = Field(default=None, max_length=20)
+
+
+class TopUpRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    amount: int
+    status: TopUpStatus
+    payer_phone: str
+    created_at: datetime
+    confirmed_at: datetime | None
+
+
+class TopUpStarted(BaseModel):
+    topup: TopUpRead
+    # Portail Djomy où envoyer le navigateur de l'acheteur.
+    redirect_url: str

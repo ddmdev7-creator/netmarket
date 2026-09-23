@@ -11,6 +11,7 @@ from app.orders.models import Order, PaymentMethod
 from app.payments import djomy_client, repository
 from app.payments.models import Payment, PaymentSettings, PaymentStatus
 from app.payments.provider import get_provider
+from app.wallets import buyer_service
 from app.wallets import service as wallets_service
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 async def create_payment_for_order(db: AsyncSession, order: Order, *, payer_phone: str) -> str | None:
     """Returns a redirect URL when the provider sends the buyer to a hosted
-    payment page (Djomy); None for cash on delivery."""
+    payment page (Djomy); None for cash on delivery or the NdjouriBank balance."""
+    if order.payment_method == PaymentMethod.WALLET:
+        # Solde insuffisant → ConflictError, avant que quoi que ce soit ne soit commité.
+        await buyer_service.pay_order(db, order)
     provider = get_provider(order.payment_method)
     status, provider_reference, redirect_url = await provider.initiate(order, payer_phone=payer_phone)
     await repository.create(

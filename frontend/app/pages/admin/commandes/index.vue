@@ -105,7 +105,7 @@ function formatDate(iso: string) {
 
         <div class="d-flex justify-space-between align-center" style="font-size: 13px">
           <span class="text-muted">
-            {{ order.payment_method === 'cash_on_delivery' ? 'Paiement à la livraison' : 'Payé en ligne' }}
+            {{ PAYMENT_METHOD_LABELS[order.payment_method].paid }}
             · {{ order.payment_status ?? '—' }}
           </span>
           <span class="order-amount">{{ formatGnf(order.total) }}</span>

@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
           <div class="card__foot">
             <span>
               <strong>{{ formatGnf(row.entry.amount + row.entry.delivery_fee) }}</strong>
-              <span class="text-muted"> · {{ row.entry.payment_method === 'cash_on_delivery' ? 'à encaisser' : 'payé en ligne' }}</span>
+              <span class="text-muted"> · {{ row.entry.payment_method === 'cash_on_delivery' ? 'à encaisser' : `payé · ${PAYMENT_METHOD_LABELS[row.entry.payment_method].short}` }}</span>
             </span>
             <span class="text-muted">
               <template v-if="row.stage === 'delivered'">Livrée à {{ formatTime(row.entry.updated_at) }}</template>

@@ -12,6 +12,7 @@ from app.core.deps import get_db, require_role
 from app.payments import djomy_client, service
 from app.payments.schemas import PaymentSettingsRead, PaymentSettingsUpdate
 from app.users.models import UserRole
+from app.wallets import buyer_service
 from app.wallets import service as wallets_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -75,6 +76,10 @@ async def djomy_webhook(request: Request, db: AsyncSession = Depends(get_db)) ->
             order_id = None
     if order_id is None:
         logger.warning("Webhook Djomy sans référence de commande exploitable : %r", reference)
+        return Response(status_code=200)
+
+    # La référence est soit une recharge NdjouriBank, soit une commande.
+    if await buyer_service.apply_topup_event(db, topup_id=order_id, event_type=event_type):
         return Response(status_code=200)
 
     await service.apply_djomy_event(db, event_type=event_type, order_id=order_id)

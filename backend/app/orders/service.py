@@ -24,6 +24,7 @@ from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder
 from app.orders.schemas import (
+    OrderCancelRequest,
     CheckoutRequest,
     CourierAssignRequest,
     DeliveryQuoteRead,
@@ -34,6 +35,7 @@ from app.orders.schemas import (
 )
 from app.payments import repository as payments_repository
 from app.payments import service as payments_service
+from app.wallets import buyer_service
 from app.wallets import service as wallets_service
 from app.payments.models import PaymentStatus
 from app.pickup_point_managers import repository as pickup_point_manager_repository
@@ -222,6 +224,10 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
         for vendor_id, items in by_vendor.items()
     }
     grand_total = sum(_vendor_amount(items) for items in by_vendor.values()) + sum(delivery_fees.values())
+    if data.payment_method == PaymentMethod.WALLET:
+        # Refus avant toute écriture ; le débit lui-même (compte verrouillé)
+        # revérifie le solde, voir buyer_service.pay_order.
+        await buyer_service.ensure_can_pay(db, user, grand_total)
 
     # Un point de retrait n'a pas de destinataire personnel (voir
     # AddressForm.vue côté frontend, qui vide déjà ces champs) — on l'impose
@@ -318,6 +324,7 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
     if payment is not None and payment.status == PaymentStatus.REFUND_PENDING:
         refund_settings = await payments_service.get_refund_settings(db)
         order.refund_delay_hours = refund_settings.refund_delay_hours
+    order.wallet_refunded_amount = (await buyer_service.refunded_amounts(db, [order.id])).get(order.id, 0)
     await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
     for sub_order in order.sub_orders:
         await _attach_product_images(db, sub_order)
@@ -341,8 +348,10 @@ async def sync_payment(db: AsyncSession, user: User, order_id: uuid.UUID) -> Ord
 async def list_my_orders(db: AsyncSession, user: User) -> list[Order]:
     orders = await repository.list_orders_for_user(db, user.id)
     status_map = await payments_repository.get_status_map(db, [order.id for order in orders])
+    refunded = await buyer_service.refunded_amounts(db, [order.id for order in orders])
     for order in orders:
         _attach_payment_status(order, status_map.get(order.id))
+        order.wallet_refunded_amount = refunded.get(order.id, 0)
         await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
         for sub_order in order.sub_orders:
             await _attach_product_images(db, sub_order)
@@ -350,7 +359,10 @@ async def list_my_orders(db: AsyncSession, user: User) -> list[Order]:
     return [_attach_delivery_tokens(order) for order in orders]
 
 
-async def cancel_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
+async def cancel_order(
+    db: AsyncSession, user: User, order_id: uuid.UUID, data: OrderCancelRequest | None = None
+) -> Order:
+    data = data or OrderCancelRequest()
     order = await get_order(db, user, order_id)
 
     if any(sub_order.status != OrderStatus.PENDING for sub_order in order.sub_orders):
@@ -366,7 +378,17 @@ async def cancel_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Ord
     # plutôt que d'annuler sans que l'argent ne revienne.
     payment = await payments_repository.get_by_order_id(db, order.id)
     refund_initiated = False
-    if payment is not None and payment.method == PaymentMethod.ONLINE and payment.status == PaymentStatus.PAID:
+    is_paid = payment is not None and payment.status == PaymentStatus.PAID
+    to_wallet = is_paid and (
+        payment.method == PaymentMethod.WALLET
+        or (payment.method == PaymentMethod.ONLINE and data.refund_to == "wallet" and await buyer_service.is_enabled(db))
+    )
+    if to_wallet:
+        # Remboursement immédiat sur le solde NdjouriBank (séquestre → solde).
+        await buyer_service.refund_to_wallet(db, order, order.total, reason="annulée par l'acheteur")
+        payment.status = PaymentStatus.REFUNDED
+        refund_initiated = True
+    elif is_paid and payment.method == PaymentMethod.ONLINE:
         buyer = await user_repository.get_by_id(db, order.user_id)
         beneficiary_name = " ".join(filter(None, [buyer.first_name, buyer.last_name])).strip() or "Client netmarket"
         await payments_service.initiate_refund(
@@ -682,6 +704,20 @@ async def update_sub_order_status(
 
     order = await repository.get_order_by_id(db, sub_order.order_id)
     order.status = _compute_order_status(order.sub_orders)
+    if data.status == OrderStatus.CANCELLED and order.payment_method == PaymentMethod.WALLET:
+        # Payé avec le solde NdjouriBank : la part de cette boutique revient
+        # tout de suite sur le solde de l'acheteur.
+        payment = await payments_repository.get_by_order_id(db, order.id)
+        if payment is not None and payment.status == PaymentStatus.PAID:
+            await buyer_service.refund_to_wallet(
+                db,
+                order,
+                sub_order.amount + sub_order.delivery_fee,
+                reason=f"{sub_order.shop_name} a annulé",
+                sub_order_id=sub_order.id,
+            )
+            if order.status == OrderStatus.CANCELLED:
+                payment.status = PaymentStatus.REFUNDED
     if data.status == OrderStatus.DELIVERED:
         # Paiement en ligne : répartition du séquestre entre vendeur, livreur,
         # point de retrait et Ndjouri (voir app/wallets/service.py).

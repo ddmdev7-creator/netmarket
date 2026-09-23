@@ -57,6 +57,9 @@ class AccountKind(StrEnum):
     VENDOR = "vendor"
     COURIER = "courier"
     PICKUP_POINT = "pickup_point"
+    # Solde NdjouriBank d'un acheteur — owner_id = User.id. Rechargé via
+    # Djomy, dépensé sur Ndjouri uniquement, jamais retirable.
+    BUYER = "buyer"
 
 
 BENEFICIARY_KINDS = (AccountKind.VENDOR, AccountKind.COURIER, AccountKind.PICKUP_POINT)
@@ -99,6 +102,11 @@ class TransactionKind(StrEnum):
     # Djomy : la réservation revient dans le portefeuille.
     WITHDRAWAL_REVERSED = "withdrawal_reversed"
     WITHDRAWAL_PAID = "withdrawal_paid"
+    # NdjouriBank (acheteurs) : recharge Djomy confirmée, commande payée avec
+    # le solde, remboursement crédité sur le solde.
+    WALLET_TOPUP = "wallet_topup"
+    WALLET_PAYMENT = "wallet_payment"
+    REFUND_TO_WALLET = "refund_to_wallet"
 
 
 class LedgerTransaction(Base, UUIDPrimaryKeyMixin):
@@ -173,3 +181,29 @@ class Withdrawal(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     djomy_total_amount: Mapped[int | None] = mapped_column(Integer, nullable=True)
     admin_note: Mapped[str | None] = mapped_column(String(300), nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TopUpStatus(StrEnum):
+    PENDING = "pending"  # acheteur envoyé sur le portail Djomy
+    PAID = "paid"  # confirmé (webhook ou synchronisation) — solde crédité
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class WalletTopUp(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Recharge du solde NdjouriBank d'un acheteur via le portail Djomy.
+    Son id sert de merchantPaymentReference chez Djomy — c'est ce qui la
+    distingue d'un paiement de commande dans le webhook."""
+
+    __tablename__ = "wallet_topups"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[TopUpStatus] = mapped_column(
+        _enum(TopUpStatus, "wallet_topup_status"), default=TopUpStatus.PENDING, nullable=False
+    )
+    payer_phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -9,7 +9,7 @@ touching the orders module — see provider.py.
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -86,3 +86,13 @@ class PaymentSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Frais estimés à la charge du bénéficiaire, déduits du montant retiré.
     withdrawal_fee_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     min_withdrawal_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=10000)
+
+    # --- NdjouriBank acheteurs (voir app/wallets/buyer_service.py) ---
+    # Désactivé tant que la conformité (BCRG / Djomy) n'est pas validée :
+    # plus de recharge ni de remboursement sur le solde, mais un solde
+    # existant reste utilisable pour payer (l'argent n'est jamais bloqué).
+    buyer_wallet_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    wallet_topup_min: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
+    wallet_topup_max: Mapped[int] = mapped_column(Integer, nullable=False, default=2_000_000)
+    # Plafond du solde d'un acheteur (monnaie électronique : limite le risque).
+    wallet_max_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=5_000_000)

@@ -11,8 +11,9 @@ import {
   PhQuestion,
   PhSignOut,
   PhStorefront,
+  PhWallet,
 } from '@phosphor-icons/vue'
-import type { CourierDetailRead } from '~/types/api'
+import type { BuyerWalletRead, CourierDetailRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -49,6 +50,16 @@ if (auth.user?.role === 'courier') {
       // Pas grave — l'avatar retombe sur les initiales.
     })
 }
+// Entrée NdjouriBank : visible si le service est ouvert ou s'il reste un
+// solde à dépenser. Chargée sans bloquer la page.
+const buyerWallet = ref<BuyerWalletRead | null>(null)
+apiFetch<BuyerWalletRead>('/ndjouribank')
+  .then((w) => {
+    buyerWallet.value = w
+  })
+  .catch(() => {})
+const showWallet = computed(() => !!buyerWallet.value && (buyerWallet.value.enabled || buyerWallet.value.balance > 0))
+
 onBeforeUnmount(() => {
   if (courierPhotoUrl.value) URL.revokeObjectURL(courierPhotoUrl.value)
 })
@@ -125,6 +136,13 @@ async function logout() {
       <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
     </NuxtLink>
 
+    <NuxtLink v-if="showWallet && buyerWallet" to="/ndjouribank" class="list-item">
+      <PhWallet :size="18" color="var(--color-neutral-400)" />
+      <span>NdjouriBank</span>
+      <span class="ml-auto text-meta wallet-balance">{{ formatGnf(buyerWallet.balance) }}</span>
+      <PhCaretRight :size="16" color="var(--color-neutral-600)" />
+    </NuxtLink>
+
     <NuxtLink v-if="auth.user?.role === 'vendor'" to="/vendeur" class="list-item">
       <PhStorefront :size="18" color="var(--color-neutral-400)" />
       <span>Mon espace vendeur</span>
@@ -186,6 +204,12 @@ async function logout() {
 </template>
 
 <style scoped>
+.wallet-balance {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-neutral-200);
+}
+
 .avatar {
   width: 56px;
   height: 56px;

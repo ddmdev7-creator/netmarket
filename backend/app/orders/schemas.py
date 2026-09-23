@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,6 +61,13 @@ class CheckoutRequest(DeliveryQuoteRequest):
     # service.checkout_cart) — le payeur mobile money n'est pas forcément
     # l'acheteur lui-même, d'où ce champ séparé plutôt que réutiliser User.phone.
     payer_phone: str | None = Field(default=None, max_length=20)
+
+
+class OrderCancelRequest(BaseModel):
+    # Paiement en ligne : "wallet" rembourse tout de suite sur le solde
+    # NdjouriBank (si ouvert) au lieu d'un versement Djomy vers le payeur.
+    # Payé avec le solde : toujours remboursé sur le solde.
+    refund_to: Literal["original", "wallet"] = "original"
 
 
 class SubOrderStatusUpdate(BaseModel):
@@ -262,6 +270,9 @@ class OrderRead(BaseModel):
     # (réglage admin, voir app/payments/router.py::admin_router) affiché à
     # l'acheteur après une annulation avec remboursement en cours.
     refund_delay_hours: int | None = None
+    # Montant déjà remboursé sur le solde NdjouriBank de l'acheteur
+    # (commande ou sous-commandes annulées).
+    wallet_refunded_amount: int = 0
     total: int
     created_at: datetime
     sub_orders: list[SubOrderRead]

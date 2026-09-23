@@ -82,7 +82,7 @@ const zoomed = ref<OrderItemRead | null>(null)
         <div>
           <div class="text-muted text-fine">Paiement</div>
           <div style="font-weight: 600">
-            {{ order.payment_method === 'cash_on_delivery' ? 'À la livraison' : 'En ligne' }}
+            {{ PAYMENT_METHOD_LABELS[order.payment_method].short }}
             · {{ order.payment_status ?? '—' }}
           </div>
         </div>

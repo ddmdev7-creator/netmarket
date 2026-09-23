@@ -15,6 +15,8 @@ from app.wallets.models import (
     LedgerAccount,
     LedgerEntry,
     LedgerTransaction,
+    TransactionKind,
+    WalletTopUp,
     Withdrawal,
     WithdrawalStatus,
 )
@@ -162,3 +164,44 @@ async def withdrawal_stats(db: AsyncSession) -> dict[WithdrawalStatus, tuple[int
         Withdrawal.status
     )
     return {status: (int(count), int(total)) for status, count, total in (await db.execute(stmt)).all()}
+
+
+# --- NdjouriBank (acheteurs) ------------------------------------------------------
+
+
+def add_topup(db: AsyncSession, topup: WalletTopUp) -> None:
+    db.add(topup)
+
+
+async def get_topup(db: AsyncSession, topup_id: uuid.UUID, *, for_update: bool = False) -> WalletTopUp | None:
+    stmt = select(WalletTopUp).where(WalletTopUp.id == topup_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def list_topups_for_user(db: AsyncSession, user_id: uuid.UUID, limit: int = 20) -> list[WalletTopUp]:
+    stmt = (
+        select(WalletTopUp)
+        .where(WalletTopUp.user_id == user_id)
+        .order_by(WalletTopUp.created_at.desc())
+        .limit(limit)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def refunded_to_wallet(db: AsyncSession, order_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """Montant remboursé sur le solde NdjouriBank, par commande."""
+    if not order_ids:
+        return {}
+    stmt = (
+        select(LedgerTransaction.order_id, func.coalesce(func.sum(LedgerEntry.amount), 0))
+        .join(LedgerEntry, LedgerEntry.transaction_id == LedgerTransaction.id)
+        .where(
+            LedgerTransaction.kind == TransactionKind.REFUND_TO_WALLET,
+            LedgerTransaction.order_id.in_(order_ids),
+            LedgerEntry.amount > 0,
+        )
+        .group_by(LedgerTransaction.order_id)
+    )
+    return {order_id: int(total) for order_id, total in (await db.execute(stmt)).all()}

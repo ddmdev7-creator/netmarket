@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db, get_pickup_point_manager, require_role
 from app.orders import service
 from app.orders.schemas import (
+    OrderCancelRequest,
     CheckoutRequest,
     CourierAssignRequest,
     CourierSubOrderRead,
@@ -193,10 +194,11 @@ async def get_order(
 @router.post("/{order_id}/cancel", response_model=OrderRead)
 async def cancel_order(
     order_id: uuid.UUID,
+    payload: OrderCancelRequest | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OrderRead:
-    return await service.cancel_order(db, current_user, order_id)
+    return await service.cancel_order(db, current_user, order_id, payload or OrderCancelRequest())
 
 
 @router.post("/{order_id}/payment/sync", response_model=OrderRead)
