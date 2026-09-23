@@ -2,10 +2,10 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.couriers.models import Courier, CourierStatus, VehicleType
+from app.couriers.models import Courier, CourierReview, CourierStatus, VehicleType
 from app.users.models import User
 
 
@@ -91,3 +91,43 @@ async def list_online_candidates(db: AsyncSession, vehicle_type: VehicleType | N
         stmt = stmt.where(Courier.vehicle_type == vehicle_type)
     rows = (await db.execute(stmt)).all()
     return [_attach_user_fields(courier, user) for courier, user in rows]
+
+
+async def get_review_by_courier_and_user(
+    db: AsyncSession, courier_id: uuid.UUID, user_id: uuid.UUID
+) -> CourierReview | None:
+    result = await db.execute(
+        select(CourierReview).where(CourierReview.courier_id == courier_id, CourierReview.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def create_review(
+    db: AsyncSession, *, courier_id: uuid.UUID, user_id: uuid.UUID, rating: int, comment: str | None
+) -> CourierReview:
+    review = CourierReview(courier_id=courier_id, user_id=user_id, rating=rating, comment=comment)
+    db.add(review)
+    await db.flush()
+    return review
+
+
+async def get_rating_summary(db: AsyncSession, courier_id: uuid.UUID) -> tuple[float | None, int]:
+    stmt = select(func.avg(CourierReview.rating), func.count(CourierReview.id)).where(
+        CourierReview.courier_id == courier_id
+    )
+    average, count = (await db.execute(stmt)).one()
+    return (float(average) if average is not None else None, count)
+
+
+async def get_rating_summary_map(
+    db: AsyncSession, courier_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[float, int]]:
+    if not courier_ids:
+        return {}
+    stmt = (
+        select(CourierReview.courier_id, func.avg(CourierReview.rating), func.count(CourierReview.id))
+        .where(CourierReview.courier_id.in_(courier_ids))
+        .group_by(CourierReview.courier_id)
+    )
+    rows = (await db.execute(stmt)).all()
+    return {courier_id: (float(average), count) for courier_id, average, count in rows}

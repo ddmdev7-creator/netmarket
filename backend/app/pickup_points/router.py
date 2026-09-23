@@ -7,12 +7,18 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Message
-from app.core.deps import get_db, require_role
+from app.core.deps import get_current_user, get_db, require_role
 from app.pickup_point_managers import service as pickup_point_managers_service
 from app.pickup_point_managers.schemas import PickupPointManagerRead
 from app.pickup_points import service
-from app.pickup_points.schemas import PickupPointCreate, PickupPointRead, PickupPointUpdate
-from app.users.models import UserRole
+from app.pickup_points.schemas import (
+    PickupPointCreate,
+    PickupPointRead,
+    PickupPointReviewCreate,
+    PickupPointReviewRead,
+    PickupPointUpdate,
+)
+from app.users.models import User, UserRole
 
 router = APIRouter(prefix="/pickup-points", tags=["pickup-points"])
 admin_router = APIRouter(
@@ -23,6 +29,16 @@ admin_router = APIRouter(
 @router.get("", response_model=list[PickupPointRead])
 async def list_pickup_points(db: AsyncSession = Depends(get_db)) -> list[PickupPointRead]:
     return await service.list_public_points(db)
+
+
+@router.post("/{point_id}/reviews", response_model=PickupPointReviewRead, status_code=status.HTTP_201_CREATED)
+async def create_pickup_point_review(
+    point_id: uuid.UUID,
+    payload: PickupPointReviewCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PickupPointReviewRead:
+    return await service.create_review(db, current_user, point_id, payload)
 
 
 @admin_router.get("", response_model=list[PickupPointRead])

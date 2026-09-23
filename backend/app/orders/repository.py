@@ -24,6 +24,37 @@ async def has_delivered_product_for_user(db: AsyncSession, user_id: uuid.UUID, p
     return (await db.execute(stmt)).first() is not None
 
 
+async def has_delivered_by_courier_for_user(db: AsyncSession, user_id: uuid.UUID, courier_id: uuid.UUID) -> bool:
+    """True once this courier actually delivered a sub-order of this user —
+    the "avis après livraison" gate for app/couriers/service.py::create_review."""
+    stmt = (
+        select(SubOrder.id)
+        .join(Order, SubOrder.order_id == Order.id)
+        .where(Order.user_id == user_id, SubOrder.courier_id == courier_id, SubOrder.status == OrderStatus.DELIVERED)
+        .limit(1)
+    )
+    return (await db.execute(stmt)).first() is not None
+
+
+async def has_used_pickup_point_for_user(db: AsyncSession, user_id: uuid.UUID, pickup_point_id: uuid.UUID) -> bool:
+    """True once this user actually received a delivered order routed through
+    this pickup point — the "avis après retrait" gate for
+    app/pickup_points/service.py::create_review. pickup_point_id lives on
+    Order (one point per order, unlike courier_id which is per sub-order),
+    so any delivered sub-order of that order is enough."""
+    stmt = (
+        select(Order.id)
+        .join(SubOrder, SubOrder.order_id == Order.id)
+        .where(
+            Order.user_id == user_id,
+            Order.pickup_point_id == pickup_point_id,
+            SubOrder.status == OrderStatus.DELIVERED,
+        )
+        .limit(1)
+    )
+    return (await db.execute(stmt)).first() is not None
+
+
 async def create_order(
     db: AsyncSession,
     *,

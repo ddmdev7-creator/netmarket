@@ -25,6 +25,8 @@ from app.couriers.schemas import (
     CourierInvitationRead,
     CourierRead,
     CourierRegister,
+    CourierReviewCreate,
+    CourierReviewRead,
 )
 from app.uploads.schemas import UploadedImages
 from app.users.models import User, UserRole
@@ -152,6 +154,16 @@ async def get_courier_document(
 @router.get("", response_model=list[CourierRead])
 async def list_couriers(db: AsyncSession = Depends(get_db)) -> list[CourierRead]:
     return await service.list_public_couriers(db)
+
+
+@router.post("/{courier_id}/reviews", response_model=CourierReviewRead, status_code=status.HTTP_201_CREATED)
+async def create_courier_review(
+    courier_id: uuid.UUID,
+    payload: CourierReviewCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CourierReviewRead:
+    return await service.create_review(db, current_user, courier_id, payload)
 
 
 @admin_router.post("", response_model=CourierInvitationRead, status_code=status.HTTP_201_CREATED)

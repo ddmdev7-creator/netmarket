@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhChatCircle, PhImage } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhChatCircle, PhCheckCircle, PhImage, PhStar } from '@phosphor-icons/vue'
 import type { OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
@@ -65,6 +65,25 @@ async function cancelOrder() {
 function shortId(id: string) {
   return `#GN-${id.slice(0, 5).toUpperCase()}`
 }
+
+// Un seul dialogue de notation partagé, ciblé sur le livreur ou le point de
+// retrait selon le bouton cliqué — même motif que reportTargetId dans
+// ProductReviewList.vue.
+const ratingDialog = ref<{ title: string; endpoint: string } | null>(null)
+const ratingOpen = computed({
+  get: () => ratingDialog.value !== null,
+  set: (v: boolean) => {
+    if (!v) ratingDialog.value = null
+  },
+})
+
+function rateCourier(courierId: string) {
+  ratingDialog.value = { title: 'Noter le livreur', endpoint: `/couriers/${courierId}/reviews` }
+}
+
+function ratePickupPoint(pointId: string) {
+  ratingDialog.value = { title: 'Noter le point de retrait', endpoint: `/pickup-points/${pointId}/reviews` }
+}
 </script>
 
 <template>
@@ -94,6 +113,35 @@ function shortId(id: string) {
           Livraison estimée :
           <strong>{{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}</strong>
         </p>
+
+        <div v-if="sub.courier_id" class="courier-block mt-2 mb-2">
+          <div class="d-flex align-center ga-2 flex-wrap">
+            <span class="text-meta">Livreur : {{ sub.courier_name ?? 'Assigné' }}</span>
+            <v-chip v-if="sub.courier_status === 'approved'" size="x-small" color="success" variant="tonal">
+              <PhCheckCircle :size="12" weight="fill" class="mr-1" />
+              Approuvé
+            </v-chip>
+          </div>
+          <div v-if="sub.courier_review_count > 0" class="d-flex align-center ga-1 mt-1">
+            <PhStar
+              v-for="n in 5"
+              :key="n"
+              :size="13"
+              :weight="n <= Math.round(sub.courier_average_rating ?? 0) ? 'fill' : 'regular'"
+              color="var(--color-accent)"
+            />
+            <span class="text-muted text-fine">({{ sub.courier_review_count }})</span>
+          </div>
+          <button
+            v-if="sub.status === 'delivered'"
+            type="button"
+            class="rate-link mt-1"
+            @click="rateCourier(sub.courier_id)"
+          >
+            Noter le livreur
+          </button>
+        </div>
+
         <div v-for="item in sub.items" :key="item.id" class="order-item-row mt-2">
           <NuxtLink :to="`/produits/${item.product_id}`" class="order-item-row__thumb">
             <img
@@ -139,6 +187,27 @@ function shortId(id: string) {
         :note="order.delivery_type === 'pickup_point' ? 'Vous récupérerez cette commande vous-même à ce point de retrait.' : null"
       />
 
+      <div v-if="order.delivery_type === 'pickup_point' && order.pickup_point_id" class="mb-4">
+        <div v-if="order.pickup_point_review_count > 0" class="d-flex align-center ga-1 mb-1">
+          <PhStar
+            v-for="n in 5"
+            :key="n"
+            :size="13"
+            :weight="n <= Math.round(order.pickup_point_average_rating ?? 0) ? 'fill' : 'regular'"
+            color="var(--color-accent)"
+          />
+          <span class="text-muted text-fine">({{ order.pickup_point_review_count }})</span>
+        </div>
+        <button
+          v-if="order.sub_orders.some((so) => so.status === 'delivered')"
+          type="button"
+          class="rate-link"
+          @click="ratePickupPoint(order.pickup_point_id)"
+        >
+          Noter le point de retrait
+        </button>
+      </div>
+
       <h3 class="text-subtitle-2 text-muted mb-1">Paiement</h3>
       <div class="mb-4">
         <p class="mb-0 text-meta">{{ paymentLabels[order.payment_method] }}</p>
@@ -167,6 +236,13 @@ function shortId(id: string) {
         Contacter le support
       </v-btn>
     </div>
+
+    <CommonRatingDialog
+      v-model="ratingOpen"
+      :title="ratingDialog?.title ?? ''"
+      :endpoint="ratingDialog?.endpoint ?? ''"
+      @submitted="refreshOrder"
+    />
   </div>
 </template>
 
@@ -235,5 +311,21 @@ function shortId(id: string) {
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.courier-block {
+  padding: 8px 10px;
+  background: var(--color-neutral-800);
+  border-radius: var(--radius-sm);
+}
+
+.rate-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-primary-300);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>

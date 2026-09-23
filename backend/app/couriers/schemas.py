@@ -1,6 +1,7 @@
 """Pydantic schemas for courier ("livreur") onboarding and admin validation."""
 
 import uuid
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -96,6 +97,12 @@ class CourierRead(BaseModel):
     # vendeur choisissant un livreur dans une liste a besoin de plus qu'un id.
     phone: str
     full_name: str | None = None
+    # Transitoires, calculés depuis courier_reviews (voir
+    # app/couriers/service.py::_attach_rating) — même motif que
+    # Product.average_rating/review_count (app/catalog/service.py). None tant
+    # qu'aucun avis, pour ne pas afficher une fausse note de 0 étoile.
+    average_rating: float | None = None
+    review_count: int = 0
 
 
 class CourierDetailRead(CourierRead):
@@ -112,3 +119,19 @@ class CourierDetailRead(CourierRead):
     admin_note: str | None
     latitude: float | None
     longitude: float | None
+
+
+class CourierReviewCreate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class CourierReviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    courier_id: uuid.UUID
+    user_id: uuid.UUID
+    rating: int
+    comment: str | None
+    created_at: datetime

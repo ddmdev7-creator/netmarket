@@ -9,7 +9,7 @@ deactivating a point later never silently changes a buyer's saved address.
 
 import uuid
 
-from sqlalchemy import Boolean, Float, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,3 +36,22 @@ class PickupPoint(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     vendor_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class PickupPointReview(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """A buyer's rating + comment on a pickup point they actually used for a
+    delivered order — same "verified use" gate as app/reviews/models.py::Review,
+    see app/orders/repository.py::has_used_pickup_point_for_user."""
+
+    __tablename__ = "pickup_point_reviews"
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_pickup_point_reviews_rating_range"),
+        UniqueConstraint("pickup_point_id", "user_id", name="uq_pickup_point_reviews_point_user"),
+    )
+
+    pickup_point_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("pickup_points.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)

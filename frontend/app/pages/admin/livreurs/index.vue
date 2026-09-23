@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhMagnifyingGlass, PhPlus, PhScales, PhUserCircle } from '@phosphor-icons/vue'
+import { PhImage, PhMagnifyingGlass, PhPlus, PhScales, PhStar, PhUserCircle } from '@phosphor-icons/vue'
 import type { CourierAdminCreate, CourierDetailRead, CourierStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -315,6 +315,16 @@ async function createCourier() {
       </div>
       <div class="text-muted mb-2" style="font-size: 12.5px">
         {{ courier.phone }} · {{ vehicleLabels[courier.vehicle_type] }}<span v-if="courier.zone"> · {{ courier.zone }}</span>
+      </div>
+      <div v-if="courier.review_count > 0" class="d-flex align-center ga-1 mb-2">
+        <PhStar
+          v-for="n in 5"
+          :key="n"
+          :size="13"
+          :weight="n <= Math.round(courier.average_rating ?? 0) ? 'fill' : 'regular'"
+          color="var(--color-accent)"
+        />
+        <span class="text-muted" style="font-size: 11px">({{ courier.review_count }})</span>
       </div>
 
       <div v-if="courier.id_document_type" class="text-muted mb-1" style="font-size: 12px">

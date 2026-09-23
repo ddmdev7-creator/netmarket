@@ -142,6 +142,17 @@ class SubOrderRead(SubOrderBase):
     """
 
     delivery_token: str | None = None
+    # courier_id est une vraie colonne (voir app/orders/models.py::SubOrder) ;
+    # le reste est attaché en lecture depuis Courier (voir
+    # app/orders/service.py::_attach_courier_info), même motif que
+    # courier_name/courier_phone sur VendorSubOrderRead ci-dessous — mais
+    # jamais le téléphone ici : un acheteur n'a pas besoin de contacter son
+    # livreur directement, contrairement au vendeur qui coordonne l'enlèvement.
+    courier_id: uuid.UUID | None = None
+    courier_name: str | None = None
+    courier_status: str | None = None
+    courier_average_rating: float | None = None
+    courier_review_count: int = 0
 
 
 class VendorSubOrderRead(SubOrderBase):
@@ -233,6 +244,13 @@ class OrderRead(BaseModel):
     recipient_name: str | None = None
     recipient_phone: str | None = None
     pickup_point_contacts: list[PickupPointContactRead] = []
+    # pickup_point_id est une vraie colonne (voir app/orders/models.py::Order) ;
+    # le nom/la note sont attachés en lecture depuis PickupPoint, même motif
+    # que pickup_point_contacts (voir app/orders/service.py::_attach_pickup_point_contacts).
+    pickup_point_id: uuid.UUID | None = None
+    pickup_point_name: str | None = None
+    pickup_point_average_rating: float | None = None
+    pickup_point_review_count: int = 0
     payment_method: PaymentMethod
     payment_status: PaymentStatus | None = None
     # Rempli uniquement sur la réponse de POST /orders/checkout quand le

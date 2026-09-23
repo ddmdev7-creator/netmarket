@@ -7,6 +7,7 @@ import {
   PhMotorcycle,
   PhPackage,
   PhPencilSimple,
+  PhCheckCircle,
   PhQuestion,
   PhSignOut,
   PhStorefront,
@@ -31,9 +32,11 @@ await useAsyncData('profil-me', () => auth.fetchMe())
 // échoue) : /couriers/{id}/documents/{key} n'est jamais public, contrairement
 // aux photos produit (voir resolveImageUrl), donc pas de simple <img src>.
 const courierPhotoUrl = ref<string | null>(null)
+const courierApproved = ref(false)
 if (auth.user?.role === 'courier') {
   apiFetch<CourierDetailRead>('/couriers/me')
     .then((courier) => {
+      courierApproved.value = courier.status === 'approved'
       if (courier.status === 'approved' && courier.face_photo_key) {
         return apiFetchBlob(`/couriers/${courier.id}/documents/${courier.face_photo_key}`)
       }
@@ -91,7 +94,13 @@ async function logout() {
         <template v-else>{{ initials }}</template>
       </div>
       <div>
-        <div class="text-body">{{ displayName }}</div>
+        <div class="d-flex align-center ga-2">
+          <span class="text-body">{{ displayName }}</span>
+          <v-chip v-if="courierApproved" size="x-small" color="success" variant="tonal">
+            <PhCheckCircle :size="12" weight="fill" class="mr-1" />
+            Livreur approuvé
+          </v-chip>
+        </div>
         <div class="text-muted text-meta">{{ auth.user?.phone }}</div>
       </div>
     </div>

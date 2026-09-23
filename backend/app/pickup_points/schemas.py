@@ -1,6 +1,7 @@
 """Pydantic schemas for admin-managed pickup points."""
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,3 +39,24 @@ class PickupPointRead(BaseModel):
     # Attaché en lecture depuis Vendor (voir app/pickup_points/repository.py),
     # None si ce point n'est pas lié à une boutique.
     vendor_shop_name: str | None = None
+    # Transitoires, calculés depuis pickup_point_reviews (voir
+    # app/pickup_points/service.py::_attach_rating) — même motif que
+    # Product.average_rating/review_count. None tant qu'aucun avis.
+    average_rating: float | None = None
+    review_count: int = 0
+
+
+class PickupPointReviewCreate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class PickupPointReviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    pickup_point_id: uuid.UUID
+    user_id: uuid.UUID
+    rating: int
+    comment: str | None
+    created_at: datetime

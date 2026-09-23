@@ -318,6 +318,7 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
     await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
     for sub_order in order.sub_orders:
         await _attach_product_images(db, sub_order)
+        await _attach_courier_info(db, sub_order)
     return _attach_delivery_tokens(order)
 
 
@@ -342,6 +343,7 @@ async def list_my_orders(db: AsyncSession, user: User) -> list[Order]:
         await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
         for sub_order in order.sub_orders:
             await _attach_product_images(db, sub_order)
+            await _attach_courier_info(db, sub_order)
     return [_attach_delivery_tokens(order) for order in orders]
 
 
@@ -409,11 +411,21 @@ def _attach_delivery_address(sub_order: SubOrder) -> SubOrder:
 async def _attach_courier_info(db: AsyncSession, sub_order: SubOrder) -> SubOrder:
     sub_order.courier_name = None
     sub_order.courier_phone = None
+    # Ces trois derniers ne servent qu'à SubOrderRead (acheteur, voir
+    # app/orders/schemas.py) — VendorSubOrderRead/AdminSubOrderRead les
+    # ignorent simplement (attributs transitoires surnuméraires, sans risque).
+    sub_order.courier_status = None
+    sub_order.courier_average_rating = None
+    sub_order.courier_review_count = 0
     if sub_order.courier_id is not None:
         courier = await courier_repository.get_by_id(db, sub_order.courier_id)
         if courier is not None:
             sub_order.courier_name = courier.full_name
             sub_order.courier_phone = courier.phone
+            sub_order.courier_status = courier.status.value
+            average, count = await courier_repository.get_rating_summary(db, courier.id)
+            sub_order.courier_average_rating = average
+            sub_order.courier_review_count = count
     return sub_order
 
 
@@ -445,11 +457,23 @@ async def _attach_pickup_point_contacts(db: AsyncSession, target, pickup_point_i
     # managers, and who's currently staffing it can change after the order
     # was placed — unlike delivery_address/recipient_*, there's no single
     # "the" contact to snapshot at checkout time.
+    # pickup_point_name/rating ne servent qu'à OrderRead (acheteur, voir
+    # app/orders/schemas.py) — les schémas vendeur/livreur/gestionnaire les
+    # ignorent simplement (attributs transitoires surnuméraires, sans risque).
+    target.pickup_point_name = None
+    target.pickup_point_average_rating = None
+    target.pickup_point_review_count = 0
     if pickup_point_id is None:
         target.pickup_point_contacts = []
         return
     managers = await pickup_point_manager_repository.list_by_pickup_point(db, pickup_point_id)
     target.pickup_point_contacts = [{"name": m.full_name, "phone": m.phone} for m in managers]
+    point = await pickup_points_repository.get_by_id(db, pickup_point_id)
+    if point is not None:
+        target.pickup_point_name = point.name
+        average, count = await pickup_points_repository.get_rating_summary(db, pickup_point_id)
+        target.pickup_point_average_rating = average
+        target.pickup_point_review_count = count
 
 
 async def list_my_sub_orders(db: AsyncSession, user: User) -> list[SubOrder]:

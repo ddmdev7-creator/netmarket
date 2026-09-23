@@ -10,12 +10,32 @@ from app.core.email_templates import courier_invitation_email
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password
 from app.couriers import repository
-from app.couriers.models import Courier, CourierStatus, IdDocumentType
-from app.couriers.schemas import CourierAdminCreate, CourierAdminUpdate, CourierAvailabilityUpdate, CourierRegister
+from app.couriers.models import Courier, CourierReview, CourierStatus, IdDocumentType
+from app.couriers.schemas import (
+    CourierAdminCreate,
+    CourierAdminUpdate,
+    CourierAvailabilityUpdate,
+    CourierRegister,
+    CourierReviewCreate,
+)
 from app.notifications import service as notifications_service
+from app.orders import repository as orders_repository
 from app.users import repository as users_repository
 from app.users import service as user_service
 from app.users.models import EmailCodePurpose, User, UserRole
+
+
+def _attach_rating(courier: Courier, summary: tuple[float, int] | None) -> Courier:
+    # Transient attributes, same pattern as app/catalog/service.py::_attach_rating.
+    average, count = summary if summary is not None else (None, 0)
+    courier.average_rating = average
+    courier.review_count = count
+    return courier
+
+
+async def _attach_ratings(db: AsyncSession, couriers: list[Courier]) -> list[Courier]:
+    summaries = await repository.get_rating_summary_map(db, [c.id for c in couriers])
+    return [_attach_rating(c, summaries.get(c.id)) for c in couriers]
 
 
 async def register_courier(db: AsyncSession, user: User, data: CourierRegister) -> Courier:
@@ -46,18 +66,20 @@ async def register_courier(db: AsyncSession, user: User, data: CourierRegister) 
     )
     user.role = UserRole.COURIER
     await db.commit()
-    return await repository.get_by_id(db, courier.id)
+    return _attach_rating(await repository.get_by_id(db, courier.id), None)
 
 
 async def get_my_courier(db: AsyncSession, user: User) -> Courier:
     courier = await repository.get_by_user_id(db, user.id)
     if courier is None:
         raise NotFoundError("Vous n'avez pas encore de profil livreur.")
-    return courier
+    summary = await repository.get_rating_summary(db, courier.id)
+    return _attach_rating(courier, summary)
 
 
 async def list_public_couriers(db: AsyncSession) -> list[Courier]:
-    return await repository.list_by_status(db, CourierStatus.APPROVED)
+    couriers = await repository.list_by_status(db, CourierStatus.APPROVED)
+    return await _attach_ratings(db, couriers)
 
 
 async def set_availability(db: AsyncSession, user: User, data: CourierAvailabilityUpdate) -> Courier:
@@ -74,7 +96,8 @@ async def set_availability(db: AsyncSession, user: User, data: CourierAvailabili
     courier.latitude = latitude
     courier.longitude = longitude
     await db.commit()
-    return await repository.get_by_id(db, courier.id)
+    summary = await repository.get_rating_summary(db, courier.id)
+    return _attach_rating(await repository.get_by_id(db, courier.id), summary)
 
 
 async def admin_create_courier(db: AsyncSession, data: CourierAdminCreate) -> User:
@@ -111,7 +134,8 @@ async def admin_create_courier(db: AsyncSession, data: CourierAdminCreate) -> Us
 
 
 async def admin_list_couriers(db: AsyncSession, status: CourierStatus | None) -> list[Courier]:
-    return await repository.list_by_status(db, status)
+    couriers = await repository.list_by_status(db, status)
+    return await _attach_ratings(db, couriers)
 
 
 async def admin_update_courier(db: AsyncSession, courier_id: uuid.UUID, data: CourierAdminUpdate) -> Courier:
@@ -132,4 +156,21 @@ async def admin_update_courier(db: AsyncSession, courier_id: uuid.UUID, data: Co
             db, courier_user_id=courier.user_id, admin_note=data.admin_note
         )
 
-    return await repository.get_by_id(db, courier_id)
+    summary = await repository.get_rating_summary(db, courier_id)
+    return _attach_rating(await repository.get_by_id(db, courier_id), summary)
+
+
+async def create_review(
+    db: AsyncSession, user: User, courier_id: uuid.UUID, data: CourierReviewCreate
+) -> CourierReview:
+    if not await orders_repository.has_delivered_by_courier_for_user(db, user.id, courier_id):
+        raise ForbiddenError("Vous ne pouvez noter qu'un livreur qui vous a déjà livré une commande.")
+    if await repository.get_review_by_courier_and_user(db, courier_id, user.id) is not None:
+        raise ConflictError("Vous avez déjà noté ce livreur.")
+
+    review = await repository.create_review(
+        db, courier_id=courier_id, user_id=user.id, rating=data.rating, comment=data.comment
+    )
+    await db.commit()
+    await db.refresh(review)
+    return review

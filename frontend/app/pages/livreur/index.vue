@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhQrCode } from '@phosphor-icons/vue'
+import { PhCheckCircle, PhQrCode } from '@phosphor-icons/vue'
 import type { CourierDetailRead, CourierSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'courier', layout: 'livreur' })
@@ -105,8 +105,14 @@ function formatDate(iso: string) {
        plutôt qu'une v-card imbriquée dans la carte détachée, pour éviter un
        effet "carte dans la carte". -->
   <div class="detail-card">
-    <div class="d-flex justify-space-between align-center mb-3">
-      <h1 class="text-h6 mb-0">Mes livraisons</h1>
+    <div class="d-flex justify-space-between align-center mb-1">
+      <div class="d-flex align-center ga-2">
+        <h1 class="text-h6 mb-0">Mes livraisons</h1>
+        <v-chip v-if="myCourier?.status === 'approved'" size="x-small" color="success" variant="tonal">
+          <PhCheckCircle :size="12" weight="fill" class="mr-1" />
+          Approuvé
+        </v-chip>
+      </div>
       <div class="d-flex align-center ga-2">
         <span class="text-muted text-meta">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
         <v-switch
@@ -120,6 +126,12 @@ function formatDate(iso: string) {
         />
       </div>
     </div>
+
+    <v-alert v-if="myCourier && myCourier.status !== 'approved'" type="warning" variant="tonal" density="compact" class="mb-3">
+      <template v-if="myCourier.status === 'pending'">Ton profil est en cours de vérification par un administrateur.</template>
+      <template v-else-if="myCourier.status === 'rejected'">Ton profil a été rejeté{{ myCourier.admin_note ? ` — ${myCourier.admin_note}` : '' }}.</template>
+      <template v-else>Ton compte est suspendu.</template>
+    </v-alert>
 
     <CommonEmptyState v-if="!pending && deliveries.length === 0" message="Aucune livraison assignée pour le moment." />
 

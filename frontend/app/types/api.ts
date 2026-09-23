@@ -118,6 +118,23 @@ export interface PickupPointRead {
   /** Renseigné quand ce point est la boutique d'un vendeur plutôt qu'un local dédié. */
   vendor_id: string | null
   vendor_shop_name: string | null
+  /** Transitoires — voir ReviewRead/average_rating sur les produits. */
+  average_rating: number | null
+  review_count: number
+}
+
+export interface PickupPointReviewCreate {
+  rating: number
+  comment?: string | null
+}
+
+export interface PickupPointReviewRead {
+  id: string
+  pickup_point_id: string
+  user_id: string
+  rating: number
+  comment: string | null
+  created_at: string
 }
 
 export interface PickupPointCreate {
@@ -145,6 +162,23 @@ export interface CourierRead {
   is_online: boolean
   phone: string
   full_name: string | null
+  /** Transitoires — voir ReviewRead/average_rating sur les produits. */
+  average_rating: number | null
+  review_count: number
+}
+
+export interface CourierReviewCreate {
+  rating: number
+  comment?: string | null
+}
+
+export interface CourierReviewRead {
+  id: string
+  courier_id: string
+  user_id: string
+  rating: number
+  comment: string | null
+  created_at: string
 }
 
 /** Vue complète (/couriers/me, /admin/couriers) — jamais l'annuaire public, voir CourierRead. */
@@ -499,6 +533,12 @@ interface SubOrderBase {
 /** Buyer-facing shape, nested under OrderRead. delivery_token is the buyer's own private QR payload (set only while status is "shipped") — the vendor never receives this field, only what their camera reads off it. */
 export interface SubOrderRead extends SubOrderBase {
   delivery_token: string | null
+  /** courier_id is a real column; the rest is looked up live (see backend service). No courier_phone here — unlike the vendor, a buyer has no need to call their courier directly. */
+  courier_id: string | null
+  courier_name: string | null
+  courier_status: CourierStatus | null
+  courier_average_rating: number | null
+  courier_review_count: number
 }
 
 /** Sub-order shape returned by the vendor-facing endpoints (GET/PATCH /orders/sub-orders/...) — adds the order-level fields a vendor needs to fulfill the order. */
@@ -572,6 +612,11 @@ export interface OrderRead {
   recipient_name: string | null
   recipient_phone: string | null
   pickup_point_contacts: PickupPointContactRead[]
+  /** pickup_point_id is a real column; the rest is looked up live (see backend service). */
+  pickup_point_id: string | null
+  pickup_point_name: string | null
+  pickup_point_average_rating: number | null
+  pickup_point_review_count: number
   payment_method: PaymentMethod
   payment_status: PaymentStatus | null
   /** Only set right after POST /orders/checkout for an online payment — redirect the buyer here immediately. */

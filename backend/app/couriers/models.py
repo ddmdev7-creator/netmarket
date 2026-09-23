@@ -14,7 +14,18 @@ leaves real-time GPS tracking to a later phase).
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import ARRAY, Boolean, Enum as SAEnum, Float, ForeignKey, String
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    CheckConstraint,
+    Enum as SAEnum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -91,3 +102,20 @@ class Courier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_online: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class CourierReview(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """A buyer's rating + comment on a courier who actually delivered them a
+    sub-order — same "verified delivery" gate as app/reviews/models.py::Review,
+    see app/orders/repository.py::has_delivered_by_courier_for_user."""
+
+    __tablename__ = "courier_reviews"
+    __table_args__ = (
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_courier_reviews_rating_range"),
+        UniqueConstraint("courier_id", "user_id", name="uq_courier_reviews_courier_user"),
+    )
+
+    courier_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("couriers.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
