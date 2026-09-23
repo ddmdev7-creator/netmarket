@@ -93,6 +93,16 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+// Résumé d'une ligne plutôt que le détail de chaque article (nom + variante
+// + quantité) : utile pour vérifier le colis au retrait, pas pour un simple
+// coup d'œil sur la carte -- les deux ou trois premiers noms suffisent à
+// reconnaître la commande.
+function itemsSummary(so: CourierSubOrderRead): string {
+  const names = so.items.map((i) => i.product_name)
+  if (names.length <= 2) return names.join(', ')
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+}
+
 // La liste (toute l'historique assigné à ce livreur, jamais paginée côté
 // API) devenait vite un long défilement une fois quelques dizaines de
 // livraisons terminées accumulées — séparées en deux onglets comme
@@ -120,86 +130,85 @@ const visible = computed(() => {
   <!-- Pas de .app-shell ici : layouts/livreur.vue en fournit déjà un (avec
        app-shell--catalog, voir ce fichier) -- un deuxième wrapper imbriqué
        ici replafonnerait à 720px, annulant l'élargissement du bandeau du
-       haut. .detail-card (main.css) recentre LE CONTENU en une carte
-       détachée, sans replafonner LayoutTopBar avec -- impose son propre
-       padding (plus de .pa-4 ici). Chaque livraison est un bloc séparé par
-       une ligne (comme les boutiques d'une commande sur commandes/[id].vue)
-       plutôt qu'une v-card imbriquée dans la carte détachée, pour éviter un
-       effet "carte dans la carte". -->
-  <div class="detail-card">
-    <div class="d-flex justify-space-between align-center flex-wrap ga-2 mb-1">
-      <div class="d-flex align-center ga-2 flex-wrap">
-        <h1 class="text-h6 mb-0" style="white-space: nowrap">Mes livraisons</h1>
-        <v-chip v-if="myCourier?.status === 'approved'" size="x-small" color="success" variant="tonal">
-          <PhCheckCircle :size="12" weight="fill" class="mr-1" />
-          Approuvé
-        </v-chip>
+       haut. .livreur-inner recentre LE CONTENU sur une largeur confortable
+       (même motif que .cart-inner, panier.vue) : les livraisons deviennent
+       une vraie grille de cartes (auto-fill) plutôt qu'un unique bloc où
+       tout s'empile dans un long défilement continu. -->
+  <div class="livreur-inner" style="padding-bottom: 76px">
+    <div class="px-4 pt-3">
+      <div class="d-flex justify-space-between align-center flex-wrap ga-2 mb-1">
+        <div class="d-flex align-center ga-2 flex-wrap">
+          <h1 class="text-h6 mb-0" style="white-space: nowrap">Mes livraisons</h1>
+          <v-chip v-if="myCourier?.status === 'approved'" size="x-small" color="success" variant="tonal">
+            <PhCheckCircle :size="12" weight="fill" class="mr-1" />
+            Approuvé
+          </v-chip>
+        </div>
+        <div class="d-flex align-center ga-2">
+          <span class="text-muted text-meta">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
+          <v-switch
+            :model-value="isOnline"
+            color="primary"
+            density="compact"
+            hide-details
+            :loading="togglingAvailability || locating"
+            :disabled="togglingAvailability || locating"
+            @update:model-value="toggleAvailability"
+          />
+        </div>
       </div>
-      <div class="d-flex align-center ga-2">
-        <span class="text-muted text-meta">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
-        <v-switch
-          :model-value="isOnline"
-          color="primary"
+
+      <v-alert v-if="myCourier && myCourier.status !== 'approved'" type="warning" variant="tonal" density="compact" class="mb-3">
+        <template v-if="myCourier.status === 'pending'">Ton profil est en cours de vérification par un administrateur.</template>
+        <template v-else-if="myCourier.status === 'rejected'">Ton profil a été rejeté{{ myCourier.admin_note ? ` — ${myCourier.admin_note}` : '' }}.</template>
+        <template v-else>Ton compte est suspendu.</template>
+      </v-alert>
+
+      <template v-if="!pending && deliveries.length > 0">
+        <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-3">
+          <v-btn value="ongoing">À livrer ({{ ongoing.length }})</v-btn>
+          <v-btn value="done">Terminées ({{ done.length }})</v-btn>
+        </v-btn-toggle>
+
+        <v-text-field
+          v-model="search"
+          placeholder="Rechercher par commande, boutique, adresse…"
           density="compact"
+          variant="outlined"
           hide-details
-          :loading="togglingAvailability || locating"
-          :disabled="togglingAvailability || locating"
-          @update:model-value="toggleAvailability"
-        />
-      </div>
+          clearable
+          class="mb-4"
+        >
+          <template #prepend-inner>
+            <PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" />
+          </template>
+        </v-text-field>
+      </template>
+
+      <CommonEmptyState v-if="!pending && deliveries.length === 0" message="Aucune livraison assignée pour le moment." />
+      <CommonEmptyState
+        v-else-if="!pending && visible.length === 0"
+        :message="tab === 'ongoing' ? 'Aucune livraison à livrer pour le moment.' : 'Aucune livraison ne correspond à cette recherche.'"
+      />
     </div>
 
-    <v-alert v-if="myCourier && myCourier.status !== 'approved'" type="warning" variant="tonal" density="compact" class="mb-3">
-      <template v-if="myCourier.status === 'pending'">Ton profil est en cours de vérification par un administrateur.</template>
-      <template v-else-if="myCourier.status === 'rejected'">Ton profil a été rejeté{{ myCourier.admin_note ? ` — ${myCourier.admin_note}` : '' }}.</template>
-      <template v-else>Ton compte est suspendu.</template>
-    </v-alert>
-
-    <template v-if="!pending && deliveries.length > 0">
-      <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-3">
-        <v-btn value="ongoing">À livrer ({{ ongoing.length }})</v-btn>
-        <v-btn value="done">Terminées ({{ done.length }})</v-btn>
-      </v-btn-toggle>
-
-      <v-text-field
-        v-model="search"
-        placeholder="Rechercher par commande, boutique, adresse…"
-        density="compact"
-        variant="outlined"
-        hide-details
-        clearable
-        class="mb-4"
-      >
-        <template #prepend-inner>
-          <PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" />
-        </template>
-      </v-text-field>
-    </template>
-
-    <CommonEmptyState v-if="!pending && deliveries.length === 0" message="Aucune livraison assignée pour le moment." />
-    <CommonEmptyState
-      v-else-if="!pending && visible.length === 0"
-      :message="tab === 'ongoing' ? 'Aucune livraison à livrer pour le moment.' : 'Aucune livraison ne correspond à cette recherche.'"
-    />
-
-    <!-- À livrer : détail complet, c'est ce qui demande une action. -->
-    <div v-if="tab === 'ongoing'">
-      <div v-for="so in visible" :key="so.id" class="mb-6">
+    <!-- À livrer : une carte par livraison, détail complet -- c'est ce qui
+         demande une action. -->
+    <div v-if="tab === 'ongoing'" class="px-4 deliveries-grid">
+      <div v-for="so in visible" :key="so.id" class="delivery-card grid-card">
         <div class="d-flex justify-space-between align-center mb-2">
-          <span class="order-code">{{ shortId(so.order_id) }}</span>
+          <span class="delivery-card__code">{{ shortId(so.order_id) }}</span>
           <StatusBadge :status="so.status" />
         </div>
-        <div class="text-muted mb-2 text-meta">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
+        <div class="text-muted mb-2 text-body">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
 
-        <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1 text-body">
-          <span
-            >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
-            {{ item.quantity }}</span
-          >
+        <div class="delivery-card__items mb-3">
+          {{ so.items.length }} article{{ so.items.length > 1 ? 's' : '' }}
+          <span class="text-muted"> — {{ itemsSummary(so) }}</span>
         </div>
 
         <OrderDeliveryDetails
-          class="mt-3 mb-3"
+          class="mb-3"
           :zone="so.delivery_zone"
           :address="so.delivery_address"
           :instructions="so.delivery_instructions"
@@ -211,7 +220,7 @@ const visible = computed(() => {
         />
 
         <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
-          <div v-if="so.pickup_dropoff_token" class="d-flex flex-column align-center mb-3">
+          <div v-if="so.pickup_dropoff_token" class="d-flex flex-column align-center mb-2">
             <p class="text-muted mb-2 text-meta">Le gestionnaire du point scanne ce code à la réception</p>
             <OrderDeliveryQrCode :token="so.pickup_dropoff_token" />
           </div>
@@ -235,17 +244,16 @@ const visible = computed(() => {
             Marquer livrée
           </v-btn>
         </div>
-
-        <v-divider class="mt-4" />
       </div>
     </div>
 
-    <!-- Terminées : ligne compacte, rien n'y est plus actionnable -- inutile
-         de réafficher l'adresse/les instructions complètes pour un historique. -->
-    <div v-else>
-      <div v-for="so in visible" :key="so.id" class="delivery-row-compact">
+    <!-- Terminées : cartes compactes, rien n'y est plus actionnable --
+         inutile de réafficher l'adresse/les instructions complètes pour un
+         historique. -->
+    <div v-else class="px-4 deliveries-grid deliveries-grid--compact">
+      <div v-for="so in visible" :key="so.id" class="delivery-card delivery-card--compact grid-card">
         <div class="d-flex justify-space-between align-center">
-          <span class="order-code">{{ shortId(so.order_id) }}</span>
+          <span class="delivery-card__code">{{ shortId(so.order_id) }}</span>
           <StatusBadge :status="so.status" />
         </div>
         <div class="text-muted text-meta mt-1">
@@ -259,20 +267,55 @@ const visible = computed(() => {
 </template>
 
 <style scoped>
-.order-code {
+/* .app-shell plafonne à 720px par défaut (voir main.css) -- trop étroit
+   pour que la grille de cartes ci-dessous profite de plusieurs colonnes sur
+   grand écran. Même largeur que .cart-inner (panier.vue). */
+@media (min-width: 960px) {
+  .livreur-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+}
+
+.deliveries-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 960px) {
+  .deliveries-grid {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+  }
+
+  /* Cartes "Terminées" plus denses (pas de bouton/QR à loger) -- profitent
+     d'une colonne plus étroite pour en montrer davantage à la fois. */
+  .deliveries-grid--compact {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+  }
+}
+
+.delivery-card {
+  padding: 16px;
+}
+
+.delivery-card--compact {
+  padding: 12px 14px;
+}
+
+.delivery-card__code {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 15px;
   letter-spacing: 0.01em;
   color: var(--color-primary-300);
 }
 
-.delivery-row-compact {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--color-divider);
-}
-
-.delivery-row-compact:last-of-type {
-  border-bottom: none;
+.delivery-card__items {
+  font-family: var(--font-heading);
+  font-size: 13.5px;
+  font-weight: 600;
 }
 </style>
