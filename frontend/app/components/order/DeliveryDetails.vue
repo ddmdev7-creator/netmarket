@@ -24,8 +24,19 @@ const props = withDefaults(
     note?: string | null
     /** false sur le tableau de bord du gestionnaire lui-même : pas besoin de se lister comme son propre contact. */
     showParty?: boolean
+    /** false sur le tableau de bord du livreur (voir livreur/index.vue) : ce
+     * repli n'apporte rien à quelqu'un qui vient justement déposer le colis
+     * à ce point, pas besoin de vérifier qui le réceptionnera. */
+    showEmptyManagerNote?: boolean
   }>(),
-  { recipientName: null, recipientPhone: null, pickupPointContacts: () => [], note: null, showParty: true },
+  {
+    recipientName: null,
+    recipientPhone: null,
+    pickupPointContacts: () => [],
+    note: null,
+    showParty: true,
+    showEmptyManagerNote: true,
+  },
 )
 </script>
 
@@ -48,7 +59,7 @@ const props = withDefaults(
             <span>{{ c.name ?? 'Gestionnaire' }} · {{ c.phone }}</span>
           </div>
         </div>
-        <div v-else class="mt-1">Aucun gestionnaire assigné pour l'instant</div>
+        <div v-else-if="props.showEmptyManagerNote" class="mt-1">Aucun gestionnaire assigné pour l'instant</div>
       </template>
       <template v-else>
         <div>Livraison à domicile</div>

@@ -174,10 +174,10 @@ const visible = computed(() => {
           v-model="search"
           placeholder="Rechercher par commande, boutique, adresse…"
           density="compact"
-          variant="outlined"
+          variant="solo-filled"
           hide-details
           clearable
-          class="mb-4"
+          class="livreur-search mb-4"
         >
           <template #prepend-inner>
             <PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" />
@@ -219,17 +219,17 @@ const visible = computed(() => {
           :recipient-name="so.recipient_name"
           :recipient-phone="so.recipient_phone"
           :pickup-point-contacts="so.pickup_point_contacts"
-          :note="so.delivery_type === 'pickup_point' ? 'À déposer sur place — le client viendra le récupérer.' : null"
+          :show-empty-manager-note="false"
         />
 
         <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
-          <div v-if="so.pickup_dropoff_token" class="d-flex flex-column align-center mb-2">
-            <p class="text-muted mb-2 text-meta">Le gestionnaire du point scanne ce code à la réception</p>
+          <div v-if="so.pickup_dropoff_token" class="qr-block mb-2">
+            <div class="qr-block__label">
+              <PhQrCode :size="15" weight="bold" />
+              Code de dépôt — à faire scanner par le point
+            </div>
             <OrderDeliveryQrCode :token="so.pickup_dropoff_token" />
           </div>
-          <p class="text-muted mb-0 text-center text-meta">
-            C'est le gestionnaire du point de retrait qui confirme la réception — rien à faire ici de votre côté.
-          </p>
         </template>
 
         <div v-else-if="so.status === 'shipped'" class="d-flex ga-2">
@@ -378,9 +378,36 @@ const visible = computed(() => {
   }
 }
 
-.delivery-card__items {
+/* Boîte mise en valeur pour le code de dépôt (point de retrait) : c'est la
+   seule action qui compte une fois le colis expédié dans ce cas -- un
+   encart distinct plutôt qu'un QR nu, pour qu'il saute aux yeux dans la
+   carte. */
+.qr-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  border: 1px solid var(--color-primary-800);
+  border-radius: var(--radius-lg);
+}
+
+.qr-block__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-heading);
-  font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--color-primary-300);
+}
+
+/* Le champ de recherche en variant="solo-filled" (voir template) se
+   détache déjà du fond gris par son propre remplissage -- ce léger relief
+   en plus le distingue mieux encore d'une simple ligne de texte. */
+.livreur-search :deep(.v-field) {
+  box-shadow: var(--shadow-sm);
 }
 </style>
