@@ -41,6 +41,8 @@ const { data: state, refresh } = await useAsyncData(
 )
 
 const application = computed<PickupApplicationRead | null>(() => state.value?.application ?? null)
+// Invitation à gérer un point existant : pas d'étapes « point » ni « local ».
+const forExistingPoint = computed(() => !!application.value?.target_pickup_point_id)
 const editable = computed(
   () => !!state.value?.can_apply && (!application.value || ['draft', 'changes_requested'].includes(application.value.status)),
 )
@@ -166,6 +168,7 @@ const missing = computed(() => {
   if (!form.id_document_front_key) list.push("Pièce d'identité (recto)")
   if (form.id_document_type === 'cni_biometrique' && !form.id_document_back_key) list.push("Pièce d'identité (verso)")
   if (!form.portrait_photo_key) list.push("Photo d'identité")
+  if (forExistingPoint.value) return list
   if (!form.point_name || !form.point_address) list.push('Nom et adresse du point')
   if (form.latitude == null || form.longitude == null) list.push('Position sur la carte')
   if (!form.opening_hours) list.push("Horaires d'ouverture")
@@ -191,12 +194,16 @@ async function submit() {
   }
 }
 
-const STEPS = [
+const STEPS = computed(() => [
   { key: 'identity', label: 'Identité', icon: PhUser },
   { key: 'documents', label: 'Pièces', icon: PhIdentificationCard },
-  { key: 'point', label: 'Point', icon: PhMapPin },
-  { key: 'premises', label: 'Local', icon: PhStorefront },
-]
+  ...(forExistingPoint.value
+    ? []
+    : [
+        { key: 'point', label: 'Point', icon: PhMapPin },
+        { key: 'premises', label: 'Local', icon: PhStorefront },
+      ]),
+])
 
 function formatDate(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
@@ -252,6 +259,13 @@ function formatDate(iso: string | null) {
               <strong>Votre dossier est à corriger</strong>
               <p>Motif : {{ application.admin_note }}</p>
               <p v-if="application.admin_suggestion"><em>Suggestion : {{ application.admin_suggestion }}</em></p>
+            </div>
+          </section>
+          <section v-else-if="forExistingPoint" class="banner banner--info">
+            <PhInfo :size="22" weight="fill" />
+            <div>
+              <strong>L'équipe Ndjouri vous invite à gérer « {{ application?.target_pickup_point_name }} ».</strong>
+              <p>Le point existe déjà : il suffit de compléter votre identité, votre pièce et votre photo d'identité.</p>
             </div>
           </section>
           <section v-else-if="application?.origin === 'invited'" class="banner banner--info">
@@ -322,7 +336,12 @@ function formatDate(iso: string | null) {
             </p>
           </section>
 
-          <section id="point" class="card">
+          <section v-if="forExistingPoint" class="card">
+            <h2 class="card__title"><PhMapPin :size="18" /> Point de retrait</h2>
+            <p class="mb-0">{{ application?.target_pickup_point_name }}</p>
+          </section>
+
+          <section v-if="!forExistingPoint" id="point" class="card">
             <h2 class="card__title"><PhMapPin :size="18" /> 3. Le point de retrait</h2>
             <div class="grid-2">
               <v-text-field v-model="form.point_name" label="Nom du point (ex. Boutique Kipé Relais)" variant="outlined" />
@@ -335,7 +354,7 @@ function formatDate(iso: string | null) {
             <CommonMapPicker v-model:latitude="form.latitude" v-model:longitude="form.longitude" />
           </section>
 
-          <section id="premises" class="card">
+          <section v-if="!forExistingPoint" id="premises" class="card">
             <h2 class="card__title"><PhStorefront :size="18" /> 4. Photos du local</h2>
             <p class="hint">
               Au moins {{ state.min_premises_photos }} photos différentes (jusqu'à {{ state.max_premises_photos }}) :

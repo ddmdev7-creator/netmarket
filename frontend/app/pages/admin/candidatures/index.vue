@@ -126,7 +126,9 @@ async function decide() {
     })
     toast.success(
       {
-        approve: 'Candidature validée : le point de retrait est créé.',
+        approve: selected.value.target_pickup_point_id
+          ? 'Candidature validée : le compte gère maintenant ce point.'
+          : 'Candidature validée : le point de retrait est créé.',
         changes: 'Dossier renvoyé pour correction.',
         reject: 'Candidature refusée définitivement.',
       }[decision.value],
@@ -193,9 +195,12 @@ const mapUrl = (a: AdminPickupApplicationRead) =>
     <div class="list">
       <button v-for="a in applications" :key="a.id" type="button" class="row" @click="open(a)">
         <div class="row__main">
-          <div class="row__title">{{ a.point_name || 'Point sans nom' }}</div>
+          <div class="row__title">
+            {{ a.target_pickup_point_name ?? a.point_name ?? 'Point sans nom' }}
+            <v-chip v-if="a.target_pickup_point_id" size="x-small" variant="tonal" class="ml-1">point existant</v-chip>
+          </div>
           <div class="text-muted text-meta">
-            {{ fullName(a) }} · {{ a.applicant_phone }} · {{ a.point_address || 'adresse non renseignée' }}
+            {{ fullName(a) }} · {{ a.applicant_phone }}<template v-if="!a.target_pickup_point_id"> · {{ a.point_address || 'adresse non renseignée' }}</template>
           </div>
           <div class="text-muted text-fine">
             <template v-if="a.submitted_at">Soumis le {{ formatDate(a.submitted_at) }}</template>
@@ -213,7 +218,7 @@ const mapUrl = (a: AdminPickupApplicationRead) =>
       <v-card v-if="selected" class="detail">
         <div class="detail__head">
           <div>
-            <h2 class="detail__title">{{ selected.point_name || 'Point sans nom' }}</h2>
+            <h2 class="detail__title">{{ selected.target_pickup_point_name ?? selected.point_name ?? 'Point sans nom' }}</h2>
             <div class="text-muted text-meta">{{ fullName(selected) }} · {{ selected.applicant_phone }} · {{ selected.applicant_email ?? 'sans e-mail' }}</div>
           </div>
           <v-chip variant="tonal" :color="STATUS_META[selected.status].color">{{ STATUS_META[selected.status].label }}</v-chip>
@@ -255,7 +260,15 @@ const mapUrl = (a: AdminPickupApplicationRead) =>
             </div>
           </section>
 
-          <section class="block">
+          <section v-if="selected.target_pickup_point_id" class="block">
+            <h3><PhMapPin :size="16" /> Point existant</h3>
+            <p class="text-meta mb-0">
+              Invitation à gérer « {{ selected.target_pickup_point_name }} » : à la validation, le compte est rattaché
+              à ce point (aucun nouveau point créé).
+            </p>
+          </section>
+
+          <section v-if="!selected.target_pickup_point_id" class="block">
             <h3><PhMapPin :size="16" /> Point proposé</h3>
             <dl class="facts">
               <div><dt>Adresse</dt><dd>{{ selected.point_address || '—' }}</dd></div>
@@ -274,7 +287,7 @@ const mapUrl = (a: AdminPickupApplicationRead) =>
             </dl>
           </section>
 
-          <section class="block">
+          <section v-if="!selected.target_pickup_point_id" class="block">
             <h3><PhStorefront :size="16" /> Photos du local ({{ selected.premises_photo_keys.length }})</h3>
             <div class="thumbs">
               <button v-for="key in selected.premises_photo_keys" :key="key" type="button" class="thumb" @click="zoomed = images[key] ?? null">
@@ -300,10 +313,11 @@ const mapUrl = (a: AdminPickupApplicationRead) =>
     <v-dialog :model-value="!!decision" max-width="460" @update:model-value="(v) => { if (!v) decision = null }">
       <v-card v-if="decision && selected" class="pa-5">
         <template v-if="decision === 'approve'">
-          <h2 class="dialog-title">Valider « {{ selected.point_name }} » ?</h2>
+          <h2 class="dialog-title">Valider « {{ selected.target_pickup_point_name ?? selected.point_name }} » ?</h2>
           <p class="text-meta">
-            Le point de retrait sera créé et actif, et le compte de {{ fullName(selected) }} deviendra gestionnaire de ce
-            point. Le candidat est prévenu par notification et par e-mail.
+            <template v-if="selected.target_pickup_point_id">Le compte de {{ fullName(selected) }} sera rattaché à ce point existant comme gestionnaire.</template>
+            <template v-else>Le point de retrait sera créé et actif, et le compte de {{ fullName(selected) }} deviendra gestionnaire de ce point.</template>
+            Le candidat est prévenu par notification et par e-mail.
           </p>
         </template>
         <template v-else-if="decision === 'changes'">

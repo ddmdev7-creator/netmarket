@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.couriers.models import IdDocumentType
 from app.pickup_point_applications.models import ApplicationOrigin, ApplicationStatus
@@ -71,6 +71,9 @@ class ApplicationRead(BaseModel):
     admin_suggestion: str | None
     reviewed_at: datetime | None
     pickup_point_id: uuid.UUID | None
+    # Invitation pour un point existant (voir models.py) + son nom, attaché en lecture.
+    target_pickup_point_id: uuid.UUID | None = None
+    target_pickup_point_name: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -95,8 +98,19 @@ class AdminApplicationRead(ApplicationRead):
 
 
 class ApplicationInvite(BaseModel):
-    email: EmailStr
+    """Par e-mail, ou en choisissant le compte (user_id). `pickup_point_id` :
+    invitation à gérer ce point existant (dossier réduit à l'identité)."""
+
+    email: EmailStr | None = None
+    user_id: uuid.UUID | None = None
+    pickup_point_id: uuid.UUID | None = None
     message: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _one_target(self) -> "ApplicationInvite":
+        if (self.email is None) == (self.user_id is None):
+            raise ValueError("Indiquez soit l'e-mail, soit le compte à inviter.")
+        return self
 
 
 class ApplicationRequestChanges(BaseModel):

@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.schemas import Message
-from app.core.deps import get_db, get_pickup_point_manager, require_role
+from app.core.deps import get_current_user, get_db, get_pickup_point_manager, require_role
 from app.pickup_point_managers import service
 from app.pickup_point_managers.schemas import (
     ManagerPointUpdate,
     PickupPointManagerAdminCreate,
     PickupPointManagerAdminUpdate,
+    PickupPointManagerAssignExisting,
     PickupPointManagerRead,
 )
 from app.pickup_points.schemas import PickupPointRead
@@ -55,6 +56,18 @@ async def admin_create_manager(
     payload: PickupPointManagerAdminCreate, db: AsyncSession = Depends(get_db)
 ) -> PickupPointManagerRead:
     return await service.admin_create_manager(db, payload)
+
+
+@admin_router.post(
+    "/assign-existing", response_model=PickupPointManagerRead, status_code=status.HTTP_201_CREATED
+)
+async def admin_assign_existing_user(
+    payload: PickupPointManagerAssignExisting,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PickupPointManagerRead:
+    """Nomme directement un compte acheteur existant gestionnaire de ce point."""
+    return await service.admin_assign_existing_user(db, current_user, payload.user_id, payload.pickup_point_id)
 
 
 @admin_router.get("", response_model=list[PickupPointManagerRead])

@@ -39,3 +39,10 @@ class PickupPointManagerRead(BaseModel):
 
 class ManagerPointUpdate(BaseModel):
     opening_hours: str = Field(min_length=3, max_length=300)
+
+
+class PickupPointManagerAssignExisting(BaseModel):
+    """Nommer directement un compte acheteur existant gestionnaire d'un point."""
+
+    user_id: uuid.UUID
+    pickup_point_id: uuid.UUID

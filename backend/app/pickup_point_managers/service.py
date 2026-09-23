@@ -3,11 +3,16 @@ and management (see app/pickup_point_managers/models.py for why there's no
 self-registration/approval lifecycle here, unlike couriers)."""
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
+from app.notifications import service as notifications_service
+from app.notifications.models import NotificationType
+from app.pickup_point_applications import repository as applications_repository
+from app.pickup_point_applications.models import ApplicationStatus
 from app.pickup_point_managers import repository
 from app.pickup_point_managers.models import PickupPointManager
 from app.pickup_point_managers.schemas import (
@@ -91,8 +96,50 @@ async def admin_delete_manager(db: AsyncSession, manager_id: uuid.UUID) -> None:
     manager = await repository.get_by_id(db, manager_id)
     if manager is None:
         raise NotFoundError("Gestionnaire introuvable.")
+    user = await users_repository.get_by_id(db, manager.user_id)
     await repository.delete(db, manager)
+    # Retiré de son point : le compte redevient acheteur plutôt que de rester
+    # « gestionnaire » sans point (un vendeur lié garde son rôle de vendeur).
+    if user is not None and user.role == UserRole.PICKUP_POINT_MANAGER:
+        user.role = UserRole.BUYER
     await db.commit()
+
+
+async def admin_assign_existing_user(
+    db: AsyncSession, admin: User, user_id: uuid.UUID, pickup_point_id: uuid.UUID
+) -> PickupPointManager:
+    """Nomination directe d'un compte acheteur existant, sans dossier : l'admin
+    en prend la responsabilité (comme pour un compte créé par lui)."""
+    await _ensure_active_point(db, pickup_point_id)
+    user = await users_repository.get_by_id(db, user_id)
+    if user is None:
+        raise NotFoundError("Compte introuvable.")
+    if user.role != UserRole.BUYER:
+        raise ConflictError("Seul un compte acheteur peut devenir gestionnaire de point de retrait.")
+    if await repository.get_by_user_id(db, user.id) is not None:
+        raise ConflictError("Ce compte gère déjà un point de retrait.")
+
+    manager = await repository.create(db, user_id=user.id, pickup_point_id=pickup_point_id)
+    user.role = UserRole.PICKUP_POINT_MANAGER
+    # Une candidature en cours n'a plus d'objet : on la clôt sur ce point.
+    application = await applications_repository.get_by_user_id(db, user.id, for_update=True)
+    if application is not None and application.status != ApplicationStatus.APPROVED:
+        application.status = ApplicationStatus.APPROVED
+        application.pickup_point_id = pickup_point_id
+        application.target_pickup_point_id = pickup_point_id
+        application.reviewed_by = admin.id
+        application.reviewed_at = datetime.now(UTC)
+    await db.commit()
+
+    point = await pickup_points_repository.get_by_id(db, pickup_point_id)
+    await notifications_service.notify_pickup_application(
+        db,
+        user_id=user.id,
+        type_=NotificationType.PICKUP_APPLICATION_APPROVED,
+        title="Vous gérez un point de retrait",
+        body=f"L'équipe Ndjouri vous a nommé gestionnaire de « {point.name} ». Reconnectez-vous pour ouvrir votre espace.",
+    )
+    return await repository.get_by_id(db, manager.id)
 
 
 async def get_my_manager_profile(db: AsyncSession, user: User) -> PickupPointManager:

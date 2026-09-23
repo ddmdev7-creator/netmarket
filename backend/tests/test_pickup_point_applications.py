@@ -276,3 +276,77 @@ async def test_documents_are_private(
     assert (await client.get(url, headers=auth_headers(stranger))).status_code == 403
     other_key = f"/pickup-point-applications/{saved['id']}/documents/{_key()}"
     assert (await client.get(other_key, headers=auth_headers(admin_user))).status_code == 404
+
+
+async def test_admin_assigns_an_existing_buyer_directly(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, admin_user: User, vendor_user: User, pickup_point: PickupPoint
+) -> None:
+    response = await client.post(
+        "/admin/pickup-point-managers/assign-existing",
+        json={"user_id": str(buyer_user.id), "pickup_point_id": str(pickup_point.id)},
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 201, response.text
+    await db_session.refresh(buyer_user)
+    assert buyer_user.role == UserRole.PICKUP_POINT_MANAGER
+    notification = (
+        await db_session.execute(select(Notification).where(Notification.user_id == buyer_user.id))
+    ).scalar_one()
+    assert pickup_point.name in notification.body
+
+    again = await client.post(
+        "/admin/pickup-point-managers/assign-existing",
+        json={"user_id": str(buyer_user.id), "pickup_point_id": str(pickup_point.id)},
+        headers=auth_headers(admin_user),
+    )
+    assert again.status_code == 409
+    vendor = await client.post(
+        "/admin/pickup-point-managers/assign-existing",
+        json={"user_id": str(vendor_user.id), "pickup_point_id": str(pickup_point.id)},
+        headers=auth_headers(admin_user),
+    )
+    assert vendor.status_code == 409
+
+    # Retiré de son point, le compte redevient acheteur.
+    await client.delete(f"/admin/pickup-point-managers/{response.json()['id']}", headers=auth_headers(admin_user))
+    await db_session.refresh(buyer_user)
+    assert buyer_user.role == UserRole.BUYER
+
+
+async def test_invitation_for_an_existing_point_only_needs_identity(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User, admin_user: User, pickup_point: PickupPoint
+) -> None:
+    invited = await client.post(
+        "/admin/pickup-point-applications/invite",
+        json={"user_id": str(buyer_user.id), "pickup_point_id": str(pickup_point.id)},
+        headers=auth_headers(admin_user),
+    )
+    assert invited.status_code == 201, invited.text
+    assert invited.json()["target_pickup_point_name"] == pickup_point.name
+
+    identity_only = {
+        key: value
+        for key, value in _complete_payload().items()
+        if key not in {"point_name", "point_address", "point_landmark", "latitude", "longitude", "opening_hours", "storage_capacity", "premises_photo_keys"}
+    }
+    saved = await client.put("/pickup-point-applications/me", json=identity_only, headers=auth_headers(buyer_user))
+    assert saved.status_code == 200, saved.text
+    submitted = await client.post("/pickup-point-applications/me/submit", headers=auth_headers(buyer_user))
+    assert submitted.status_code == 200, submitted.text
+
+    points_before = len((await db_session.execute(select(PickupPoint))).scalars().all())
+    approved = await client.post(
+        f"/admin/pickup-point-applications/{submitted.json()['id']}/approve", headers=auth_headers(admin_user)
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["pickup_point_id"] == str(pickup_point.id)
+    assert len((await db_session.execute(select(PickupPoint))).scalars().all()) == points_before
+    manager = (
+        await db_session.execute(select(PickupPointManager).where(PickupPointManager.user_id == buyer_user.id))
+    ).scalar_one()
+    assert manager.pickup_point_id == pickup_point.id
+
+
+async def test_invite_needs_exactly_one_target(client: AsyncClient, admin_user: User, buyer_user: User) -> None:
+    neither = await client.post("/admin/pickup-point-applications/invite", json={}, headers=auth_headers(admin_user))
+    assert neither.status_code == 422

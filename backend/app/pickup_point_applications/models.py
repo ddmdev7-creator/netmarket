@@ -96,7 +96,13 @@ class PickupPointApplication(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     admin_suggestion: Mapped[str | None] = mapped_column(String(500), nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Point créé à la validation.
+    # Invitation à gérer un point QUI EXISTE DÉJÀ : le candidat ne fournit
+    # alors que son identité et ses pièces, la validation le rattache à ce
+    # point au lieu d'en créer un. NULL pour une candidature classique.
+    target_pickup_point_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("pickup_points.id", ondelete="SET NULL"), nullable=True
+    )
+    # Point créé (ou rattaché) à la validation.
     pickup_point_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("pickup_points.id", ondelete="SET NULL"), nullable=True
     )

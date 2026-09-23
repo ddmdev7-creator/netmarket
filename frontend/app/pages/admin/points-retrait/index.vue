@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhCheckCircle, PhMapPin, PhPencilSimple, PhPlus, PhStorefront, PhTrash, PhUser, PhWarningCircle } from '@phosphor-icons/vue'
 import type { OverviewMapItem } from '~/components/admin/OverviewMap.vue'
-import type { PickupPointManagerAdminCreate, PickupPointManagerRead, PickupPointRead, VendorRead } from '~/types/api'
+import type { PickupPointManagerAdminCreate, PickupPointManagerRead, PickupPointRead, UserRead, VendorRead } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
 
@@ -219,20 +219,79 @@ async function deletePoint() {
   }
 }
 
-// Gestionnaires — un compte par personne staffant un point, créé uniquement
-// par l'admin (pas d'auto-inscription, contrairement aux livreurs) : voir
-// app/pickup_point_managers dans le backend.
+// Gestionnaires — deux façons d'en ajouter un à un point : créer un nouveau
+// compte, ou choisir un compte acheteur existant, nommé directement ou invité
+// à fournir son identité et ses pièces avant validation (voir backend
+// app/pickup_point_managers et app/pickup_point_applications).
 const managerDialogPointId = ref<string | null>(null)
+const managerDialogPoint = computed(() => points.value.find((p) => p.id === managerDialogPointId.value) ?? null)
+const managerMode = ref<'existing' | 'new'>('existing')
 const creatingManager = ref(false)
 const managerForm = ref({ phone: '', password: '', firstName: '', lastName: '' })
 
 function resetManagerForm() {
   managerForm.value = { phone: '', password: '', firstName: '', lastName: '' }
+  selectedBuyerId.value = null
+  inviteMessage.value = ''
 }
 
-function openManagerDialog(pointId: string) {
+// Comptes acheteurs existants (chargés à l'ouverture de la fenêtre).
+const buyers = ref<UserRead[]>([])
+const selectedBuyerId = ref<string | null>(null)
+const inviteMessage = ref('')
+const assigning = ref<'direct' | 'invite' | null>(null)
+const buyerItems = computed(() =>
+  buyers.value.map((u) => ({
+    value: u.id,
+    title: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.phone,
+    subtitle: [u.phone, u.email].filter(Boolean).join(' · '),
+  })),
+)
+function buyerFilter(_value: string, query: string, item?: { raw: { title: string; subtitle: string } }) {
+  const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '')
+  const q = norm(query)
+  return !!item && (norm(item.raw.title).includes(q) || norm(item.raw.subtitle).includes(q))
+}
+
+async function openManagerDialog(pointId: string) {
   resetManagerForm()
+  managerMode.value = 'existing'
   managerDialogPointId.value = pointId
+  try {
+    buyers.value = (await apiFetch<UserRead[]>('/admin/users')).filter((u) => u.role === 'buyer')
+  } catch {
+    buyers.value = []
+  }
+}
+
+async function assignExisting(kind: 'direct' | 'invite') {
+  if (!managerDialogPointId.value || !selectedBuyerId.value) return
+  assigning.value = kind
+  try {
+    if (kind === 'direct') {
+      await apiFetch('/admin/pickup-point-managers/assign-existing', {
+        method: 'POST',
+        body: { user_id: selectedBuyerId.value, pickup_point_id: managerDialogPointId.value },
+      })
+      toast.success('Compte nommé gestionnaire — il est prévenu par notification.')
+    } else {
+      await apiFetch('/admin/pickup-point-applications/invite', {
+        method: 'POST',
+        body: {
+          user_id: selectedBuyerId.value,
+          pickup_point_id: managerDialogPointId.value,
+          message: inviteMessage.value.trim() || null,
+        },
+      })
+      toast.success('Invitation envoyée : validez son dossier dans « Candidatures points ».')
+    }
+    managerDialogPointId.value = null
+    await refreshManagers()
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'Action impossible pour ce compte.'))
+  } finally {
+    assigning.value = null
+  }
 }
 
 async function createManager() {
@@ -450,14 +509,67 @@ async function removeManager(managerId: string) {
       </v-card>
     </v-dialog>
 
-    <v-dialog :model-value="!!managerDialogPointId" max-width="380" @update:model-value="(v) => !v && (managerDialogPointId = null)">
+    <v-dialog :model-value="!!managerDialogPointId" max-width="440" @update:model-value="(v) => !v && (managerDialogPointId = null)">
       <v-card class="pa-4">
-        <h2 class="text-h6 mb-3">Ajouter un gestionnaire</h2>
-        <p class="text-muted mb-4" style="font-size: 12.5px">
-          Le compte est actif immédiatement — pas de validation à part.
-        </p>
+        <h2 class="text-h6 mb-1">Ajouter un gestionnaire</h2>
+        <p v-if="managerDialogPoint" class="text-muted mb-3" style="font-size: 12.5px">{{ managerDialogPoint.name }}</p>
 
-        <v-form @submit.prevent="createManager">
+        <v-btn-toggle v-model="managerMode" mandatory density="compact" divided variant="outlined" class="mb-4">
+          <v-btn value="existing" size="small">Compte existant</v-btn>
+          <v-btn value="new" size="small">Nouveau compte</v-btn>
+        </v-btn-toggle>
+
+        <template v-if="managerMode === 'existing'">
+          <v-autocomplete
+            v-model="selectedBuyerId"
+            :items="buyerItems"
+            :custom-filter="buyerFilter"
+            item-title="title"
+            item-value="value"
+            label="Rechercher un acheteur (nom, téléphone, e-mail)"
+            variant="outlined"
+            clearable
+            :item-props="(i: { subtitle: string }) => ({ subtitle: i.subtitle })"
+            no-data-text="Aucun compte acheteur trouvé"
+            class="mb-2"
+          />
+          <v-textarea
+            v-model="inviteMessage"
+            label="Message joint à l'invitation (facultatif)"
+            rows="2"
+            auto-grow
+            variant="outlined"
+            class="mb-1"
+          />
+          <div class="choice">
+            <v-btn
+              color="primary"
+              block
+              :disabled="!selectedBuyerId"
+              :loading="assigning === 'invite'"
+              @click="assignExisting('invite')"
+            >
+              Inviter avec vérification
+            </v-btn>
+            <p class="choice__hint">La personne fournit son identité, sa pièce et sa photo ; vous validez son dossier dans « Candidatures points ».</p>
+            <v-btn
+              variant="tonal"
+              block
+              :disabled="!selectedBuyerId"
+              :loading="assigning === 'direct'"
+              @click="assignExisting('direct')"
+            >
+              Nommer directement
+            </v-btn>
+            <p class="choice__hint">Le compte devient gestionnaire de ce point tout de suite, sans dossier.</p>
+          </div>
+          <v-btn variant="text" block class="mt-1" @click="managerDialogPointId = null">Annuler</v-btn>
+        </template>
+
+        <v-form v-else @submit.prevent="createManager">
+          <p class="text-muted mb-3" style="font-size: 12.5px">
+            Crée un compte actif immédiatement — transmettez vous-même le téléphone et le mot de passe.
+          </p>
           <label class="field-label">Téléphone</label>
           <v-text-field v-model="managerForm.phone" placeholder="+224621234567" class="mb-2" />
 
@@ -486,6 +598,12 @@ async function removeManager(managerId: string) {
 </template>
 
 <style scoped>
+.choice__hint {
+  margin: 4px 2px 12px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
 /* Une colonne unique gaspillait tout l'espace disponible sur un écran de
    bureau (voir le même correctif déjà fait sur vendeur/commandes) — 3-4
    colonnes selon la largeur réelle plutôt qu'un nombre fixe. */

@@ -113,8 +113,16 @@ async def admin_get_application(application_id: uuid.UUID, db: AsyncSession = De
 async def admin_invite(
     payload: ApplicationInvite, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> AdminApplicationRead:
-    """Invite par e-mail un compte acheteur existant à constituer son dossier."""
-    return await service.admin_invite(db, current_user, payload.email, payload.message)
+    """Invite un compte acheteur existant (par e-mail ou en le choisissant) à
+    constituer son dossier — pour un nouveau point, ou pour gérer un point existant."""
+    return await service.admin_invite(
+        db,
+        current_user,
+        email=payload.email,
+        user_id=payload.user_id,
+        pickup_point_id=payload.pickup_point_id,
+        message=payload.message,
+    )
 
 
 @admin_router.post("/{application_id}/approve", response_model=AdminApplicationRead)

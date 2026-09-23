@@ -64,8 +64,12 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _read(application: PickupPointApplication) -> ApplicationRead:
-    return ApplicationRead.model_validate(application)
+async def _read(db: AsyncSession, application: PickupPointApplication) -> ApplicationRead:
+    read = ApplicationRead.model_validate(application)
+    if application.target_pickup_point_id is not None:
+        point = await pickup_points_repository.get_by_id(db, application.target_pickup_point_id)
+        read.target_pickup_point_name = point.name if point else None
+    return read
 
 
 # --- Côté candidat -----------------------------------------------------------------
@@ -85,7 +89,7 @@ async def get_my_state(db: AsyncSession, user: User) -> MyApplicationState:
     application = await repository.get_by_user_id(db, user.id)
     reason = _blocked_reason(user, application)
     return MyApplicationState(
-        application=_read(application) if application else None,
+        application=await _read(db, application) if application else None,
         can_apply=reason is None,
         blocked_reason=reason,
         min_premises_photos=MIN_PREMISES_PHOTOS,
@@ -130,7 +134,7 @@ async def save_draft(db: AsyncSession, user: User, data: ApplicationDraft) -> Ap
         setattr(application, field, value.strip() if isinstance(value, str) else value)
     await db.commit()
     await db.refresh(application)
-    return _read(application)
+    return await _read(db, application)
 
 
 def _missing_fields(application: PickupPointApplication) -> list[str]:
@@ -148,11 +152,18 @@ def _missing_fields(application: PickupPointApplication) -> list[str]:
         "point_address": "adresse du point de retrait",
         "opening_hours": "horaires d'ouverture",
     }
+    # Invitation pour un point existant : seuls l'identité et les pièces sont demandées.
+    for_existing_point = application.target_pickup_point_id is not None
+    point_fields = {"point_name", "point_address", "opening_hours"}
     for field, label in required.items():
+        if for_existing_point and field in point_fields:
+            continue
         if not getattr(application, field):
             missing.append(label)
     if application.id_document_type == IdDocumentType.CNI_BIOMETRIQUE and not application.id_document_back_key:
         missing.append("pièce d'identité (verso)")
+    if for_existing_point:
+        return missing
     if application.latitude is None or application.longitude is None:
         missing.append("position du point sur la carte")
     if len(application.premises_photo_keys) < MIN_PREMISES_PHOTOS:
@@ -170,6 +181,7 @@ async def submit(db: AsyncSession, user: User) -> ApplicationRead:
     application.submission_count += 1
     await db.commit()
     await db.refresh(application)
+    read = await _read(db, application)
 
     for admin in await users_repository.list_by_role(db, UserRole.ADMIN):
         await notifications_service.notify_pickup_application(
@@ -177,10 +189,11 @@ async def submit(db: AsyncSession, user: User) -> ApplicationRead:
             user_id=admin.id,
             type_=NotificationType.PICKUP_APPLICATION_SUBMITTED,
             title="Candidature point de retrait à examiner",
-            body=f"« {application.point_name} » — {application.first_name} {application.last_name}"
+            body=f"« {read.target_pickup_point_name or application.point_name} » — "
+            f"{application.first_name} {application.last_name}"
             + (" (dossier corrigé)" if application.submission_count > 1 else ""),
         )
-    return _read(application)
+    return read
 
 
 def _check_portrait(content: bytes) -> None:
@@ -259,7 +272,7 @@ async def get_for_document(db: AsyncSession, user: User, application_id: uuid.UU
 async def _admin_read(db: AsyncSession, application: PickupPointApplication) -> AdminApplicationRead:
     applicant = await users_repository.get_by_id(db, application.user_id)
     return AdminApplicationRead(
-        **ApplicationRead.model_validate(application).model_dump(),
+        **(await _read(db, application)).model_dump(),
         applicant_phone=applicant.phone if applicant else "—",
         applicant_email=applicant.email if applicant else None,
     )
@@ -296,12 +309,32 @@ async def _email(user: User, *, heading: str, paragraphs: list[str], cta_label: 
         logger.warning("E-mail de candidature non envoyé à %s", user.email, exc_info=True)
 
 
-async def admin_invite(db: AsyncSession, admin: User, email: str, message: str | None) -> AdminApplicationRead:
+async def admin_invite(
+    db: AsyncSession,
+    admin: User,
+    *,
+    email: str | None,
+    user_id: uuid.UUID | None,
+    pickup_point_id: uuid.UUID | None,
+    message: str | None,
+) -> AdminApplicationRead:
     """Invite un compte acheteur existant à constituer son dossier. Rouvre un
-    dossier refusé définitivement (l'admin est seul à pouvoir le faire)."""
-    user = await users_repository.get_by_email_insensitive(db, email)
+    dossier refusé définitivement (l'admin est seul à pouvoir le faire). Avec
+    `pickup_point_id`, l'invitation porte sur ce point existant : le dossier
+    se limite à l'identité et aux pièces."""
+    user = (
+        await users_repository.get_by_id(db, user_id)
+        if user_id is not None
+        else await users_repository.get_by_email_insensitive(db, email or "")
+    )
     if user is None:
-        raise NotFoundError("Aucun compte avec cet e-mail : la personne doit d'abord créer un compte acheteur.")
+        raise NotFoundError("Compte introuvable : la personne doit d'abord créer un compte acheteur.")
+    point_name = None
+    if pickup_point_id is not None:
+        point = await pickup_points_repository.get_by_id(db, pickup_point_id)
+        if point is None or not point.is_active:
+            raise ConflictError("Ce point de retrait n'est pas disponible.")
+        point_name = point.name
     if user.role != UserRole.BUYER:
         raise ConflictError("Ce compte n'est pas un compte acheteur.")
     application = await repository.get_by_user_id(db, user.id, for_update=True)
@@ -319,19 +352,33 @@ async def admin_invite(db: AsyncSession, admin: User, email: str, message: str |
     application.origin = ApplicationOrigin.INVITED
     application.invited_by = admin.id
     application.invited_at = _now()
+    application.target_pickup_point_id = pickup_point_id
     await db.commit()
     await db.refresh(application)
 
-    body = "L'équipe Ndjouri vous invite à devenir gestionnaire d'un point de retrait. Complétez votre dossier depuis votre espace."
+    if point_name:
+        body = (
+            f"L'équipe Ndjouri vous invite à gérer le point de retrait « {point_name} ». "
+            "Complétez votre dossier (identité et pièces) depuis votre espace."
+        )
+    else:
+        body = "L'équipe Ndjouri vous invite à devenir gestionnaire d'un point de retrait. Complétez votre dossier depuis votre espace."
     await notifications_service.notify_pickup_application(
         db, user_id=user.id, type_=NotificationType.PICKUP_APPLICATION_INVITED, title="Devenez point de retrait", body=body
     )
-    paragraphs = [
-        "L'équipe Ndjouri vous invite à devenir gestionnaire d'un point de retrait : vous recevrez les colis des "
-        "clients de votre quartier et serez rémunéré pour chaque colis remis.",
-        "Pour postuler, connectez-vous et complétez votre dossier : pièce d'identité, photo d'identité, adresse du "
-        "point et photos du local.",
-    ]
+    if point_name:
+        paragraphs = [
+            f"L'équipe Ndjouri vous invite à gérer le point de retrait « {point_name} » : vous y recevrez les colis "
+            "des clients et serez rémunéré pour chaque colis remis.",
+            "Connectez-vous et complétez votre dossier : identité, pièce d'identité et photo d'identité.",
+        ]
+    else:
+        paragraphs = [
+            "L'équipe Ndjouri vous invite à devenir gestionnaire d'un point de retrait : vous recevrez les colis des "
+            "clients de votre quartier et serez rémunéré pour chaque colis remis.",
+            "Pour postuler, connectez-vous et complétez votre dossier : pièce d'identité, photo d'identité, adresse du "
+            "point et photos du local.",
+        ]
     if message:
         paragraphs.insert(1, f"Message de l'équipe : {message}")
     await _email(user, heading="Invitation : devenez point de retrait", paragraphs=paragraphs, cta_label="Compléter mon dossier")
@@ -348,18 +395,24 @@ async def admin_approve(db: AsyncSession, admin: User, application_id: uuid.UUID
     if user.role != UserRole.BUYER or await managers_repository.get_by_user_id(db, user.id) is not None:
         raise ConflictError("Ce compte a changé de rôle depuis sa candidature : validation impossible.")
 
-    zone = application.point_address or ""
-    if application.point_landmark:
-        zone = f"{zone} — {application.point_landmark}"
-    point = await pickup_points_repository.create(
-        db,
-        name=application.point_name,
-        zone=zone[:300],
-        latitude=application.latitude,
-        longitude=application.longitude,
-        opening_hours=application.opening_hours,
-        is_active=True,
-    )
+    if application.target_pickup_point_id is not None:
+        # Invitation pour un point existant : on y rattache le gestionnaire.
+        point = await pickup_points_repository.get_by_id(db, application.target_pickup_point_id)
+        if point is None or not point.is_active:
+            raise ConflictError("Le point de retrait visé n'est plus disponible.")
+    else:
+        zone = application.point_address or ""
+        if application.point_landmark:
+            zone = f"{zone} — {application.point_landmark}"
+        point = await pickup_points_repository.create(
+            db,
+            name=application.point_name,
+            zone=zone[:300],
+            latitude=application.latitude,
+            longitude=application.longitude,
+            opening_hours=application.opening_hours,
+            is_active=True,
+        )
     await managers_repository.create(db, user_id=user.id, pickup_point_id=point.id)
     user.role = UserRole.PICKUP_POINT_MANAGER
     user.first_name = user.first_name or application.first_name
@@ -378,13 +431,13 @@ async def admin_approve(db: AsyncSession, admin: User, application_id: uuid.UUID
         user_id=user.id,
         type_=NotificationType.PICKUP_APPLICATION_APPROVED,
         title="Candidature validée",
-        body=f"« {point.name} » est maintenant un point de retrait Ndjouri. Bienvenue !",
+        body=f"Vous gérez maintenant le point de retrait « {point.name} ». Bienvenue !",
     )
     await _email(
         user,
         heading="Votre point de retrait est validé",
         paragraphs=[
-            f"Bonne nouvelle : « {point.name} » est maintenant un point de retrait Ndjouri.",
+            f"Bonne nouvelle : vous gérez maintenant le point de retrait « {point.name} ».",
             "Reconnectez-vous pour accéder à votre espace gestionnaire : colis attendus, colis en stock et remises aux clients.",
         ],
         cta_label="Ouvrir mon espace",

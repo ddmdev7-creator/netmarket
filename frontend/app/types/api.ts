@@ -1116,6 +1116,9 @@ export interface PickupApplicationRead extends PickupApplicationDraft {
   admin_suggestion: string | null
   reviewed_at: string | null
   pickup_point_id: string | null
+  /** Invitation à gérer un point existant : dossier réduit à l'identité. */
+  target_pickup_point_id: string | null
+  target_pickup_point_name: string | null
   created_at: string
   updated_at: string
 }
