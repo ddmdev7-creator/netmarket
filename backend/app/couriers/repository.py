@@ -25,6 +25,13 @@ async def get_by_id(db: AsyncSession, courier_id: uuid.UUID) -> Courier | None:
     return _attach_user_fields(courier, user)
 
 
+async def list_by_ids(db: AsyncSession, courier_ids: set[uuid.UUID]) -> list[Courier]:
+    if not courier_ids:
+        return []
+    stmt = select(Courier, User).join(User, Courier.user_id == User.id).where(Courier.id.in_(courier_ids))
+    return [_attach_user_fields(courier, user) for courier, user in (await db.execute(stmt)).all()]
+
+
 async def get_by_user_id(db: AsyncSession, user_id: uuid.UUID) -> Courier | None:
     stmt = select(Courier, User).join(User, Courier.user_id == User.id).where(Courier.user_id == user_id)
     row = (await db.execute(stmt)).first()

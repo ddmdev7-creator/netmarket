@@ -89,3 +89,48 @@ async def test_requires_admin(client: AsyncClient, buyer_user: User) -> None:
     response = await client.get("/admin/deliveries/active", headers=auth_headers(buyer_user))
 
     assert response.status_code == 403
+
+
+async def test_monitor_lists_in_flight_and_delivered_today(
+    client: AsyncClient,
+    admin_user: User,
+    buyer_user: User,
+    vendor_user: User,
+    product: Product,
+    courier: Courier,
+    courier_user: User,
+) -> None:
+    vendor_headers = auth_headers(vendor_user)
+    in_flight = await _checkout(client, buyer_user, product)
+    await client.patch(
+        f"/orders/sub-orders/{in_flight}/courier", json={"courier_id": str(courier.id)}, headers=vendor_headers
+    )
+    await client.patch(f"/orders/sub-orders/{in_flight}/status", json={"status": "confirmed"}, headers=vendor_headers)
+
+    delivered = await _checkout(client, buyer_user, product)
+    await client.patch(
+        f"/orders/sub-orders/{delivered}/courier", json={"courier_id": str(courier.id)}, headers=vendor_headers
+    )
+    for status in ["confirmed", "preparing", "shipped"]:
+        await client.patch(f"/orders/sub-orders/{delivered}/status", json={"status": status}, headers=vendor_headers)
+    await client.patch(
+        f"/orders/sub-orders/{delivered}/status", json={"status": "delivered"}, headers=auth_headers(courier_user)
+    )
+
+    pending = await _checkout(client, buyer_user, product)
+
+    response = await client.get("/admin/deliveries/monitor", headers=auth_headers(admin_user))
+
+    assert response.status_code == 200
+    entries = {e["sub_order_id"]: e for e in response.json()["entries"]}
+    assert entries[in_flight]["status"] == "confirmed"
+    assert entries[in_flight]["courier_phone"] == courier_user.phone
+    assert entries[in_flight]["shop_name"] == "Boutique Test"
+    assert entries[delivered]["status"] == "delivered"
+    assert pending not in entries
+
+
+async def test_monitor_requires_admin(client: AsyncClient, buyer_user: User) -> None:
+    response = await client.get("/admin/deliveries/monitor", headers=auth_headers(buyer_user))
+
+    assert response.status_code == 403

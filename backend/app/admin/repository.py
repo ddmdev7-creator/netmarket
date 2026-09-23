@@ -1,8 +1,9 @@
 """Aggregate read queries for the admin dashboard: counts, sales, top rankings."""
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -65,12 +66,28 @@ async def top_vendors(db: AsyncSession, limit: int = 5) -> list[tuple]:
     return list((await db.execute(stmt)).all())
 
 
-async def get_vendor_owner(db: AsyncSession, vendor_id: uuid.UUID) -> User | None:
-    """The account behind a boutique — Vendor has no relationship to User,
-    joined here rather than in app/vendors/repository.py since this is
+async def get_vendor_with_owner(db: AsyncSession, vendor_id: uuid.UUID) -> tuple[Vendor, User] | None:
+    """A boutique + the account behind it — Vendor has no relationship to
+    User, joined here rather than in app/vendors/repository.py since this is
     admin-only reporting, not something the vendor/catalog modules need."""
-    stmt = select(User).join(Vendor, Vendor.user_id == User.id).where(Vendor.id == vendor_id)
-    return (await db.execute(stmt)).scalar_one_or_none()
+    stmt = select(Vendor, User).join(User, Vendor.user_id == User.id).where(Vendor.id == vendor_id)
+    row = (await db.execute(stmt)).first()
+    return (row[0], row[1]) if row else None
+
+
+async def count_orders_for_user(db: AsyncSession, user_id: uuid.UUID) -> int:
+    stmt = select(func.count()).select_from(Order).where(Order.user_id == user_id)
+    return (await db.execute(stmt)).scalar_one()
+
+
+async def get_pickup_point_with_shop(db: AsyncSession, pickup_point_id: uuid.UUID) -> tuple[PickupPoint, str | None] | None:
+    stmt = (
+        select(PickupPoint, Vendor.shop_name)
+        .outerjoin(Vendor, PickupPoint.vendor_id == Vendor.id)
+        .where(PickupPoint.id == pickup_point_id)
+    )
+    row = (await db.execute(stmt)).first()
+    return (row[0], row[1]) if row else None
 
 
 async def list_all_orders(
@@ -110,5 +127,32 @@ async def list_active_deliveries(db: AsyncSession) -> list[tuple]:
         .outerjoin(PickupPoint, Order.pickup_point_id == PickupPoint.id)
         .where(SubOrder.status.in_(ACTIVE_DELIVERY_STATUSES))
         .order_by(SubOrder.created_at.desc())
+    )
+    return list((await db.execute(stmt)).all())
+
+
+# Suivi des livraisons : tout ce qui est entre les mains de la chaîne
+# logistique (confirmé → au point de retrait), plus ce qui a été livré depuis
+# `since`, pour le compteur du jour. Les annulations ne sont pas remontées :
+# la plupart surviennent avant toute prise en charge (commande en attente),
+# ce ne sont pas des livraisons.
+MONITORED_STATUSES = (*ACTIVE_DELIVERY_STATUSES, OrderStatus.ARRIVED_AT_PICKUP_POINT)
+
+
+async def list_monitored_deliveries(db: AsyncSession, since: datetime) -> list[tuple]:
+    """(SubOrder, Order, buyer User | None, vendor zone, pickup point name)."""
+    stmt = (
+        select(SubOrder, Order, User, Vendor.zone, PickupPoint.name)
+        .join(Order, SubOrder.order_id == Order.id)
+        .join(Vendor, SubOrder.vendor_id == Vendor.id)
+        .outerjoin(User, Order.user_id == User.id)
+        .outerjoin(PickupPoint, Order.pickup_point_id == PickupPoint.id)
+        .where(
+            or_(
+                SubOrder.status.in_(MONITORED_STATUSES),
+                and_(SubOrder.status == OrderStatus.DELIVERED, SubOrder.updated_at >= since),
+            )
+        )
+        .order_by(SubOrder.updated_at.desc())
     )
     return list((await db.execute(stmt)).all())

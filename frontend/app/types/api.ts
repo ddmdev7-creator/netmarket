@@ -660,17 +660,72 @@ export interface OrderRead {
   sub_orders: SubOrderRead[]
 }
 
-/** Sub-order shape for the admin's own order detail (GET /admin/orders/{id}) — adds the vendor account (not just the frozen shop_name) and courier info. */
-export interface AdminSubOrderRead extends SubOrderBase {
-  courier_name: string | null
-  courier_phone: string | null
-  storage_location: string | null
-  vendor_owner_phone: string | null
-  vendor_owner_email: string | null
-  vendor_owner_full_name: string | null
+/** La boutique d'une sous-commande telle qu'elle est aujourd'hui + le compte de son propriétaire. */
+export interface AdminVendorInfo {
+  id: string
+  shop_name: string
+  status: VendorStatus
+  zone: string | null
+  latitude: number | null
+  longitude: number | null
+  commission_rate: number
+  preparation_days: number
+  created_at: string
+  owner_full_name: string | null
+  owner_phone: string | null
+  owner_email: string | null
 }
 
-/** Full order detail for the admin — order + buyer account + per-sub-order vendor/courier info. */
+/** Livreur d'une sous-commande. face_photo_key se charge via GET /couriers/{id}/documents/{key} (pas public). */
+export interface AdminCourierInfo {
+  id: string
+  full_name: string | null
+  phone: string
+  status: CourierStatus
+  vehicle_type: VehicleType
+  vehicle_name: string | null
+  vehicle_plate_number: string | null
+  zone: string | null
+  is_online: boolean
+  face_photo_key: string | null
+  average_rating: number | null
+  review_count: number
+}
+
+export interface AdminBuyerInfo {
+  id: string
+  full_name: string | null
+  phone: string
+  email: string | null
+  email_verified: boolean
+  is_active: boolean
+  created_at: string
+  order_count: number
+}
+
+export interface AdminPickupPointInfo {
+  id: string
+  name: string
+  zone: string
+  latitude: number | null
+  longitude: number | null
+  is_active: boolean
+  vendor_shop_name: string | null
+  average_rating: number | null
+  review_count: number
+}
+
+/** Sub-order shape for the admin's own order detail (GET /admin/orders/{id}). */
+export interface AdminSubOrderRead extends SubOrderBase {
+  created_at: string
+  updated_at: string
+  storage_location: string | null
+  vendor: AdminVendorInfo | null
+  courier: AdminCourierInfo | null
+  dispatch_offered_courier_name: string | null
+}
+
+/** Full order detail for the admin — order + buyer account + pickup point + per-sub-order vendor/courier. */
 export interface AdminOrderRead {
   id: string
   status: OrderStatus
@@ -678,6 +733,8 @@ export interface AdminOrderRead {
   delivery_type: DeliveryType
   delivery_zone: string | null
   delivery_instructions: string | null
+  delivery_latitude: number | null
+  delivery_longitude: number | null
   recipient_name: string | null
   recipient_phone: string | null
   pickup_point_contacts: PickupPointContactRead[]
@@ -686,9 +743,46 @@ export interface AdminOrderRead {
   total: number
   created_at: string
   sub_orders: AdminSubOrderRead[]
-  buyer_phone: string
-  buyer_email: string | null
-  buyer_full_name: string | null
+  buyer: AdminBuyerInfo | null
+  pickup_point: AdminPickupPointInfo | null
+}
+
+/** GET /admin/deliveries/monitor — une ligne de l'écran de suivi des livraisons. */
+export interface DeliveryMonitorEntry {
+  sub_order_id: string
+  order_id: string
+  status: OrderStatus
+  created_at: string
+  /** Dernier changement (statut/livreur) de la sous-commande. */
+  updated_at: string
+  estimated_delivery_min: string | null
+  estimated_delivery_max: string | null
+  amount: number
+  delivery_fee: number
+  payment_method: PaymentMethod
+  vendor_id: string
+  shop_name: string
+  vendor_zone: string | null
+  delivery_type: DeliveryType
+  delivery_zone: string | null
+  delivery_address: string
+  pickup_point_name: string | null
+  storage_location: string | null
+  buyer_name: string | null
+  buyer_phone: string | null
+  courier_id: string | null
+  courier_name: string | null
+  courier_phone: string | null
+  courier_is_online: boolean | null
+  dispatch_offered_courier_id: string | null
+  dispatch_offered_courier_name: string | null
+}
+
+export interface DeliveryMonitorRead {
+  generated_at: string
+  /** Début de journée pris pour « livrées aujourd'hui ». */
+  since: string
+  entries: DeliveryMonitorEntry[]
 }
 
 export interface AdminTopProduct {

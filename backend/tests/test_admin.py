@@ -134,11 +134,35 @@ async def test_admin_order_detail_includes_buyer_vendor_and_courier_info(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["buyer_phone"] == buyer_user.phone
+    assert body["buyer"]["phone"] == buyer_user.phone
+    assert body["buyer"]["order_count"] == 1
+    assert body["pickup_point"] is None
     sub_order = body["sub_orders"][0]
-    assert sub_order["vendor_owner_phone"] == vendor_user.phone
-    assert sub_order["courier_phone"] == courier_user.phone
+    assert sub_order["vendor"]["owner_phone"] == vendor_user.phone
+    assert sub_order["vendor"]["shop_name"] == "Boutique Test"
+    assert sub_order["courier"]["id"] == str(courier.id)
+    assert sub_order["courier"]["phone"] == courier_user.phone
+    assert sub_order["courier"]["vehicle_type"] == courier.vehicle_type.value
     assert sub_order["items"][0]["product_image"] == "products/casque.jpg"
+
+
+async def test_admin_order_detail_includes_pickup_point(
+    client: AsyncClient, admin_user: User, buyer_user: User, product: Product, pickup_point
+) -> None:
+    await client.post("/cart/items", json={"product_id": str(product.id), "quantity": 1}, headers=auth_headers(buyer_user))
+    checkout = await client.post(
+        "/orders/checkout",
+        json={**CHECKOUT_PAYLOAD, "delivery_type": "pickup_point", "pickup_point_id": str(pickup_point.id)},
+        headers=auth_headers(buyer_user),
+    )
+
+    response = await client.get(f"/admin/orders/{checkout.json()['id']}", headers=auth_headers(admin_user))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pickup_point"]["id"] == str(pickup_point.id)
+    assert body["pickup_point"]["name"] == "Point Test"
+    assert body["sub_orders"][0]["courier"] is None
 
 
 async def test_admin_order_detail_404_for_unknown_order(client: AsyncClient, admin_user: User) -> None:

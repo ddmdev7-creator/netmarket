@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import service
-from app.admin.schemas import ActiveDeliveryRead, AdminStats
+from app.admin.schemas import ActiveDeliveryRead, AdminStats, DeliveryMonitorRead
 from app.core.deps import get_db, require_role
 from app.core.pagination import Page, PageParams, pagination_params
 from app.orders.models import OrderStatus
@@ -29,6 +29,12 @@ async def get_stats(db: AsyncSession = Depends(get_db)) -> AdminStats:
 @router.get("/deliveries/active", response_model=list[ActiveDeliveryRead])
 async def list_active_deliveries(db: AsyncSession = Depends(get_db)) -> list[ActiveDeliveryRead]:
     return await service.list_active_deliveries(db)
+
+
+@router.get("/deliveries/monitor", response_model=DeliveryMonitorRead)
+async def get_delivery_monitor(db: AsyncSession = Depends(get_db)) -> DeliveryMonitorRead:
+    """Écran de suivi des livraisons, rafraîchi en continu par le front."""
+    return await service.get_delivery_monitor(db)
 
 
 @router.get("/orders", response_model=Page[OrderRead])

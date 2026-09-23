@@ -1,11 +1,11 @@
 """Admin dashboard schemas: platform-wide statistics."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
-from app.orders.models import DeliveryType, OrderStatus
+from app.orders.models import DeliveryType, OrderStatus, PaymentMethod
 
 
 class TopProduct(BaseModel):
@@ -56,3 +56,45 @@ class ActiveDeliveryRead(BaseModel):
     destination_longitude: float | None
     courier_id: uuid.UUID | None
     dispatch_offered_courier_id: uuid.UUID | None
+
+
+class DeliveryMonitorEntry(BaseModel):
+    """Une sous-commande suivie par l'écran admin de suivi des livraisons
+    (pages/admin/livraisons) — tout ce qu'il faut pour repérer un colis
+    bloqué sans ouvrir la commande."""
+
+    sub_order_id: uuid.UUID
+    order_id: uuid.UUID
+    status: OrderStatus
+    created_at: datetime
+    # Dernier changement de la sous-commande — en pratique son dernier
+    # changement de statut/livreur, d'où l'« immobile depuis » de l'écran.
+    updated_at: datetime
+    estimated_delivery_min: date | None
+    estimated_delivery_max: date | None
+    amount: int
+    delivery_fee: int
+    payment_method: PaymentMethod
+    vendor_id: uuid.UUID
+    shop_name: str
+    vendor_zone: str | None
+    delivery_type: DeliveryType
+    delivery_zone: str | None
+    delivery_address: str
+    pickup_point_name: str | None
+    storage_location: str | None
+    buyer_name: str | None
+    buyer_phone: str | None
+    courier_id: uuid.UUID | None
+    courier_name: str | None
+    courier_phone: str | None
+    courier_is_online: bool | None
+    dispatch_offered_courier_id: uuid.UUID | None
+    dispatch_offered_courier_name: str | None
+
+
+class DeliveryMonitorRead(BaseModel):
+    generated_at: datetime
+    # Début de la journée (UTC = heure de Conakry) pris pour « livrées aujourd'hui ».
+    since: datetime
+    entries: list[DeliveryMonitorEntry]

@@ -267,28 +267,92 @@ class OrderRead(BaseModel):
     sub_orders: list[SubOrderRead]
 
 
+class AdminVendorInfo(BaseModel):
+    """La boutique telle qu'elle est aujourd'hui (SubOrder.shop_name reste le
+    nom figé au checkout) + le compte de son propriétaire."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    shop_name: str
+    status: str
+    zone: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    commission_rate: float
+    preparation_days: int
+    created_at: datetime
+    owner_full_name: str | None = None
+    owner_phone: str | None = None
+    owner_email: str | None = None
+
+
+class AdminCourierInfo(BaseModel):
+    """Le livreur d'une sous-commande. face_photo_key n'est pas une URL
+    publique : l'écran admin la charge via GET /couriers/{id}/documents/{key}
+    (voir app/couriers/router.py::get_courier_document)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    full_name: str | None = None
+    phone: str
+    status: str
+    vehicle_type: VehicleType
+    vehicle_name: str | None = None
+    vehicle_plate_number: str | None = None
+    zone: str | None = None
+    is_online: bool
+    face_photo_key: str | None = None
+    average_rating: float | None = None
+    review_count: int = 0
+
+
+class AdminBuyerInfo(BaseModel):
+    id: uuid.UUID
+    full_name: str | None = None
+    phone: str
+    email: str | None = None
+    email_verified: bool
+    is_active: bool
+    created_at: datetime
+    order_count: int
+
+
+class AdminPickupPointInfo(BaseModel):
+    """Le point de retrait lu en direct (pas figé sur la commande), comme
+    pickup_point_contacts."""
+
+    id: uuid.UUID
+    name: str
+    zone: str
+    latitude: float | None = None
+    longitude: float | None = None
+    is_active: bool
+    vendor_shop_name: str | None = None
+    average_rating: float | None = None
+    review_count: int = 0
+
+
 class AdminSubOrderRead(SubOrderBase):
     """Sub-order shape for the admin's own order detail view — adds the
-    vendor's own account info (not just the frozen shop_name) and the
-    assigned courier's info, everything an admin needs to investigate an
-    order without switching screens."""
+    vendor's current shop + owner account (not just the frozen shop_name)
+    and the assigned courier's full profile, everything an admin needs to
+    investigate an order without switching screens."""
 
-    courier_name: str | None = None
-    courier_phone: str | None = None
+    created_at: datetime
+    updated_at: datetime
     storage_location: str | None = None
-    # Compte du vendeur propriétaire de cette boutique, attaché en lecture
-    # (voir app/admin/repository.py::get_vendor_owner) — shop_name reste la
-    # source figée pour l'affichage principal, ces champs ne servent qu'à
-    # l'onglet "Boutique" de l'admin.
-    vendor_owner_phone: str | None = None
-    vendor_owner_email: str | None = None
-    vendor_owner_full_name: str | None = None
+    vendor: AdminVendorInfo | None = None
+    courier: AdminCourierInfo | None = None
+    # Dispatch en cours, pas encore accepté (voir SubOrder.dispatch_offered_courier_id).
+    dispatch_offered_courier_name: str | None = None
 
 
 class AdminOrderRead(BaseModel):
     """Full order detail for the admin's own order screen — order info +
-    buyer account + per-sub-order vendor/courier info, organized as tabs on
-    the frontend (see pages/admin/commandes/[id].vue)."""
+    buyer account + pickup point + per-sub-order vendor/courier info (see
+    pages/admin/commandes/[id].vue)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -298,6 +362,8 @@ class AdminOrderRead(BaseModel):
     delivery_type: DeliveryType
     delivery_zone: str | None = None
     delivery_instructions: str | None = None
+    delivery_latitude: float | None = None
+    delivery_longitude: float | None = None
     recipient_name: str | None = None
     recipient_phone: str | None = None
     pickup_point_contacts: list[PickupPointContactRead] = []
@@ -306,8 +372,8 @@ class AdminOrderRead(BaseModel):
     total: int
     created_at: datetime
     sub_orders: list[AdminSubOrderRead]
-    # Acheteur — Order.user_id n'a pas de relation SQLAlchemy vers User
-    # (jamais eu besoin ailleurs), attaché en lecture comme le reste ici.
-    buyer_phone: str
-    buyer_email: str | None = None
-    buyer_full_name: str | None = None
+    # Order.user_id n'a pas de relation SQLAlchemy vers User (jamais eu
+    # besoin ailleurs), attaché en lecture comme le reste ici. None si le
+    # compte a disparu.
+    buyer: AdminBuyerInfo | None = None
+    pickup_point: AdminPickupPointInfo | None = None
