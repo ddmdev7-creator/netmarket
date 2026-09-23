@@ -598,3 +598,31 @@ async def test_manager_sees_customer_and_can_update_opening_hours(
         "/pickup-point-managers/me/point", json={"opening_hours": "Tous les jours"}, headers=auth_headers(buyer_user)
     )
     assert forbidden.status_code == 403
+
+
+async def test_parcel_changes_push_a_silent_refresh_to_courier_and_managers(
+    client: AsyncClient,
+    monkeypatch,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    manager_user: User,
+    manager: PickupPointManager,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    signals: list[tuple[set, str]] = []
+
+    async def capture(user_ids, scope):
+        signals.append((set(user_ids), scope))
+
+    monkeypatch.setattr("app.orders.service.notifications_service.push_refresh", capture)
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+
+    # Affectation + 3 changements de statut : le livreur et le gestionnaire sont prévenus à chaque fois.
+    assert len(signals) == 4
+    assert all(ids == {courier_user.id, manager_user.id} and scope == "deliveries" for ids, scope in signals)
+
+    await scan_handoff(client, manager_user, sub_order_id)
+    assert len(signals) == 5

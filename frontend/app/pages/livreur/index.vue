@@ -25,6 +25,25 @@ watch(
     if (id && id !== previous) refresh()
   },
 )
+// Signal silencieux du serveur à chaque changement sur un de ses colis
+// (affectation, expédition, dépôt au point, annulation…).
+watch(() => notifications.deliveriesTick, () => refresh())
+// Filet de sécurité si la connexion temps réel est coupée : relecture
+// périodique et au retour sur l'onglet.
+let poller: ReturnType<typeof setInterval> | undefined
+function onVisibility() {
+  if (!document.hidden) refresh()
+}
+onMounted(() => {
+  poller = setInterval(() => {
+    if (!document.hidden) refresh()
+  }, 30_000)
+  document.addEventListener('visibilitychange', onVisibility)
+})
+onBeforeUnmount(() => {
+  clearInterval(poller)
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 
 const { data: myCourier } = await useAsyncData(
   'courier-me-availability',

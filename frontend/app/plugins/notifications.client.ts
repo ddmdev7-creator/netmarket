@@ -20,4 +20,10 @@ export default defineNuxtPlugin(() => {
     },
     { immediate: true },
   )
+
+  // Mobile : l'appli revient au premier plan ou retrouve le réseau.
+  window.addEventListener('online', () => notifications.reconnectNow())
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) notifications.reconnectNow()
+  })
 })

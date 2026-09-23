@@ -414,6 +414,8 @@ async def cancel_order(
     if not refund_initiated:
         await payments_service.mark_cancelled(db, order.id)
     await db.commit()
+    for sub_order in order.sub_orders:
+        await _signal_parcel_followers(db, sub_order)
     return await get_order(db, user, order_id)
 
 
@@ -534,6 +536,7 @@ async def assign_courier(
         if courier is None or courier.status != CourierStatus.APPROVED:
             raise ConflictError("Ce livreur n'est pas disponible.")
 
+    previous_courier_id = sub_order.courier_id
     sub_order.courier_id = data.courier_id
     # Assignation manuelle : prime sur un dispatch automatique en cours (voir
     # start_dispatch) — on vide son état et on réveille sa tâche de fond
@@ -545,6 +548,7 @@ async def assign_courier(
     _wake_dispatch(sub_order_id)
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    await _signal_parcel_followers(db, updated, extra_courier_ids={previous_courier_id})
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
     await _attach_dispatch_offer_info(db, updated)
@@ -739,6 +743,7 @@ async def update_sub_order_status(
         await notifications_service.notify_sub_order_status_changed(db, buyer, sub_order)
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    await _signal_parcel_followers(db, updated)
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
     await _attach_product_images(db, updated)
@@ -861,6 +866,23 @@ async def get_delivery_offer(db: AsyncSession, user: User, sub_order_id: uuid.UU
         offer["pickup_point_zone"] = point.zone if point else None
         offer["pickup_point_contacts"] = [{"name": m.full_name, "phone": m.phone} for m in managers]
     return offer
+
+
+async def _signal_parcel_followers(
+    db: AsyncSession, sub_order: SubOrder, *, extra_courier_ids: set[uuid.UUID | None] | None = None
+) -> None:
+    """Prévient en direct (signal silencieux) le livreur et les gestionnaires
+    du point concernés qu'un colis a changé — leur écran relit sa liste."""
+    user_ids: set[uuid.UUID] = set()
+    for courier_id in {sub_order.courier_id, *(extra_courier_ids or set())}:
+        if courier_id is not None:
+            courier = await courier_repository.get_by_id(db, courier_id)
+            if courier is not None:
+                user_ids.add(courier.user_id)
+    if sub_order.order.pickup_point_id is not None:
+        for manager in await pickup_point_manager_repository.list_by_pickup_point(db, sub_order.order.pickup_point_id):
+            user_ids.add(manager.user_id)
+    await notifications_service.push_refresh(user_ids, "deliveries")
 
 
 def _wake_dispatch(sub_order_id: uuid.UUID) -> None:
@@ -1017,6 +1039,7 @@ async def accept_delivery(db: AsyncSession, user: User, sub_order_id: uuid.UUID)
         )
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    await _signal_parcel_followers(db, updated)
     _attach_delivery_address(updated)
     await _attach_pickup_point_contacts(db, updated, updated.order.pickup_point_id)
     await _attach_product_images(db, updated)

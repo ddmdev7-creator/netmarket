@@ -18,6 +18,10 @@ export const useNotificationStore = defineStore('notifications', () => {
   // récente écrase juste l'affichage, cohérent avec le reste du design
   // volontairement simple de cette fonctionnalité.
   const pendingDeliveryRequest = ref<NotificationRead | null>(null)
+  // Signal silencieux « relis tes colis » (backend notifications.push_refresh,
+  // jamais affiché) : les écrans livreur / point de retrait surveillent ce
+  // compteur pour se rafraîchir en direct.
+  const deliveriesTick = ref(0)
   let socket: WebSocket | null = null
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let reconnectDelay = 1000
@@ -33,7 +37,11 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
   }
 
-  function handleIncoming(notification: NotificationRead) {
+  function handleIncoming(notification: NotificationRead | { type: 'refresh'; scope: string }) {
+    if (notification.type === 'refresh') {
+      deliveriesTick.value += 1
+      return
+    }
     items.value = [notification, ...items.value].slice(0, 50)
     unreadCount.value += 1
     if (notification.type === 'delivery_request') {
@@ -74,17 +82,39 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
   }
 
-  function connect() {
-    if (socket) return
+  // Le jeton d'accès (30 min) n'est vérifié qu'à l'ouverture du socket : une
+  // reconnexion après une coupure réseau (fréquente sur mobile) avec un jeton
+  // expiré serait refusée en boucle. On le renouvelle d'abord s'il expire.
+  function tokenExpiresSoon(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/')))
+      return typeof payload.exp !== 'number' || payload.exp * 1000 < Date.now() + 60_000
+    } catch {
+      return true
+    }
+  }
+
+  let connecting = false
+  async function connect() {
+    if (socket || connecting) return
     const auth = useAuthStore()
     if (!auth.accessToken) return
+    if (tokenExpiresSoon(auth.accessToken)) {
+      connecting = true
+      try {
+        const refreshed = await auth.tryRefresh()
+        if (!refreshed || !auth.accessToken || socket) return
+      } finally {
+        connecting = false
+      }
+    }
 
     const wsBase = useApiBase().replace(/^http/, 'ws')
     socket = new WebSocket(`${wsBase}/notifications/ws/notifications?token=${encodeURIComponent(auth.accessToken)}`)
 
     socket.onmessage = (event) => {
       try {
-        handleIncoming(JSON.parse(event.data) as NotificationRead)
+        handleIncoming(JSON.parse(event.data))
       } catch {
         // Message malformé — ignoré plutôt que de faire planter le socket.
       }
@@ -101,7 +131,21 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
     socket.onopen = () => {
       reconnectDelay = 1000
+      // Reconnecté : ce qui a changé pendant la coupure est relu tout de suite.
+      deliveriesTick.value += 1
     }
+  }
+
+  // Retour au premier plan ou du réseau : reconnexion immédiate plutôt que
+  // d'attendre la fin du délai de reconnexion.
+  function reconnectNow() {
+    if (socket || !useAuthStore().accessToken) return
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
+    }
+    reconnectDelay = 1000
+    connect()
   }
 
   function disconnect() {
@@ -124,6 +168,8 @@ export const useNotificationStore = defineStore('notifications', () => {
     items,
     unreadCount,
     pendingDeliveryRequest,
+    deliveriesTick,
+    reconnectNow,
     fetchInitial,
     markRead,
     markAllRead,

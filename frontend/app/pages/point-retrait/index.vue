@@ -44,6 +44,7 @@ watch(
     if (id && id !== previous) refresh()
   },
 )
+watch(() => notifications.deliveriesTick, () => refresh())
 let poller: ReturnType<typeof setInterval> | undefined
 function onVisibility() {
   if (!document.hidden) refresh()

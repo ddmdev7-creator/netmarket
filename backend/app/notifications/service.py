@@ -208,3 +208,14 @@ async def notify_pickup_application(
     """Étapes d'une candidature gestionnaire de point de retrait (invitation,
     soumission côté admin, décisions côté candidat)."""
     await _persist_and_push(db, user_id=user_id, type_=type_, title=title, body=body, order_id=None)
+
+
+async def push_refresh(user_ids: set[uuid.UUID], scope: str) -> None:
+    """Signal silencieux (non enregistré, jamais affiché) : « relis tes
+    données ». Pour les écrans qui suivent des colis sans que chaque
+    changement mérite une notification (espace livreur, point de retrait)."""
+    for user_id in user_ids:
+        try:
+            await ws_manager.send_to_user(user_id, {"type": "refresh", "scope": scope})
+        except Exception:  # noqa: BLE001 — un signal perdu est rattrapé par la relecture périodique
+            logger.info("Signal de rafraîchissement non envoyé", exc_info=True)
