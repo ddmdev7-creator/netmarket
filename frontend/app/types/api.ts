@@ -439,6 +439,19 @@ export interface ReviewRead {
   rating: number
   comment: string | null
   created_at: string
+  updated_at: string
+  /** Prénom + initiale (« Mamadou D. »), null si le compte n'a pas de prénom. */
+  author_name: string | null
+}
+
+/** GET /reviews/mine — un produit reçu par l'acheteur, avec son avis s'il en a laissé un. */
+export interface ReviewableProductRead {
+  product_id: string
+  product_name: string
+  product_image: string | null
+  order_id: string
+  delivered_at: string
+  review: ReviewRead | null
 }
 
 export interface ReviewCreate {

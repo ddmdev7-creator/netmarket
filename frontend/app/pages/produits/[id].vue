@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PhArrowLeft, PhFlag, PhMapPin, PhShoppingCart, PhStar, PhTruck } from '@phosphor-icons/vue'
-import type { ProductRead } from '~/types/api'
+import type { ProductRead, ReviewRead } from '~/types/api'
 
 definePageMeta({ layout: 'blank' })
 
@@ -13,7 +13,7 @@ const toast = useToastStore()
 
 const productId = route.params.id as string
 
-const { data: product, error } = await useAsyncData(`product-${productId}`, () =>
+const { data: product, error, refresh: refreshProduct } = await useAsyncData(`product-${productId}`, () =>
   apiFetch<ProductRead>(`/products/${productId}`),
 )
 
@@ -21,12 +21,24 @@ const reviewListRef = ref<{ refresh: () => Promise<void> } | null>(null)
 const reviewFormOpen = ref(false)
 const reportProductOpen = ref(false)
 
+// Seul un acheteur qui a reçu ce produit peut le noter (règle backend) :
+// la liste de ses produits reçus dit s'il peut laisser un avis, ou s'il en
+// a déjà un à modifier.
+const reviewable = useReviewableProducts()
+const myEntry = computed(() => reviewable.byProduct.value.get(productId) ?? null)
+
 function openReviewForm() {
   if (!auth.isAuthenticated) {
     router.push({ path: '/connexion', query: { redirect: route.fullPath } })
     return
   }
   reviewFormOpen.value = true
+}
+
+function onReviewSubmitted(review: ReviewRead) {
+  reviewable.applyReview(review)
+  reviewListRef.value?.refresh()
+  refreshProduct()
 }
 
 const quantity = ref(1)
@@ -335,8 +347,17 @@ async function addToCart() {
 
         <div class="d-flex justify-space-between align-center mb-2">
           <h3 class="text-subtitle-1 mb-0">Avis</h3>
-          <v-btn variant="outlined" size="small" @click="openReviewForm">Laisser un avis</v-btn>
+          <v-btn v-if="!auth.isAuthenticated" variant="outlined" size="small" @click="openReviewForm">
+            Laisser un avis
+          </v-btn>
+          <v-btn v-else-if="myEntry" variant="outlined" size="small" color="primary" @click="openReviewForm">
+            <PhStar :size="15" weight="fill" class="mr-1" />
+            {{ myEntry.review ? 'Modifier mon avis' : 'Noter ce produit' }}
+          </v-btn>
         </div>
+        <p v-if="auth.isAuthenticated && !myEntry && !reviewable.pending.value" class="text-muted text-meta mb-3">
+          Seuls les acheteurs ayant reçu ce produit peuvent le noter.
+        </p>
         <ProductReviewList ref="reviewListRef" :product-id="productId" />
       </div>
     </div>
@@ -344,7 +365,10 @@ async function addToCart() {
     <ProductReviewForm
       v-model="reviewFormOpen"
       :product-id="productId"
-      @submitted="reviewListRef?.refresh()"
+      :product-name="product?.name"
+      :product-image="product?.images?.[0] ?? null"
+      :existing="myEntry?.review ?? null"
+      @submitted="onReviewSubmitted"
     />
     <CommonReportDialog v-model="reportProductOpen" :endpoint="`/products/${productId}/reports`" />
 

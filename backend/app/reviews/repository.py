@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.reviews.models import Review
+from app.users.models import User
 
 
 async def get_by_product_and_user(db: AsyncSession, product_id: uuid.UUID, user_id: uuid.UUID) -> Review | None:
@@ -31,9 +32,24 @@ async def create(
     return review
 
 
-async def list_for_product(db: AsyncSession, product_id: uuid.UUID) -> list[Review]:
-    stmt = select(Review).where(Review.product_id == product_id).order_by(Review.created_at.desc())
-    return list((await db.execute(stmt)).scalars().all())
+async def list_for_product(db: AsyncSession, product_id: uuid.UUID) -> list[tuple[Review, User | None]]:
+    """Avis + leur auteur (pour le nom affiché), le plus récent d'abord."""
+    stmt = (
+        select(Review, User)
+        .outerjoin(User, Review.user_id == User.id)
+        .where(Review.product_id == product_id)
+        .order_by(Review.created_at.desc())
+    )
+    return [(review, user) for review, user in (await db.execute(stmt)).all()]
+
+
+async def list_for_user_and_products(
+    db: AsyncSession, user_id: uuid.UUID, product_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, Review]:
+    if not product_ids:
+        return {}
+    stmt = select(Review).where(Review.user_id == user_id, Review.product_id.in_(product_ids))
+    return {review.product_id: review for review in (await db.execute(stmt)).scalars().all()}
 
 
 async def get_rating_summary(db: AsyncSession, product_id: uuid.UUID) -> tuple[float | None, int]:

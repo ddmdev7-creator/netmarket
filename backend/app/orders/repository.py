@@ -24,6 +24,22 @@ async def has_delivered_product_for_user(db: AsyncSession, user_id: uuid.UUID, p
     return (await db.execute(stmt)).first() is not None
 
 
+async def list_delivered_items_for_user(db: AsyncSession, user_id: uuid.UUID) -> list[tuple]:
+    """(product_id, product_name, variant_id, order_id, delivered_at) de chaque
+    article livré à cet acheteur, le plus récent d'abord — base de la liste
+    « produits à noter » (app/reviews/service.py::list_reviewable_products).
+    delivered_at = SubOrder.updated_at : la remise est le dernier changement
+    d'une sous-commande livrée."""
+    stmt = (
+        select(OrderItem.product_id, OrderItem.product_name, OrderItem.variant_id, Order.id, SubOrder.updated_at)
+        .join(SubOrder, OrderItem.sub_order_id == SubOrder.id)
+        .join(Order, SubOrder.order_id == Order.id)
+        .where(Order.user_id == user_id, SubOrder.status == OrderStatus.DELIVERED)
+        .order_by(SubOrder.updated_at.desc())
+    )
+    return list((await db.execute(stmt)).all())
+
+
 async def has_delivered_by_courier_for_user(db: AsyncSession, user_id: uuid.UUID, courier_id: uuid.UUID) -> bool:
     """True once this courier actually delivered a sub-order of this user —
     the "avis après livraison" gate for app/couriers/service.py::create_review."""

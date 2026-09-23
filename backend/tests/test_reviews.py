@@ -112,3 +112,67 @@ async def test_public_review_list_visible_without_auth(
 
     assert response.status_code == 200
     assert response.json()[0]["rating"] == 5
+
+
+async def test_reviewable_products_lists_delivered_products_with_my_review(
+    client: AsyncClient, buyer_user: User, vendor_user: User, product: Product, courier: Courier, courier_user: User
+) -> None:
+    empty = await client.get("/reviews/mine", headers=auth_headers(buyer_user))
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    await _buy_and_deliver(client, buyer_user, vendor_user, product, courier, courier_user)
+
+    [pending] = (await client.get("/reviews/mine", headers=auth_headers(buyer_user))).json()
+    assert pending["product_id"] == str(product.id)
+    assert pending["review"] is None
+
+    await client.post(f"/products/{product.id}/reviews", json={"rating": 3}, headers=auth_headers(buyer_user))
+
+    [reviewed] = (await client.get("/reviews/mine", headers=auth_headers(buyer_user))).json()
+    assert reviewed["review"]["rating"] == 3
+
+
+async def test_buyer_can_update_own_review(
+    client: AsyncClient, buyer_user: User, vendor_user: User, product: Product, courier: Courier, courier_user: User
+) -> None:
+    await _buy_and_deliver(client, buyer_user, vendor_user, product, courier, courier_user)
+    await client.post(f"/products/{product.id}/reviews", json={"rating": 2}, headers=auth_headers(buyer_user))
+
+    response = await client.put(
+        f"/products/{product.id}/reviews/mine",
+        json={"rating": 5, "comment": "Finalement très bien"},
+        headers=auth_headers(buyer_user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["rating"] == 5
+    [listed] = (await client.get(f"/products/{product.id}/reviews")).json()
+    assert (listed["rating"], listed["comment"]) == (5, "Finalement très bien")
+
+
+async def test_updating_a_missing_review_is_404(client: AsyncClient, buyer_user: User, product: Product) -> None:
+    response = await client.put(
+        f"/products/{product.id}/reviews/mine", json={"rating": 5}, headers=auth_headers(buyer_user)
+    )
+
+    assert response.status_code == 404
+
+
+async def test_review_list_shows_first_name_and_initial_only(
+    client: AsyncClient,
+    db_session,
+    buyer_user: User,
+    vendor_user: User,
+    product: Product,
+    courier: Courier,
+    courier_user: User,
+) -> None:
+    buyer_user.first_name, buyer_user.last_name = "Mamadou", "Diallo"
+    await db_session.flush()
+    await _buy_and_deliver(client, buyer_user, vendor_user, product, courier, courier_user)
+    await client.post(f"/products/{product.id}/reviews", json={"rating": 4}, headers=auth_headers(buyer_user))
+
+    [listed] = (await client.get(f"/products/{product.id}/reviews")).json()
+
+    assert listed["author_name"] == "Mamadou D."

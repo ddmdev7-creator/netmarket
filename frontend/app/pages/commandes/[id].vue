@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PhArrowLeft, PhChatCircle, PhCheckCircle, PhImage, PhStar } from '@phosphor-icons/vue'
-import type { OrderRead } from '~/types/api'
+import type { OrderItemRead, OrderRead, ReviewRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
@@ -77,6 +77,25 @@ const ratingOpen = computed({
   },
 })
 
+// Avis produit : un par produit reçu (même produit commandé deux fois = un
+// seul avis, modifiable) — voir composables/useReviewableProducts.ts.
+const reviewable = useReviewableProducts()
+const reviewTarget = ref<OrderItemRead | null>(null)
+const reviewInitialRating = ref(0)
+const reviewOpen = computed({
+  get: () => reviewTarget.value !== null,
+  set: (v: boolean) => {
+    if (!v) reviewTarget.value = null
+  },
+})
+function rateProduct(item: OrderItemRead, rating = 0) {
+  reviewInitialRating.value = rating
+  reviewTarget.value = item
+}
+function onProductReviewed(review: ReviewRead) {
+  reviewable.applyReview(review)
+}
+
 function rateCourier(courierId: string) {
   ratingDialog.value = { title: 'Noter le livreur', endpoint: `/couriers/${courierId}/reviews` }
 }
@@ -142,7 +161,8 @@ function ratePickupPoint(pointId: string) {
           </button>
         </div>
 
-        <div v-for="item in sub.items" :key="item.id" class="order-item-row mt-2">
+        <div v-for="item in sub.items" :key="item.id" class="mt-2">
+        <div class="order-item-row">
           <NuxtLink :to="`/produits/${item.product_id}`" class="order-item-row__thumb">
             <img
               v-if="item.product_image"
@@ -157,6 +177,37 @@ function ratePickupPoint(pointId: string) {
             {{ item.quantity }}</span
           >
           <span class="amount">{{ formatGnf(item.unit_price * item.quantity) }}</span>
+        </div>
+        <div v-if="sub.status === 'delivered'" class="item-review">
+          <template v-if="reviewable.byProduct.value.get(item.product_id)?.review">
+            <span class="item-review__stars" :aria-label="`Votre note : ${reviewable.byProduct.value.get(item.product_id)!.review!.rating} sur 5`">
+              <PhStar
+                v-for="n in 5"
+                :key="n"
+                :size="14"
+                :weight="n <= reviewable.byProduct.value.get(item.product_id)!.review!.rating ? 'fill' : 'regular'"
+                color="var(--color-accent)"
+              />
+            </span>
+            <span class="text-muted text-fine">Votre avis</span>
+            <button type="button" class="rate-link" @click="rateProduct(item)">Modifier</button>
+          </template>
+          <template v-else>
+            <span class="item-review__prompt">Notez ce produit :</span>
+            <span class="item-review__stars item-review__stars--pick">
+              <button
+                v-for="n in 5"
+                :key="n"
+                type="button"
+                class="item-review__star"
+                :aria-label="`Donner ${n} étoile${n > 1 ? 's' : ''}`"
+                @click="rateProduct(item, n)"
+              >
+                <PhStar :size="18" />
+              </button>
+            </span>
+          </template>
+        </div>
         </div>
 
         <div v-if="sub.delivery_fee > 0" class="d-flex justify-space-between text-meta text-muted mt-2">
@@ -237,6 +288,17 @@ function ratePickupPoint(pointId: string) {
       </v-btn>
     </div>
 
+    <ProductReviewForm
+      v-if="reviewTarget"
+      v-model="reviewOpen"
+      :product-id="reviewTarget.product_id"
+      :product-name="reviewTarget.product_name"
+      :product-image="reviewTarget.product_image"
+      :existing="reviewable.byProduct.value.get(reviewTarget.product_id)?.review ?? null"
+      :initial-rating="reviewInitialRating"
+      @submitted="onProductReviewed"
+    />
+
     <CommonRatingDialog
       v-model="ratingOpen"
       :title="ratingDialog?.title ?? ''"
@@ -247,6 +309,49 @@ function ratePickupPoint(pointId: string) {
 </template>
 
 <style scoped>
+.item-review {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 6px 0 0 50px;
+}
+
+.item-review__prompt {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-neutral-300);
+}
+
+.item-review__stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.item-review__star {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+
+/* Survol : l'étoile survolée et toutes celles à sa gauche s'allument. */
+.item-review__stars--pick:hover .item-review__star {
+  color: var(--color-accent);
+}
+
+.item-review__stars--pick .item-review__star:hover ~ .item-review__star {
+  color: var(--color-neutral-500);
+}
+
+.item-review__star:hover {
+  transform: scale(1.15);
+}
+
 .order-item-row {
   display: flex;
   align-items: center;

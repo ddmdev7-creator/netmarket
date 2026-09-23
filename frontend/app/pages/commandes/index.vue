@@ -5,12 +5,13 @@ import {
   PhImage,
   PhMagnifyingGlass,
   PhPackage,
+  PhStar,
   PhStorefront,
   PhTruck,
   PhWarningCircle,
   PhX,
 } from '@phosphor-icons/vue'
-import type { OrderRead, OrderStatus } from '~/types/api'
+import type { OrderRead, OrderStatus, ReviewableProductRead, ReviewRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -26,6 +27,27 @@ const MAX_THUMBS = 4
 const { data: orders, pending, error } = await useAsyncData('my-orders', () => apiFetch<OrderRead[]>('/orders'), {
   default: () => [],
 })
+
+// --- Produits à noter ---------------------------------------------------------
+// Chaque produit reçu et pas encore noté — une étoile cliquée ouvre le
+// formulaire avec cette note pré-sélectionnée.
+
+const reviewable = useReviewableProducts()
+const reviewTarget = ref<ReviewableProductRead | null>(null)
+const reviewInitialRating = ref(0)
+const reviewOpen = computed({
+  get: () => reviewTarget.value !== null,
+  set: (v: boolean) => {
+    if (!v) reviewTarget.value = null
+  },
+})
+function rateProduct(product: ReviewableProductRead, rating: number) {
+  reviewInitialRating.value = rating
+  reviewTarget.value = product
+}
+function onProductReviewed(review: ReviewRead) {
+  reviewable.applyReview(review)
+}
 
 // --- Filtres -------------------------------------------------------------------
 // Synchronisés avec l'URL (?q=…&statut=…&periode=…&tri=…) : un retour
@@ -209,6 +231,52 @@ const statusAccent: Record<OrderStatus, string> = {
       </div>
     </header>
 
+    <!-- Produits reçus pas encore notés -->
+    <section v-if="reviewable.toReview.value.length" class="to-review" aria-labelledby="to-review-title">
+      <div class="to-review__head">
+        <h2 id="to-review-title" class="to-review__title">
+          <PhStar :size="18" weight="fill" color="var(--color-accent)" />
+          Produits à noter
+          <span class="to-review__count">{{ reviewable.toReview.value.length }}</span>
+        </h2>
+        <p class="to-review__sub">Votre avis aide les autres acheteurs et met en avant les bons produits.</p>
+      </div>
+      <div class="to-review__list">
+        <div v-for="p in reviewable.toReview.value" :key="p.product_id" class="to-review__item">
+          <NuxtLink :to="`/produits/${p.product_id}`" class="to-review__thumb">
+            <img v-if="p.product_image" :src="resolveImageUrl(p.product_image, apiBase)" :alt="p.product_name" loading="lazy" />
+            <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
+          </NuxtLink>
+          <div class="to-review__info">
+            <div class="to-review__name">{{ p.product_name }}</div>
+            <div class="to-review__date">Reçu le {{ formatDate(p.delivered_at) }}</div>
+            <div class="to-review__stars">
+              <button
+                v-for="n in 5"
+                :key="n"
+                type="button"
+                class="to-review__star"
+                :aria-label="`Donner ${n} étoile${n > 1 ? 's' : ''} à ${p.product_name}`"
+                @click="rateProduct(p, n)"
+              >
+                <PhStar :size="20" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <ProductReviewForm
+      v-if="reviewTarget"
+      v-model="reviewOpen"
+      :product-id="reviewTarget.product_id"
+      :product-name="reviewTarget.product_name"
+      :product-image="reviewTarget.product_image"
+      :initial-rating="reviewInitialRating"
+      @submitted="onProductReviewed"
+    />
+
     <!-- Barre de recherche et filtres -->
     <section class="toolbar" aria-label="Rechercher et filtrer">
       <div class="toolbar__row">
@@ -380,6 +448,139 @@ const statusAccent: Record<OrderStatus, string> = {
   margin: 2px 0 0;
   font-size: 13.5px;
   color: var(--color-neutral-400);
+}
+
+/* --- Produits à noter ----------------------------------------------------- */
+
+.to-review {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.to-review__head {
+  margin-bottom: 12px;
+}
+
+.to-review__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-neutral-200);
+}
+
+.to-review__count {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+  font-size: 12.5px;
+  line-height: 22px;
+}
+
+.to-review__sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+/* Défilement horizontal : la bande garde une hauteur fixe quel que soit le
+   nombre de produits à noter. */
+.to-review__list {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+
+.to-review__item {
+  display: flex;
+  gap: 12px;
+  flex: 0 0 290px;
+  padding: 10px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  scroll-snap-align: start;
+}
+
+.to-review__thumb {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.to-review__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.to-review__info {
+  min-width: 0;
+}
+
+.to-review__name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-neutral-200);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.to-review__date {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.to-review__stars {
+  display: flex;
+  margin: 4px 0 0 -3px;
+}
+
+.to-review__star {
+  display: flex;
+  padding: 3px;
+  border: none;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+
+/* Survol : l'étoile survolée et toutes celles à sa gauche s'allument. */
+.to-review__stars:hover .to-review__star {
+  color: var(--color-accent);
+}
+
+.to-review__stars .to-review__star:hover ~ .to-review__star {
+  color: var(--color-neutral-500);
+}
+
+.to-review__star:hover {
+  transform: scale(1.15);
+}
+
+@media (max-width: 560px) {
+  .to-review__item {
+    flex-basis: 260px;
+  }
 }
 
 /* --- Barre d'outils ------------------------------------------------------- */

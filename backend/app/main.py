@@ -22,6 +22,7 @@ from app.pickup_points.router import admin_router as pickup_points_admin_router
 from app.pickup_points.router import router as pickup_points_router
 from app.reports.router import admin_router as reports_admin_router
 from app.reports.router import router as reports_router
+from app.reviews.router import me_router as my_reviews_router
 from app.reviews.router import router as reviews_router
 from app.subscriptions.router import admin_router as subscriptions_admin_router
 from app.subscriptions.router import router as subscriptions_router
@@ -62,6 +63,7 @@ app.include_router(pickup_points_admin_router)
 app.include_router(pickup_point_managers_router)
 app.include_router(pickup_point_managers_admin_router)
 app.include_router(reviews_router)
+app.include_router(my_reviews_router)
 app.include_router(reports_router)
 app.include_router(reports_admin_router)
 app.include_router(uploads_router)
