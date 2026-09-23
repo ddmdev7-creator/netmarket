@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhCheckCircle, PhQrCode } from '@phosphor-icons/vue'
+import { PhCheckCircle, PhMagnifyingGlass, PhQrCode } from '@phosphor-icons/vue'
 import type { CourierDetailRead, CourierSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'courier', layout: 'livreur' })
@@ -92,6 +92,28 @@ function shortId(orderId: string) {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
+
+// La liste (toute l'historique assigné à ce livreur, jamais paginée côté
+// API) devenait vite un long défilement une fois quelques dizaines de
+// livraisons terminées accumulées — séparées en deux onglets comme
+// commandes/index.vue (acheteur), "À livrer" reste court et concentré sur
+// ce qui demande une action.
+const tab = ref<'ongoing' | 'done'>('ongoing')
+const ongoing = computed(() => deliveries.value.filter((so) => !['delivered', 'cancelled'].includes(so.status)))
+const done = computed(() => deliveries.value.filter((so) => ['delivered', 'cancelled'].includes(so.status)))
+
+const search = ref('')
+const visible = computed(() => {
+  const list = tab.value === 'ongoing' ? ongoing.value : done.value
+  const query = search.value.trim().toLowerCase()
+  if (!query) return list
+  return list.filter((so) =>
+    [shortId(so.order_id), so.shop_name, so.delivery_address, so.recipient_name ?? '']
+      .join(' ')
+      .toLowerCase()
+      .includes(query),
+  )
+})
 </script>
 
 <template>
@@ -105,9 +127,9 @@ function formatDate(iso: string) {
        plutôt qu'une v-card imbriquée dans la carte détachée, pour éviter un
        effet "carte dans la carte". -->
   <div class="detail-card">
-    <div class="d-flex justify-space-between align-center mb-1">
-      <div class="d-flex align-center ga-2">
-        <h1 class="text-h6 mb-0">Mes livraisons</h1>
+    <div class="d-flex justify-space-between align-center flex-wrap ga-2 mb-1">
+      <div class="d-flex align-center ga-2 flex-wrap">
+        <h1 class="text-h6 mb-0" style="white-space: nowrap">Mes livraisons</h1>
         <v-chip v-if="myCourier?.status === 'approved'" size="x-small" color="success" variant="tonal">
           <PhCheckCircle :size="12" weight="fill" class="mr-1" />
           Approuvé
@@ -133,61 +155,103 @@ function formatDate(iso: string) {
       <template v-else>Ton compte est suspendu.</template>
     </v-alert>
 
+    <template v-if="!pending && deliveries.length > 0">
+      <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-3">
+        <v-btn value="ongoing">À livrer ({{ ongoing.length }})</v-btn>
+        <v-btn value="done">Terminées ({{ done.length }})</v-btn>
+      </v-btn-toggle>
+
+      <v-text-field
+        v-model="search"
+        placeholder="Rechercher par commande, boutique, adresse…"
+        density="compact"
+        variant="outlined"
+        hide-details
+        clearable
+        class="mb-4"
+      >
+        <template #prepend-inner>
+          <PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" />
+        </template>
+      </v-text-field>
+    </template>
+
     <CommonEmptyState v-if="!pending && deliveries.length === 0" message="Aucune livraison assignée pour le moment." />
+    <CommonEmptyState
+      v-else-if="!pending && visible.length === 0"
+      :message="tab === 'ongoing' ? 'Aucune livraison à livrer pour le moment.' : 'Aucune livraison ne correspond à cette recherche.'"
+    />
 
-    <div v-for="so in deliveries" :key="so.id" class="mb-6">
-      <div class="d-flex justify-space-between align-center mb-2">
-        <span class="order-code">{{ shortId(so.order_id) }}</span>
-        <StatusBadge :status="so.status" />
-      </div>
-      <div class="text-muted mb-2 text-meta">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
-
-      <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1 text-body">
-        <span
-          >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
-          {{ item.quantity }}</span
-        >
-      </div>
-
-      <OrderDeliveryDetails
-        class="mt-3 mb-3"
-        :zone="so.delivery_zone"
-        :address="so.delivery_address"
-        :instructions="so.delivery_instructions"
-        :delivery-type="so.delivery_type"
-        :recipient-name="so.recipient_name"
-        :recipient-phone="so.recipient_phone"
-        :pickup-point-contacts="so.pickup_point_contacts"
-        :note="so.delivery_type === 'pickup_point' ? 'À déposer sur place — le client viendra le récupérer.' : null"
-      />
-
-      <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
-        <div v-if="so.pickup_dropoff_token" class="d-flex flex-column align-center mb-3">
-          <p class="text-muted mb-2 text-meta">Le gestionnaire du point scanne ce code à la réception</p>
-          <OrderDeliveryQrCode :token="so.pickup_dropoff_token" />
+    <!-- À livrer : détail complet, c'est ce qui demande une action. -->
+    <div v-if="tab === 'ongoing'">
+      <div v-for="so in visible" :key="so.id" class="mb-6">
+        <div class="d-flex justify-space-between align-center mb-2">
+          <span class="order-code">{{ shortId(so.order_id) }}</span>
+          <StatusBadge :status="so.status" />
         </div>
-        <p class="text-muted mb-0 text-center text-meta">
-          C'est le gestionnaire du point de retrait qui confirme la réception — rien à faire ici de votre côté.
-        </p>
-      </template>
+        <div class="text-muted mb-2 text-meta">{{ so.shop_name }} · {{ formatDate(so.created_at) }}</div>
 
-      <div v-else-if="so.status === 'shipped'" class="d-flex ga-2">
-        <v-btn color="primary" size="small" class="flex-grow-1" @click="scannerOpen = true">
-          <PhQrCode :size="16" class="mr-1" />
-          Scanner pour confirmer
-        </v-btn>
-        <v-btn
-          variant="outlined"
-          size="small"
-          class="flex-grow-1"
-          :loading="updatingId === so.id"
-          @click="markDelivered(so)"
-        >
-          Marquer livrée
-        </v-btn>
+        <div v-for="item in so.items" :key="item.id" class="d-flex justify-space-between mb-1 text-body">
+          <span
+            >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
+            {{ item.quantity }}</span
+          >
+        </div>
+
+        <OrderDeliveryDetails
+          class="mt-3 mb-3"
+          :zone="so.delivery_zone"
+          :address="so.delivery_address"
+          :instructions="so.delivery_instructions"
+          :delivery-type="so.delivery_type"
+          :recipient-name="so.recipient_name"
+          :recipient-phone="so.recipient_phone"
+          :pickup-point-contacts="so.pickup_point_contacts"
+          :note="so.delivery_type === 'pickup_point' ? 'À déposer sur place — le client viendra le récupérer.' : null"
+        />
+
+        <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
+          <div v-if="so.pickup_dropoff_token" class="d-flex flex-column align-center mb-3">
+            <p class="text-muted mb-2 text-meta">Le gestionnaire du point scanne ce code à la réception</p>
+            <OrderDeliveryQrCode :token="so.pickup_dropoff_token" />
+          </div>
+          <p class="text-muted mb-0 text-center text-meta">
+            C'est le gestionnaire du point de retrait qui confirme la réception — rien à faire ici de votre côté.
+          </p>
+        </template>
+
+        <div v-else-if="so.status === 'shipped'" class="d-flex ga-2">
+          <v-btn color="primary" size="small" class="flex-grow-1" @click="scannerOpen = true">
+            <PhQrCode :size="16" class="mr-1" />
+            Scanner pour confirmer
+          </v-btn>
+          <v-btn
+            variant="outlined"
+            size="small"
+            class="flex-grow-1"
+            :loading="updatingId === so.id"
+            @click="markDelivered(so)"
+          >
+            Marquer livrée
+          </v-btn>
+        </div>
+
+        <v-divider class="mt-4" />
       </div>
+    </div>
 
-      <v-divider class="mt-4" />
+    <!-- Terminées : ligne compacte, rien n'y est plus actionnable -- inutile
+         de réafficher l'adresse/les instructions complètes pour un historique. -->
+    <div v-else>
+      <div v-for="so in visible" :key="so.id" class="delivery-row-compact">
+        <div class="d-flex justify-space-between align-center">
+          <span class="order-code">{{ shortId(so.order_id) }}</span>
+          <StatusBadge :status="so.status" />
+        </div>
+        <div class="text-muted text-meta mt-1">
+          {{ so.shop_name }} · {{ formatDate(so.created_at) }} · {{ so.items.length }} article{{ so.items.length > 1 ? 's' : '' }}
+        </div>
+      </div>
     </div>
 
     <VendorQrScannerDialog v-model="scannerOpen" @decode="handleDecode" />
@@ -201,5 +265,14 @@ function formatDate(iso: string) {
   font-size: 13.5px;
   letter-spacing: 0.01em;
   color: var(--color-primary-300);
+}
+
+.delivery-row-compact {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.delivery-row-compact:last-of-type {
+  border-bottom: none;
 }
 </style>
