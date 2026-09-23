@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.addresses.models import Address
@@ -18,6 +18,7 @@ from app.reviews.models import Review
 from app.subscriptions.models import VendorSubscription
 from app.users.models import EmailCode, EmailCodePurpose, User, UserRole
 from app.vendors.models import Vendor
+from app.wallets.models import WalletTopUp, Withdrawal
 
 
 async def get_by_id(db: AsyncSession, user_id: uuid.UUID) -> User | None:
@@ -38,6 +39,21 @@ async def get_by_phone(db: AsyncSession, phone: str) -> User | None:
 async def get_by_email(db: AsyncSession, email: str) -> User | None:
     result = await db.execute(select(User).where(User.email == email))
     return result.scalar_one_or_none()
+
+
+async def get_by_email_insensitive(db: AsyncSession, email: str) -> User | None:
+    result = await db.execute(select(User).where(func.lower(User.email) == email.strip().lower()))
+    return result.scalars().first()
+
+
+async def list_by_role(db: AsyncSession, role: UserRole) -> list[User]:
+    result = await db.execute(select(User).where(User.role == role))
+    return list(result.scalars().all())
+
+
+async def has_withdrawals(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    stmt = select(Withdrawal.id).where(Withdrawal.requested_by == user_id).limit(1)
+    return (await db.execute(stmt)).first() is not None
 
 
 async def admin_exists(db: AsyncSession) -> bool:
@@ -145,5 +161,9 @@ async def purge_user(db: AsyncSession, user: User) -> None:
     await db.execute(delete(Report).where(Report.reporter_id == user.id))
     await db.execute(delete(Address).where(Address.user_id == user.id))
     await db.execute(delete(EmailCode).where(EmailCode.user_id == user.id))
+    # Recharges NdjouriBank : les écritures du grand livre n'y sont liées que
+    # par une clé métier, pas par une clé étrangère. (Les candidatures point
+    # de retrait partent en cascade au niveau de la base.)
+    await db.execute(delete(WalletTopUp).where(WalletTopUp.user_id == user.id))
 
     await db.delete(user)

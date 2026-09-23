@@ -21,6 +21,10 @@ const roleLabel = computed(() => {
       return 'Vendeur'
     case 'admin':
       return 'Admin'
+    case 'courier':
+      return 'Livreur'
+    case 'pickup_point_manager':
+      return 'Point de retrait'
     default:
       return 'Acheteur'
   }

@@ -25,6 +25,12 @@ class NotificationType(StrEnum):
     DELIVERY_REQUEST = "delivery_request"
     DELIVERY_REQUEST_ACCEPTED = "delivery_request_accepted"
     DELIVERY_NO_COURIER_FOUND = "delivery_no_courier_found"
+    # Candidature gestionnaire de point de retrait (app/pickup_point_applications).
+    PICKUP_APPLICATION_INVITED = "pickup_application_invited"
+    PICKUP_APPLICATION_SUBMITTED = "pickup_application_submitted"
+    PICKUP_APPLICATION_APPROVED = "pickup_application_approved"
+    PICKUP_APPLICATION_CHANGES_REQUESTED = "pickup_application_changes_requested"
+    PICKUP_APPLICATION_REJECTED = "pickup_application_rejected"
 
 
 class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):

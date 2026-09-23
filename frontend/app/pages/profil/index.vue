@@ -165,11 +165,16 @@ async function logout() {
       <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
     </NuxtLink>
 
-    <!-- Pas de "Devenir gestionnaire" : ces comptes sont créés uniquement par
-         l'admin (voir /admin/points-retrait), pas d'auto-inscription. -->
-    <NuxtLink v-if="auth.user?.role === 'pickup_point_manager'" to="/point-retrait" class="list-item">
+    <!-- Candidature validée par l'admin (voir /point-retrait/candidature et
+         backend app/pickup_point_applications). -->
+    <NuxtLink v-if="auth.user?.role === 'pickup_point_manager' || auth.user?.is_pickup_point_manager" to="/point-retrait" class="list-item">
       <PhPackage :size="18" color="var(--color-neutral-400)" />
       <span>Mon espace point de retrait</span>
+      <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
+    </NuxtLink>
+    <NuxtLink v-else-if="auth.user?.role === 'buyer'" to="/point-retrait/candidature" class="list-item">
+      <PhPackage :size="18" color="var(--color-neutral-400)" />
+      <span>Devenir point de retrait</span>
       <PhCaretRight :size="16" color="var(--color-neutral-600)" class="ml-auto" />
     </NuxtLink>
 

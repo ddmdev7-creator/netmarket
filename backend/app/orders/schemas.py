@@ -271,6 +271,10 @@ class PickupPointManagerSubOrderRead(BaseModel):
     courier_name: str | None = None
     courier_phone: str | None = None
     storage_location: str | None = None
+    customer_name: str | None = None
+    customer_phone: str | None = None
+    # Dernier changement de statut : pour un colis au point, depuis quand il attend.
+    updated_at: datetime
 
 
 class OrderRead(BaseModel):

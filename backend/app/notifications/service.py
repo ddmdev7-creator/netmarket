@@ -200,3 +200,11 @@ async def notify_delivery_no_courier_found(db: AsyncSession, *, vendor_user_id: 
         order_id=None,
         sub_order_id=sub_order_id,
     )
+
+
+async def notify_pickup_application(
+    db: AsyncSession, *, user_id: uuid.UUID, type_: NotificationType, title: str, body: str
+) -> None:
+    """Étapes d'une candidature gestionnaire de point de retrait (invitation,
+    soumission côté admin, décisions côté candidat)."""
+    await _persist_and_push(db, user_id=user_id, type_=type_, title=title, body=body, order_id=None)

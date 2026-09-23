@@ -565,3 +565,36 @@ async def test_vendor_whose_shop_is_the_pickup_point_can_scan_the_courier_dropof
     handed = await scan_handoff(client, vendor_user, sub_order_id)
     assert handed.status_code == 200, handed.text
     assert handed.json()["status"] == "delivered"
+
+
+async def test_manager_sees_customer_and_can_update_opening_hours(
+    client: AsyncClient,
+    db_session,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    manager_user: User,
+    manager: PickupPointManager,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    buyer_user.first_name, buyer_user.last_name = "Mariama", "Sow"
+    await db_session.flush()
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+    listing = await client.get("/orders/pickup-point-deliveries", headers=auth_headers(manager_user))
+    entry = next(so for so in listing.json() if so["id"] == sub_order_id)
+    assert entry["customer_name"] == "Mariama Sow"
+    assert entry["customer_phone"] == buyer_user.phone
+    assert entry["updated_at"]
+
+    point = await client.get("/pickup-point-managers/me/point", headers=auth_headers(manager_user))
+    assert point.status_code == 200 and point.json()["id"] == str(pickup_point.id)
+    updated = await client.patch(
+        "/pickup-point-managers/me/point", json={"opening_hours": "Lun–Ven 9h–19h"}, headers=auth_headers(manager_user)
+    )
+    assert updated.json()["opening_hours"] == "Lun–Ven 9h–19h"
+    forbidden = await client.patch(
+        "/pickup-point-managers/me/point", json={"opening_hours": "Tous les jours"}, headers=auth_headers(buyer_user)
+    )
+    assert forbidden.status_code == 403

@@ -127,6 +127,7 @@ export interface PickupPointRead {
   is_active: boolean
   /** Renseigné quand ce point est la boutique d'un vendeur plutôt qu'un local dédié. */
   vendor_id: string | null
+  opening_hours: string | null
   vendor_shop_name: string | null
   /** Transitoires — voir ReviewRead/average_rating sur les produits. */
   average_rating: number | null
@@ -330,6 +331,10 @@ export interface PickupPointManagerSubOrderRead {
   courier_name: string | null
   courier_phone: string | null
   storage_location: string | null
+  customer_name: string | null
+  customer_phone: string | null
+  /** Dernier changement de statut (arrivée au point pour un colis en stock). */
+  updated_at: string
 }
 
 export interface LowStockProduct {
@@ -1072,4 +1077,61 @@ export interface DeliveryOfferRead {
   pickup_point_zone: string | null
   pickup_point_contacts: PickupPointContactRead[]
   expires_in_seconds: number
+}
+
+// --- Candidatures gestionnaire de point de retrait (backend app/pickup_point_applications) ---
+
+export type PickupApplicationStatus = 'draft' | 'submitted' | 'changes_requested' | 'approved' | 'rejected'
+export type PickupApplicationSlot = 'id_front' | 'id_back' | 'portrait' | 'premises'
+
+export interface PickupApplicationDraft {
+  first_name: string | null
+  last_name: string | null
+  birth_date: string | null
+  residence_address: string | null
+  id_document_type: IdDocumentType | null
+  id_document_number: string | null
+  id_document_front_key: string | null
+  id_document_back_key: string | null
+  portrait_photo_key: string | null
+  point_name: string | null
+  point_address: string | null
+  point_landmark: string | null
+  latitude: number | null
+  longitude: number | null
+  opening_hours: string | null
+  storage_capacity: number | null
+  premises_photo_keys: string[]
+}
+
+export interface PickupApplicationRead extends PickupApplicationDraft {
+  id: string
+  user_id: string
+  status: PickupApplicationStatus
+  origin: 'self' | 'invited'
+  invited_at: string | null
+  submitted_at: string | null
+  submission_count: number
+  admin_note: string | null
+  admin_suggestion: string | null
+  reviewed_at: string | null
+  pickup_point_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** GET /pickup-point-applications/me */
+export interface MyPickupApplicationState {
+  application: PickupApplicationRead | null
+  can_apply: boolean
+  blocked_reason: string | null
+  min_premises_photos: number
+  max_premises_photos: number
+  portrait_min_width: number
+  portrait_min_height: number
+}
+
+export interface AdminPickupApplicationRead extends PickupApplicationRead {
+  applicant_phone: string
+  applicant_email: string | null
 }

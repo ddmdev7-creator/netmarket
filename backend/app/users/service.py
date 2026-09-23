@@ -137,6 +137,9 @@ async def admin_delete_user(db: AsyncSession, admin: User, target_user_id: uuid.
     if target.role == UserRole.ADMIN:
         raise ForbiddenError("Impossible de supprimer un compte administrateur via cette route.")
 
+    # Un historique de retraits appartient au grand livre : on ne l'efface pas.
+    if await repository.has_withdrawals(db, target.id):
+        raise ConflictError("Ce compte a un historique de retraits : il ne peut pas être supprimé.")
     await repository.purge_user(db, target)
     await db.commit()
 

@@ -11,16 +11,36 @@ from app.common.schemas import Message
 from app.core.deps import get_db, get_pickup_point_manager, require_role
 from app.pickup_point_managers import service
 from app.pickup_point_managers.schemas import (
+    ManagerPointUpdate,
     PickupPointManagerAdminCreate,
     PickupPointManagerAdminUpdate,
     PickupPointManagerRead,
 )
+from app.pickup_points.schemas import PickupPointRead
 from app.users.models import User, UserRole
 
 router = APIRouter(prefix="/pickup-point-managers", tags=["pickup-point-managers"])
 admin_router = APIRouter(
     prefix="/admin/pickup-point-managers", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))]
 )
+
+
+@router.get("/me/point", response_model=PickupPointRead)
+async def get_my_point(
+    current_user: User = Depends(get_pickup_point_manager), db: AsyncSession = Depends(get_db)
+) -> PickupPointRead:
+    """Le point de retrait géré : nom, adresse, horaires, note moyenne."""
+    return await service.get_my_point(db, current_user)
+
+
+@router.patch("/me/point", response_model=PickupPointRead)
+async def update_my_point(
+    payload: ManagerPointUpdate,
+    current_user: User = Depends(get_pickup_point_manager),
+    db: AsyncSession = Depends(get_db),
+) -> PickupPointRead:
+    """Le gestionnaire met à jour les horaires affichés aux clients."""
+    return await service.update_my_point(db, current_user, payload)
 
 
 @router.get("/me", response_model=PickupPointManagerRead)

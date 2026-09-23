@@ -27,6 +27,7 @@ from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.orders.models import Order, OrderItem, SubOrder  # noqa: F401
 from app.payments.models import Payment  # noqa: F401
+from app.pickup_point_applications.models import PickupPointApplication  # noqa: F401
 from app.pickup_point_managers.models import PickupPointManager  # noqa: F401
 from app.pickup_points.models import PickupPoint  # noqa: F401
 from app.reviews.models import Review  # noqa: F401

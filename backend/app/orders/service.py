@@ -574,11 +574,22 @@ async def list_my_point_deliveries(db: AsyncSession, user: User) -> list[SubOrde
     if manager is None:
         raise NotFoundError("Vous n'avez pas de profil gestionnaire de point de retrait.")
     sub_orders = await repository.list_sub_orders_for_pickup_point(db, manager.pickup_point_id)
+    customers: dict[uuid.UUID, User | None] = {}
     result = []
     for so in sub_orders:
         _attach_delivery_address(so)
         await _attach_courier_info(db, so)
         await _attach_product_images(db, so)
+        # Le client qui viendra retirer le colis : pour le reconnaître, le
+        # retrouver par son nom et l'appeler si le colis attend trop.
+        buyer_id = so.order.user_id
+        if buyer_id not in customers:
+            customers[buyer_id] = await user_repository.get_by_id(db, buyer_id)
+        buyer = customers[buyer_id]
+        so.customer_name = (
+            " ".join(filter(None, [buyer.first_name, buyer.last_name])).strip() or None if buyer else None
+        )
+        so.customer_phone = buyer.phone if buyer else None
         result.append(so)
     return result
 

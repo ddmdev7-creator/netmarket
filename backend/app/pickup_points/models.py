@@ -36,6 +36,9 @@ class PickupPoint(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     vendor_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("vendors.id", ondelete="SET NULL"), nullable=True
     )
+    # Texte libre (ex. « Lun–Sam 8h–20h »), repris de la candidature du
+    # gestionnaire (app/pickup_point_applications) ou saisi par l'admin.
+    opening_hours: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 class PickupPointReview(Base, UUIDPrimaryKeyMixin, TimestampMixin):

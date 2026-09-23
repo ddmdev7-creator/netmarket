@@ -20,6 +20,7 @@ from app.delivery import models as delivery_models  # noqa: F401
 from app.notifications import models as notifications_models  # noqa: F401
 from app.orders import models as orders_models  # noqa: F401
 from app.payments import models as payments_models  # noqa: F401
+from app.pickup_point_applications import models as pickup_point_applications_models  # noqa: F401
 from app.pickup_point_managers import models as pickup_point_managers_models  # noqa: F401
 from app.pickup_points import models as pickup_points_models  # noqa: F401
 from app.reports import models as reports_models  # noqa: F401

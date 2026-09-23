@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhBank, PhChartBar, PhCreditCard, PhCurrencyCircleDollar, PhFlag, PhMapPin, PhMapTrifold, PhMotorcycle, PhPackage, PhSparkle, PhStorefront, PhTag, PhTruck, PhUsers } from '@phosphor-icons/vue'
+import { PhBank, PhChartBar, PhClipboardText, PhCreditCard, PhCurrencyCircleDollar, PhFlag, PhMapPin, PhMapTrifold, PhMotorcycle, PhPackage, PhSparkle, PhStorefront, PhTag, PhTruck, PhUsers } from '@phosphor-icons/vue'
 
 const emit = defineEmits<{ navigate: [] }>()
 
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/admin/livraisons', label: 'Suivi livraisons', icon: PhTruck },
   { to: '/admin/carte', label: 'Carte', icon: PhMapTrifold },
   { to: '/admin/points-retrait', label: 'Points retrait', icon: PhMapPin },
+  { to: '/admin/candidatures', label: 'Candidatures points', icon: PhClipboardText },
   { to: '/admin/frais-livraison', label: 'Frais livraison', icon: PhCurrencyCircleDollar },
   { to: '/admin/finance', label: 'Compte principal', icon: PhBank },
   { to: '/admin/paiement', label: 'Paiement', icon: PhCreditCard },

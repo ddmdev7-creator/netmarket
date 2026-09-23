@@ -7,6 +7,8 @@ the same wording, wrapped in `_layout()` so every email shares one look
 #0A66F5, background #F3F4F6).
 """
 
+import html
+
 BRAND_NAME = "Marketplace Guinée"
 COLOR_PRIMARY = "#0A66F5"
 COLOR_BACKGROUND = "#F3F4F6"
@@ -149,3 +151,35 @@ def order_status_email(shop_name: str, status_label: str) -> tuple[str, str, str
 </p>
 """
     return subject, text, _layout(preheader=text.splitlines()[2], title=subject, body_html=body_html)
+
+
+def _button(url: str, label: str) -> str:
+    return f"""\
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;">
+  <tr>
+    <td style="background-color:{COLOR_PRIMARY}; border-radius:8px;">
+      <a href="{url}" style="display:inline-block; padding:12px 22px; font-size:15px; font-weight:700; color:#ffffff; text-decoration:none;">{label}</a>
+    </td>
+  </tr>
+</table>
+"""
+
+
+def pickup_application_email(
+    *, heading: str, paragraphs: list[str], cta_label: str, cta_url: str
+) -> tuple[str, str, str]:
+    """Candidature gestionnaire de point de retrait : invitation et décisions
+    de l'admin (validation, correction demandée, refus). `paragraphs` est du
+    texte brut (échappé ici)."""
+    subject = f"{heading} — {BRAND_NAME}"
+    text = "\n\n".join([*paragraphs, f"{cta_label} : {cta_url}"])
+    body = "".join(
+        f'<p style="margin:0 0 12px; font-size:15px; line-height:22px; color:{COLOR_MUTED};">{html.escape(p)}</p>'
+        for p in paragraphs
+    )
+    body_html = f"""\
+<h1 style="margin:0 0 12px; font-size:20px; color:{COLOR_TEXT};">{html.escape(heading)}</h1>
+{body}
+{_button(cta_url, html.escape(cta_label))}
+"""
+    return subject, text, _layout(preheader=paragraphs[0][:120] if paragraphs else heading, title=subject, body_html=body_html)

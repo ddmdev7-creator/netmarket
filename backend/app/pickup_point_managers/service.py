@@ -10,7 +10,11 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.core.security import hash_password
 from app.pickup_point_managers import repository
 from app.pickup_point_managers.models import PickupPointManager
-from app.pickup_point_managers.schemas import PickupPointManagerAdminCreate, PickupPointManagerAdminUpdate
+from app.pickup_point_managers.schemas import (
+    ManagerPointUpdate,
+    PickupPointManagerAdminCreate,
+    PickupPointManagerAdminUpdate,
+)
 from app.pickup_points import repository as pickup_points_repository
 from app.users import repository as users_repository
 from app.users.models import User, UserRole
@@ -96,3 +100,21 @@ async def get_my_manager_profile(db: AsyncSession, user: User) -> PickupPointMan
     if manager is None:
         raise NotFoundError("Vous n'avez pas de profil gestionnaire de point de retrait.")
     return manager
+
+
+async def get_my_point(db: AsyncSession, user: User):
+    manager = await repository.get_by_user_id(db, user.id)
+    if manager is None:
+        raise NotFoundError("Vous n'avez pas de profil gestionnaire de point de retrait.")
+    point = await pickup_points_repository.get_by_id(db, manager.pickup_point_id)
+    if point is None:
+        raise NotFoundError("Point de retrait introuvable.")
+    point.average_rating, point.review_count = await pickup_points_repository.get_rating_summary(db, point.id)
+    return point
+
+
+async def update_my_point(db: AsyncSession, user: User, data: ManagerPointUpdate):
+    point = await get_my_point(db, user)
+    point.opening_hours = data.opening_hours.strip()
+    await db.commit()
+    return await get_my_point(db, user)

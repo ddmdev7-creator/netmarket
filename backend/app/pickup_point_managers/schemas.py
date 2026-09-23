@@ -35,3 +35,7 @@ class PickupPointManagerRead(BaseModel):
     # Attachés en lecture depuis User (voir app/pickup_point_managers/repository.py).
     phone: str
     full_name: str | None = None
+
+
+class ManagerPointUpdate(BaseModel):
+    opening_hours: str = Field(min_length=3, max_length=300)
