@@ -19,6 +19,7 @@ from app.vendors.schemas import (
     VendorAdminUpdate,
     VendorDashboard,
     VendorOwnerUpdate,
+    VendorPublicRead,
     VendorRead,
     VendorRegister,
 )
@@ -66,13 +67,13 @@ async def get_my_orders_timeseries(
     return await service.get_my_orders_timeseries(db, current_user)
 
 
-@router.get("", response_model=list[VendorRead])
-async def list_vendors(db: AsyncSession = Depends(get_db)) -> list[VendorRead]:
+@router.get("", response_model=list[VendorPublicRead])
+async def list_vendors(db: AsyncSession = Depends(get_db)) -> list[VendorPublicRead]:
     return await service.list_public_vendors(db)
 
 
-@router.get("/{vendor_id}", response_model=VendorRead)
-async def get_vendor(vendor_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> VendorRead:
+@router.get("/{vendor_id}", response_model=VendorPublicRead)
+async def get_vendor(vendor_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> VendorPublicRead:
     return await service.get_public_vendor(db, vendor_id)
 
 

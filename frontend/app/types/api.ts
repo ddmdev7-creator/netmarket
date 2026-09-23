@@ -63,6 +63,16 @@ export interface VendorRead {
   preparation_days: number
 }
 
+/** Vue publique (/vendors) — sans compte propriétaire ni commission, voir VendorRead. */
+export interface VendorPublicRead {
+  id: string
+  shop_name: string
+  zone: string | null
+  latitude: number | null
+  longitude: number | null
+  preparation_days: number
+}
+
 export interface SubscriptionPlanRead {
   id: string
   name: string

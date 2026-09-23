@@ -71,6 +71,22 @@ class VendorRead(BaseModel):
     owner_full_name: str | None = None
 
 
+class VendorPublicRead(BaseModel):
+    """Vue publique (/vendors, sans authentification) : ce qu'un visiteur
+    peut voir d'une boutique. Jamais le compte du propriétaire (téléphone,
+    email, nom) ni la commission — voir VendorRead pour le vendeur lui-même
+    et l'admin."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    shop_name: str
+    zone: str | None
+    latitude: float | None
+    longitude: float | None
+    preparation_days: int
+
+
 class LowStockProduct(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

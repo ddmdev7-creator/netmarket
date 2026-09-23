@@ -165,6 +165,26 @@ async def test_public_listing_only_shows_approved_vendors(
     assert detail_after.status_code == 200
 
 
+async def test_public_vendor_views_hide_owner_account_and_commission(
+    client: AsyncClient, buyer_user: User, admin_user: User
+) -> None:
+    register_response = await client.post(
+        "/vendors/me",
+        json={"shop_name": "Boutique Publique", "email": "vendeur@test.gn", **POSITION},
+        headers=auth_headers(buyer_user),
+    )
+    vendor_id = register_response.json()["id"]
+    await client.patch(f"/admin/vendors/{vendor_id}", json={"status": "approved"}, headers=auth_headers(admin_user))
+
+    listed = next(v for v in (await client.get("/vendors")).json() if v["id"] == vendor_id)
+    detail = (await client.get(f"/vendors/{vendor_id}")).json()
+
+    for body in (listed, detail):
+        assert body["shop_name"] == "Boutique Publique"
+        for private_field in ("owner_phone", "owner_email", "owner_full_name", "commission_rate", "user_id"):
+            assert private_field not in body
+
+
 async def test_register_vendor_requires_a_position(client: AsyncClient, buyer_user: User) -> None:
     headers = auth_headers(buyer_user)
     payload = {"shop_name": "Ma Boutique", "email": "vendeur@test.gn"}

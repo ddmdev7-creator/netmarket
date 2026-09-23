@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PhCheckCircle, PhMapPin } from '@phosphor-icons/vue'
 import type { MapContextPin } from '~/components/common/MapPicker.vue'
-import type { DeliveryType, PickupPointRead, VendorRead } from '~/types/api'
+import type { DeliveryType, PickupPointRead, VendorPublicRead } from '~/types/api'
 
 export interface AddressFormValues {
   label: string
@@ -77,7 +77,7 @@ const { data: pickupPoints } = await useAsyncData('address-form-pickup-points', 
 // retrait) : aide l'acheteur à se situer, sans rien sélectionner. Une
 // boutique qui est aussi un point de retrait n'a qu'un repère, comme sur la
 // carte admin. /vendors ne renvoie que les boutiques approuvées.
-const { data: shops } = await useAsyncData('address-form-shops', () => apiFetch<VendorRead[]>('/vendors'), {
+const { data: shops } = await useAsyncData('address-form-shops', () => apiFetch<VendorPublicRead[]>('/vendors'), {
   default: () => [],
 })
 
