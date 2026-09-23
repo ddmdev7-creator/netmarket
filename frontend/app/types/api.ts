@@ -852,3 +852,136 @@ export interface NotificationList {
   items: NotificationRead[]
   unread_count: number
 }
+
+// --- Portefeuilles et compte principal (backend app/wallets) ---------------------
+
+export type WalletKind = 'vendor' | 'courier' | 'pickup_point'
+export type LedgerAccountKind = WalletKind | 'djomy_treasury' | 'order_escrow' | 'platform_revenue' | 'withdrawals_pending'
+export type PayoutProvider = 'OM' | 'MOMO' | 'PAYCARD' | 'SOUTRA_MONEY' | 'KULU'
+export type LedgerTransactionKind =
+  | 'payment_captured'
+  | 'sub_order_settled'
+  | 'refund_completed'
+  | 'withdrawal_requested'
+  | 'withdrawal_reversed'
+  | 'withdrawal_paid'
+export type WithdrawalStatus = 'pending' | 'processing' | 'paid' | 'rejected' | 'cancelled' | 'failed'
+
+export interface WalletBalance {
+  /** Retirable maintenant. */
+  available: number
+  /** Gains dont le délai de sécurité n'est pas écoulé. */
+  pending: number
+  total: number
+}
+
+/** GET /wallets/mine — un portefeuille par rôle rémunéré de l'utilisateur. */
+export interface WalletRead {
+  id: string
+  kind: WalletKind
+  owner_id: string | null
+  owner_label: string
+  balance: WalletBalance
+  /** Réservé par des retraits demandés ou en cours de versement (déjà déduit du solde). */
+  withdrawals_in_progress: number
+  payout_provider: PayoutProvider | null
+  payout_account_number: string | null
+  payout_beneficiary_name: string | null
+  min_withdrawal_amount: number
+  withdrawal_fee_percent: number
+  earnings_hold_days: number
+}
+
+export interface WalletEntryRead {
+  id: string
+  created_at: string
+  kind: LedgerTransactionKind
+  description: string
+  /** > 0 argent reçu, < 0 argent sorti (du point de vue du titulaire). */
+  amount: number
+  available_at: string
+  is_pending: boolean
+  order_id: string | null
+  sub_order_id: string | null
+  withdrawal_id: string | null
+}
+
+export interface PayoutMethodUpdate {
+  payout_provider: PayoutProvider
+  payout_account_number: string
+  payout_beneficiary_name: string
+}
+
+export interface WithdrawalRead {
+  id: string
+  account_id: string
+  status: WithdrawalStatus
+  /** Débité du portefeuille = fee + net_amount. */
+  amount: number
+  fee: number
+  net_amount: number
+  fee_percent: number
+  payout_provider: PayoutProvider
+  payout_account_number: string
+  payout_beneficiary_name: string
+  admin_note: string | null
+  created_at: string
+  processed_at: string | null
+}
+
+export interface AdminWithdrawalRead extends WithdrawalRead {
+  account_kind: LedgerAccountKind
+  owner_label: string
+  djomy_payout_id: string | null
+  djomy_total_amount: number | null
+}
+
+/** GET /admin/finance/overview — le compte principal. */
+export interface AdminFinanceOverview {
+  treasury: number
+  escrow: number
+  beneficiaries_available: number
+  beneficiaries_pending: number
+  beneficiaries_total: number
+  withdrawals_reserved: number
+  platform_revenue: number
+  is_balanced: boolean
+  total_captured: number
+  total_refunded: number
+  total_paid_out: number
+  withdrawals_pending_count: number
+  withdrawals_pending_amount: number
+  withdrawals_processing_count: number
+  withdrawals_processing_amount: number
+}
+
+export interface AdminWalletRead {
+  id: string
+  kind: WalletKind
+  owner_id: string | null
+  owner_label: string
+  balance: WalletBalance
+  withdrawals_in_progress: number
+  payout_provider: PayoutProvider | null
+  payout_account_number: string | null
+}
+
+export interface LedgerTransactionRead {
+  id: string
+  created_at: string
+  kind: LedgerTransactionKind
+  description: string
+  order_id: string | null
+  sub_order_id: string | null
+  withdrawal_id: string | null
+  /** Montants bruts : > 0 débit, < 0 crédit. */
+  lines: { account_kind: LedgerAccountKind; owner_label: string; amount: number }[]
+}
+
+export interface EarningsSettings {
+  courier_delivery_share_percent: number
+  pickup_point_fee_per_parcel: number
+  earnings_hold_days: number
+  withdrawal_fee_percent: number
+  min_withdrawal_amount: number
+}

@@ -9,7 +9,7 @@ touching the orders module — see provider.py.
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import Enum as SAEnum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,7 +64,7 @@ class PaymentSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """Réglages globaux du module paiement — une seule ligne en base (voir
     repository.get_settings), sur le même principe qu'un singleton plutôt
     qu'une vraie table de configuration multi-valeurs, puisqu'il n'y a pour
-    l'instant qu'un seul réglage."""
+    l'instant que quelques réglages."""
 
     __tablename__ = "payment_settings"
 
@@ -73,3 +73,16 @@ class PaymentSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # informatif seulement, Djomy ne garantit pas ce délai, c'est une
     # estimation que l'admin ajuste selon son expérience du prestataire.
     refund_delay_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=48)
+
+    # --- Répartition des gains (voir app/wallets/service.py::settle_sub_order) ---
+    # Part des frais de livraison reversée au livreur ; Ndjouri garde le reste.
+    courier_delivery_share_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
+    # Rémunération fixe d'un point de retrait par colis remis, prise sur la part Ndjouri.
+    pickup_point_fee_per_parcel: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
+    # Délai entre la livraison et le moment où le gain devient retirable (litiges, retours).
+    earnings_hold_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+
+    # --- Retraits (voir app/wallets/service.py::request_withdrawal) ---
+    # Frais estimés à la charge du bénéficiaire, déduits du montant retiré.
+    withdrawal_fee_percent: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
+    min_withdrawal_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=10000)

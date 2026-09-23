@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhChartBar, PhGear, PhMapPinLine, PhPackage, PhStorefront } from '@phosphor-icons/vue'
+import { PhChartBar, PhGear, PhMapPinLine, PhPackage, PhStorefront, PhWallet } from '@phosphor-icons/vue'
 
 const emit = defineEmits<{ navigate: [] }>()
 const auth = useAuthStore()
@@ -11,6 +11,7 @@ const navItems = computed(() => [
   { to: '/vendeur', label: 'Tableau de bord', icon: PhChartBar },
   { to: '/vendeur/produits', label: 'Produits', icon: PhPackage },
   { to: '/vendeur/commandes', label: 'Commandes', icon: PhStorefront },
+  { to: '/vendeur/gains', label: 'Mes gains', icon: PhWallet },
   { to: '/vendeur/boutique', label: 'Boutique', icon: PhGear },
   ...(auth.user?.is_pickup_point_manager
     ? [{ to: '/point-retrait', label: 'Mon point de retrait', icon: PhMapPinLine }]

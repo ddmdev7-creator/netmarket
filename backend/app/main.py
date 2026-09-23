@@ -16,6 +16,8 @@ from app.notifications.router import router as notifications_router
 from app.orders.router import router as orders_router
 from app.payments.router import admin_router as payments_admin_router
 from app.payments.router import router as payments_router
+from app.wallets.router import admin_router as wallets_admin_router
+from app.wallets.router import router as wallets_router
 from app.pickup_point_managers.router import admin_router as pickup_point_managers_admin_router
 from app.pickup_point_managers.router import router as pickup_point_managers_router
 from app.pickup_points.router import admin_router as pickup_points_admin_router
@@ -58,6 +60,8 @@ app.include_router(cart_router)
 app.include_router(orders_router)
 app.include_router(payments_router)
 app.include_router(payments_admin_router)
+app.include_router(wallets_router)
+app.include_router(wallets_admin_router)
 app.include_router(pickup_points_router)
 app.include_router(pickup_points_admin_router)
 app.include_router(pickup_point_managers_router)

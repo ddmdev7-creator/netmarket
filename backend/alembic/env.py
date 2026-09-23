@@ -27,6 +27,7 @@ from app.reviews import models as reviews_models  # noqa: F401
 from app.subscriptions import models as subscriptions_models  # noqa: F401
 from app.users import models as users_models  # noqa: F401
 from app.vendors import models as vendors_models  # noqa: F401
+from app.wallets import models as wallets_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().database_url)

@@ -12,6 +12,7 @@ from app.core.deps import get_db, require_role
 from app.payments import djomy_client, service
 from app.payments.schemas import PaymentSettingsRead, PaymentSettingsUpdate
 from app.users.models import UserRole
+from app.wallets import service as wallets_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 admin_router = APIRouter(
@@ -46,11 +47,19 @@ async def djomy_webhook(request: Request, db: AsyncSession = Depends(get_db)) ->
     # V2 : payout imbriqué sous data.payout (remboursement, voir
     # service.initiate_refund) — jamais envoyé en V1 d'après la doc Djomy.
     if "payout" in data:
-        payout_id = (data.get("payout") or {}).get("payoutId")
+        payout = data.get("payout") or {}
+        payout_id = payout.get("payoutId") or payout.get("id")
         if not payout_id:
             logger.warning("Webhook Djomy payout sans payoutId exploitable.")
             return Response(status_code=200)
-        await service.apply_djomy_payout_event(db, event_type=event_type, payout_id=payout_id)
+        # Un payout est soit un retrait de bénéficiaire (app/wallets), soit
+        # un remboursement acheteur (app/payments).
+        total = payout.get("totalAmountToPay")
+        handled = await wallets_service.apply_withdrawal_payout_event(
+            db, payout_id=payout_id, event_type=event_type, total_amount=int(total) if total is not None else None
+        )
+        if not handled:
+            await service.apply_djomy_payout_event(db, event_type=event_type, payout_id=payout_id)
         return Response(status_code=200)
 
     # V1 : les champs du paiement sont directement dans `data`. V2 : imbriqués

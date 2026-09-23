@@ -34,6 +34,7 @@ from app.orders.schemas import (
 )
 from app.payments import repository as payments_repository
 from app.payments import service as payments_service
+from app.wallets import service as wallets_service
 from app.payments.models import PaymentStatus
 from app.pickup_point_managers import repository as pickup_point_manager_repository
 from app.pickup_points import repository as pickup_points_repository
@@ -681,6 +682,10 @@ async def update_sub_order_status(
 
     order = await repository.get_order_by_id(db, sub_order.order_id)
     order.status = _compute_order_status(order.sub_orders)
+    if data.status == OrderStatus.DELIVERED:
+        # Paiement en ligne : répartition du séquestre entre vendeur, livreur,
+        # point de retrait et Ndjouri (voir app/wallets/service.py).
+        await wallets_service.settle_sub_order(db, order, sub_order)
     if order.status == OrderStatus.DELIVERED and order.payment_method == PaymentMethod.CASH_ON_DELIVERY:
         # Cash on delivery: money only actually changes hands once every
         # vendor in the order has delivered — see payments/provider.py. For

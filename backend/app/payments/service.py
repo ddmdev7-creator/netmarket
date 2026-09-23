@@ -6,10 +6,12 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError
+from app.orders import repository as orders_repository
 from app.orders.models import Order, PaymentMethod
 from app.payments import djomy_client, repository
 from app.payments.models import Payment, PaymentSettings, PaymentStatus
 from app.payments.provider import get_provider
+from app.wallets import service as wallets_service
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +83,17 @@ async def apply_djomy_event(db: AsyncSession, *, event_type: str, order_id: uuid
         logger.warning("Webhook Djomy %s pour une commande inconnue (order_id=%s)", event_type, order_id)
         return False
     payment.status = new_status
+    if new_status == PaymentStatus.PAID:
+        await _record_capture(db, order_id)
     await db.commit()
     return True
+
+
+async def _record_capture(db: AsyncSession, order_id: uuid.UUID) -> None:
+    """Paiement confirmé → trésorerie/séquestre du grand livre (app/wallets)."""
+    order = await orders_repository.get_order_by_id(db, order_id)
+    if order is not None:
+        await wallets_service.record_payment_captured(db, order)
 
 
 async def apply_djomy_payout_event(db: AsyncSession, *, event_type: str, payout_id: str) -> bool:
@@ -96,6 +107,10 @@ async def apply_djomy_payout_event(db: AsyncSession, *, event_type: str, payout_
         logger.warning("Webhook Djomy %s pour un remboursement inconnu (payoutId=%s)", event_type, payout_id)
         return False
     payment.status = new_status
+    if new_status == PaymentStatus.REFUNDED:
+        order = await orders_repository.get_order_by_id(db, payment.order_id)
+        if order is not None:
+            await wallets_service.record_refund_completed(db, order)
     await db.commit()
     return True
 
@@ -157,4 +172,6 @@ async def sync_pending_payment(db: AsyncSession, order: Order) -> None:
     new_status = _DJOMY_DATA_STATUS_TO_STATUS.get(data.get("status", ""))
     if new_status is not None:
         payment.status = new_status
+        if new_status == PaymentStatus.PAID:
+            await _record_capture(db, order.id)
         await db.commit()

@@ -125,16 +125,18 @@ async def get_payment_status(transaction_id: str) -> dict:
         return response.json()["data"]
 
 
-async def create_refund_payout(
+async def create_payout(
     *, amount: int, account_number: str, provider_code: str, beneficiary_name: str, reference: str, message: str
-) -> str:
-    """Refunds are modelled as an outbound payout to the payer's own mobile
-    money account (POST /v1/payout-orders) — Djomy has no dedicated "reverse
-    this transaction" endpoint. Requires the merchant's Djomy balance to
-    cover the amount (see PayoutBalanceInfo.isTopupRequired in the response;
-    not checked here, a 4xx/insufficient-balance error propagates like any
-    other). Returns the payout item's id, to match against the
-    `payout.success`/`payout.failed` webhook's `data.payout.payoutId`."""
+) -> dict:
+    """Versement sortant vers un compte mobile money (POST /v1/payout-orders),
+    un seul bénéficiaire par ordre. `amount` est le montant reçu par le
+    bénéficiaire, hors frais : Djomy prélève montant + frais sur le solde
+    marchand (totalAmountToPay). Le solde doit couvrir le tout — sinon
+    l'ordre est créé mais bloqué (balances.isTopupRequired), pas vérifié ici.
+
+    Retourne {"order_id", "payout_id", "total_amount_to_pay"} — payout_id est
+    à rapprocher du webhook payout.* (data.payout.payoutId) ou à relire via
+    get_payout."""
     headers = await _authenticated_headers()
     payload = {
         "description": message,
@@ -159,7 +161,44 @@ async def create_refund_payout(
         response.raise_for_status()
         data = response.json()["data"]
 
-    return data["payoutItems"][0]["itemId"]
+    item = data["payoutItems"][0]
+    total = item.get("totalAmountToPay") or data.get("totalAmountToPay")
+    return {
+        "order_id": data["id"],
+        "payout_id": item["itemId"],
+        "total_amount_to_pay": int(total) if total is not None else None,
+    }
+
+
+async def get_payout(order_id: str, payout_id: str) -> dict:
+    """GET /v1/payout-orders/{orderId}/payout-items/{payoutId} — `data`
+    contient notamment `status` (CREATED, READY_TO_PROCESS, PROCESSING,
+    REJECTED, SUCCESS, FAILED) et `totalAmountToPay`."""
+    headers = await _authenticated_headers()
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(
+            f"{settings.djomy_base_url}/v1/payout-orders/{order_id}/payout-items/{payout_id}", headers=headers
+        )
+        response.raise_for_status()
+        return response.json()["data"]
+
+
+async def create_refund_payout(
+    *, amount: int, account_number: str, provider_code: str, beneficiary_name: str, reference: str, message: str
+) -> str:
+    """Refunds are modelled as an outbound payout to the payer's own mobile
+    money account — Djomy has no dedicated "reverse this transaction"
+    endpoint. Returns the payout item's id, to match against the
+    `payout.success`/`payout.failed` webhook's `data.payout.payoutId`."""
+    result = await create_payout(
+        amount=amount,
+        account_number=account_number,
+        provider_code=provider_code,
+        beneficiary_name=beneficiary_name,
+        reference=reference,
+        message=message,
+    )
+    return result["payout_id"]
 
 
 def verify_webhook_signature(raw_body: bytes, signature_header: str | None) -> bool:

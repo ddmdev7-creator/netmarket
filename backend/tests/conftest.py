@@ -32,6 +32,7 @@ from app.reviews.models import Review  # noqa: F401
 from app.subscriptions.models import SubscriptionPlan
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor, VendorStatus
+from app.wallets.models import LedgerAccount  # noqa: F401
 
 try:
     TEST_DATABASE_URL = os.environ["TEST_DATABASE_URL"]
