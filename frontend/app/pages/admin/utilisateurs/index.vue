@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhKey, PhMagnifyingGlass, PhTrash, PhUsers } from '@phosphor-icons/vue'
+import { PhEnvelopeSimple, PhKey, PhPhone, PhTrash } from '@phosphor-icons/vue'
 import type { UserRead, UserRole } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -53,6 +53,21 @@ const filteredUsers = computed(() => {
     return name.includes(term) || email.includes(term) || (!!digits && phone.includes(digits))
   })
 })
+
+// Pastille d'initiales, teinte par rôle (repère visuel ; le rôle reste écrit
+// en clair dans la puce à côté).
+const roleAvatar: Record<UserRole, string> = {
+  buyer: '#2a78d6',
+  vendor: '#199e70',
+  courier: '#c98500',
+  pickup_point_manager: '#8a5cd6',
+  admin: '#d63b3b',
+}
+
+function initials(user: UserRead): string {
+  const letters = [user.first_name, user.last_name].filter(Boolean).map((part) => part!.trim()[0] ?? '')
+  return (letters.join('') || user.phone.slice(-2)).toUpperCase()
+}
 
 function displayName(user: UserRead): string {
   const full = [user.first_name, user.last_name].filter(Boolean).join(' ')
@@ -114,48 +129,42 @@ async function resetPassword() {
   <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Utilisateurs ({{ users.length }})</h1>
 
-    <v-text-field
+    <CommonSearchBar
       v-model="search"
       placeholder="Rechercher par nom, téléphone ou e-mail…"
-      density="compact"
-      variant="outlined"
-      hide-details
-      clearable
+      :count="filteredUsers.length"
       class="mb-3"
-      style="max-width: 420px"
-    >
-      <template #prepend-inner><PhMagnifyingGlass :size="16" /></template>
-    </v-text-field>
+    />
 
     <v-btn-toggle v-model="filter" mandatory density="comfortable" divided class="mb-4 flex-wrap">
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
     </v-btn-toggle>
-
-    <p v-if="searchTerm" class="text-muted text-meta mb-2">{{ filteredUsers.length }} résultat(s)</p>
 
     <CommonEmptyState
       v-if="!pending && filteredUsers.length === 0"
       :message="searchTerm ? 'Aucun utilisateur ne correspond à cette recherche.' : 'Aucun utilisateur dans cette catégorie.'"
     />
 
-    <v-card v-for="user in filteredUsers" :key="user.id" class="mb-2 pa-3">
-      <div class="d-flex justify-space-between align-center">
-        <div class="d-flex align-center ga-2" style="min-width: 0">
-          <PhUsers :size="16" color="var(--color-neutral-500)" style="flex: none" />
-          <div style="min-width: 0">
-            <div class="user-row__name">{{ displayName(user) }}</div>
-            <div class="text-muted user-row__contact">
-              {{ user.phone }}<span v-if="user.email"> · {{ user.email }}</span>
-            </div>
-          </div>
+    <div class="user-grid">
+      <article v-for="user in filteredUsers" :key="user.id" class="user-card" :class="{ 'user-card--inactive': !user.is_active }">
+        <header class="user-card__head">
+          <span class="user-card__avatar" :style="{ background: roleAvatar[user.role] }">{{ initials(user) }}</span>
+          <v-chip :color="roleMeta[user.role].color" size="x-small" variant="tonal">{{ roleMeta[user.role].label }}</v-chip>
+        </header>
+        <div class="user-card__name" :title="displayName(user)">{{ displayName(user) }}</div>
+        <div class="user-card__line"><PhPhone :size="13" /> {{ user.phone }}</div>
+        <div class="user-card__line" :title="user.email ?? ''">
+          <PhEnvelopeSimple :size="13" />
+          <span class="user-card__ellipsis">{{ user.email ?? 'Pas d’e-mail' }}</span>
         </div>
-
-        <div class="d-flex align-center ga-2" style="flex: none">
-          <v-chip :color="roleMeta[user.role].color" size="small" variant="tonal">
-            {{ roleMeta[user.role].label }}
-          </v-chip>
-          <v-btn variant="text" size="small" icon @click="openResetPassword(user.id)">
-            <PhKey :size="16" />
+        <div class="user-card__flags">
+          <v-chip v-if="!user.is_active" size="x-small" variant="tonal">Désactivé</v-chip>
+          <v-chip v-if="user.email && !user.email_verified" size="x-small" variant="tonal" color="warning">E-mail non vérifié</v-chip>
+          <v-chip v-if="user.is_pickup_point_manager && user.role !== 'pickup_point_manager'" size="x-small" variant="tonal" color="secondary">Gère un point</v-chip>
+        </div>
+        <footer class="user-card__actions">
+          <v-btn variant="text" size="small" @click="openResetPassword(user.id)">
+            <PhKey :size="15" class="mr-1" /> Mot de passe
           </v-btn>
           <v-btn
             v-if="user.role !== 'admin' && user.id !== auth.user?.id"
@@ -163,14 +172,14 @@ async function resetPassword() {
             color="error"
             size="small"
             icon
+            aria-label="Supprimer le compte"
             @click="confirmDeleteId = user.id"
           >
-            <PhTrash :size="16" />
+            <PhTrash :size="15" />
           </v-btn>
-        </div>
-      </div>
-      <v-chip v-if="!user.is_active" color="default" size="x-small" variant="tonal" class="mt-2">Désactivé</v-chip>
-    </v-card>
+        </footer>
+      </article>
+    </div>
 
     <v-dialog :model-value="!!confirmDeleteId" max-width="360" @update:model-value="(v) => !v && (confirmDeleteId = null)">
       <v-card class="pa-5">
@@ -213,18 +222,107 @@ async function resetPassword() {
 </template>
 
 <style scoped>
-.user-row__name {
-  font-size: 13px;
-  font-weight: 600;
+/* 4 cartes par ligne sur grand écran, moins sur tablette et mobile. */
+.user-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 600px) {
+  .user-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .user-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .user-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.user-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+  box-shadow: var(--shadow-sm);
+}
+
+.user-card--inactive {
+  opacity: 0.65;
+}
+
+.user-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.user-card__avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.user-card__name {
+  margin-bottom: 4px;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--color-neutral-200);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.user-row__contact {
-  font-size: 11.5px;
-  white-space: nowrap;
+.user-card__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+}
+
+.user-card__ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-card__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  min-height: 0;
+}
+
+.user-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-divider);
 }
 </style>

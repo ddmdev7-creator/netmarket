@@ -308,20 +308,26 @@ async function quickAdd(event: MouseEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Fond uni et clair : la plupart des photos produit sont détourées sur
-     blanc, un dégradé gris les faisait paraître « posées » sur un bloc. */
-  background: var(--color-neutral-800);
+  /* Blanc : la plupart des photos produit sont détourées sur blanc, elles se
+     raccordent sans bande visible autour d'une photo non carrée. */
+  background: #fff;
   overflow: hidden;
 }
 
 .product-card__image img {
-  /* Pleine largeur de la carte, sans marge : "cover" remplit tout le carré
-     (bords légèrement rognés pour une photo non carrée) plutôt qu'une image
-     réduite au milieu d'un fond neutre. */
+  /* Pleine largeur, sans marge, et photo toujours entière ("contain") :
+     "cover" rognait les photos non carrées. L'espace restant (photo en
+     hauteur ou en largeur) prend le fond blanc du cadre. */
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+}
+
+:root[data-theme='dark'] .product-card__image {
+  background: var(--color-neutral-800);
 }
 
 /* Enfant DIRECT seulement (pas ">img" dans .product-card__carousel, plus
@@ -333,14 +339,14 @@ async function quickAdd(event: MouseEvent) {
 }
 
 .product-card:hover .product-card__image > img {
-  transform: scale(1.1);
+  transform: scale(1.04);
 }
 
 /* :active plutôt que :hover seul : sur mobile (l'essentiel du trafic PWA,
    voir ProductGrid) il n'y a pas de survol — sans ce répondant au toucher,
    l'effet de zoom ne se verrait jamais en usage réel. */
 .product-card:active .product-card__image > img {
-  transform: scale(1.04);
+  transform: scale(1.02);
 }
 
 .product-card__carousel {
@@ -358,6 +364,8 @@ async function quickAdd(event: MouseEvent) {
 }
 
 .product-card__frame {
+  position: relative;
+  overflow: hidden;
   flex: 0 0 100%;
   width: 100%;
   height: 100%;
@@ -370,13 +378,13 @@ async function quickAdd(event: MouseEvent) {
 
 .product-card__dots {
   position: absolute;
+  z-index: 2;
   bottom: 7px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 4px;
-  z-index: 1;
 }
 
 .product-card__dot {
@@ -395,6 +403,7 @@ async function quickAdd(event: MouseEvent) {
 
 .product-card__stock-tag {
   position: absolute;
+  z-index: 2;
   top: 8px;
   left: 8px;
   font-size: 9.5px;
@@ -416,6 +425,7 @@ async function quickAdd(event: MouseEvent) {
 
 .product-card__quick-add {
   position: absolute;
+  z-index: 2;
   bottom: 8px;
   right: 8px;
   width: 30px;

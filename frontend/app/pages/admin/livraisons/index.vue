@@ -18,7 +18,6 @@
 import {
   PhArrowsClockwise,
   PhClock,
-  PhMagnifyingGlass,
   PhMotorcycle,
   PhUser,
   PhWarningCircle,
@@ -316,18 +315,12 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <v-text-field
+      <CommonSearchBar
         v-model="search"
         placeholder="Rechercher une commande, boutique, livreur, client, zone…"
-        density="compact"
-        hide-details
-        clearable
+        :count="visibleRows.length"
         class="mb-4"
-      >
-        <template #prepend-inner>
-          <PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" />
-        </template>
-      </v-text-field>
+      />
 
       <CommonEmptyState
         v-if="data && !counts.active && !counts.byStage.delivered"
