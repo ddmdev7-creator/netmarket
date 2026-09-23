@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from app.catalog.models import Product
 from app.couriers.models import Courier
 from app.users.models import User
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 
 CHECKOUT_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 ONLINE_CHECKOUT_PAYLOAD = {
@@ -162,11 +162,7 @@ async def test_payment_marked_paid_once_order_fully_delivered(
         )
         assert step.status_code == 200
     # La remise finale revient au livreur, pas au vendeur.
-    delivered_step = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(courier_user),
-    )
+    delivered_step = await scan_handoff(client, courier_user, sub_order_id)
     assert delivered_step.status_code == 200
 
     order_response = await client.get(f"/orders/{order['id']}", headers=auth_headers(buyer_user))
@@ -276,11 +272,7 @@ async def test_delivery_does_not_mark_an_online_payment_paid(
         await client.patch(
             f"/orders/sub-orders/{sub_order_id}/status", json={"status": target_status}, headers=vendor_headers
         )
-    await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(courier_user),
-    )
+    await scan_handoff(client, courier_user, sub_order_id)
 
     order_response = await client.get(f"/orders/{order['id']}", headers=auth_headers(buyer_user))
     assert order_response.json()["payment_status"] == "pending"

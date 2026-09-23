@@ -17,7 +17,6 @@ _hasher = PasswordHasher()
 class TokenType(StrEnum):
     ACCESS = "access"
     REFRESH = "refresh"
-    DELIVERY = "delivery"
 
 
 def hash_password(password: str) -> str:
@@ -55,17 +54,6 @@ def create_access_token(subject: str, role: str) -> str:
 
 def create_refresh_token(subject: str) -> str:
     return _create_token(subject, TokenType.REFRESH, timedelta(days=settings.refresh_token_expire_days))
-
-
-def create_delivery_token(sub_order_id: str) -> str:
-    """Signed token embedded in the buyer's delivery QR code.
-
-    60 days comfortably outlives any realistic shipped→delivered window
-    while still being bounded (a signed token has no other expiry/revocation
-    mechanism — see app/orders/service.py::confirm_delivery_by_token, which
-    also re-checks the sub-order is still "shipped" before honoring it).
-    """
-    return _create_token(sub_order_id, TokenType.DELIVERY, timedelta(days=60))
 
 
 class InvalidTokenError(Exception):

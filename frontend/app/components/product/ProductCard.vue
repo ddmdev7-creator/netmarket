@@ -312,17 +312,16 @@ async function quickAdd(event: MouseEvent) {
      blanc, un dégradé gris les faisait paraître « posées » sur un bloc. */
   background: var(--color-neutral-800);
   overflow: hidden;
-  padding: 8px;
-  box-sizing: border-box;
 }
 
 .product-card__image img {
+  /* Pleine largeur de la carte, sans marge : "cover" remplit tout le carré
+     (bords légèrement rognés pour une photo non carrée) plutôt qu'une image
+     réduite au milieu d'un fond neutre. */
+  display: block;
   width: 100%;
   height: 100%;
-  /* "contain" plutôt que "cover" : l'image entière reste visible (jamais
-     rognée), quitte à laisser un léger fond neutre sur les côtés pour les
-     photos qui ne sont pas déjà carrées. */
-  object-fit: contain;
+  object-fit: cover;
 }
 
 /* Enfant DIRECT seulement (pas ">img" dans .product-card__carousel, plus

@@ -10,7 +10,7 @@ const toast = useToastStore()
 const { data: tiers, pending, refresh } = await useAsyncData(
   'admin-delivery-fee-tiers',
   () => apiFetch<DeliveryFeeTierRead[]>('/admin/delivery-fee-tiers'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 const hasCatchAll = computed(() => tiers.value.some((t) => t.max_km === null))

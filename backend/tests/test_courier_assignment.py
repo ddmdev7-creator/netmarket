@@ -5,7 +5,7 @@ from httpx import AsyncClient
 
 from app.couriers.models import Courier, CourierStatus, VehicleType
 from app.users.models import User, UserRole
-from tests.conftest import auth_headers, make_user, make_vendor
+from tests.conftest import auth_headers, make_user, make_vendor, scan_handoff
 
 CHECKOUT_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 
@@ -138,11 +138,7 @@ async def test_assigned_courier_can_mark_delivered_once_shipped(
         )
         assert step.status_code == 200
 
-    response = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(courier_user),
-    )
+    response = await scan_handoff(client, courier_user, sub_order_id)
 
     assert response.status_code == 200
     assert response.json()["status"] == "delivered"

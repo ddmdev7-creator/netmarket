@@ -155,18 +155,21 @@ async def notify_delivery_request(
     courier_user_id: uuid.UUID,
     sub_order_id: uuid.UUID,
     shop_name: str,
-    amount: int,
+    courier_earning: int,
     distance_km: float,
 ) -> None:
-    formatted_amount = f"{amount:,}".replace(",", " ")
+    # Jamais le prix des articles : seulement ce qui concerne le livreur (son
+    # gain sur les frais de livraison, la distance). Le détail (adresse, point
+    # de retrait) est lu à part — GET /orders/sub-orders/{id}/delivery-offer.
+    formatted_earning = f"{courier_earning:,}".replace(",", " ")
     await _persist_and_push(
         db,
         user_id=courier_user_id,
         type_=NotificationType.DELIVERY_REQUEST,
         title="Nouvelle demande de livraison",
         body=(
-            f"« {shop_name} » recherche un livreur — {formatted_amount} GNF, "
-            f"à environ {distance_km:.1f} km de vous."
+            f"« {shop_name} » recherche un livreur — gain {formatted_earning} GNF, "
+            f"boutique à environ {distance_km:.1f} km de vous."
         ),
         order_id=None,
         sub_order_id=sub_order_id,

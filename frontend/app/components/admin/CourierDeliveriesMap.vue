@@ -31,7 +31,7 @@ const { data, pending, refresh } = useAsyncData(
     ])
     return { couriers, deliveries }
   },
-  { default: () => ({ couriers: [], deliveries: [] }), getCachedData: () => undefined },
+  { default: () => ({ couriers: [], deliveries: [] }), getCachedData: hydrateThenRefetch },
 )
 
 const showCouriers = ref(true)

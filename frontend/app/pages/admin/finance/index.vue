@@ -32,10 +32,7 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 const { apiFetch } = useApi()
 const toast = useToastStore()
 // Données du rendu serveur à l'hydratation, puis toujours fraîches.
-const noCache = {
-  getCachedData: (key: string, nuxtApp: ReturnType<typeof useNuxtApp>) =>
-    nuxtApp.isHydrating ? nuxtApp.payload.data[key] : undefined,
-}
+const noCache = { getCachedData: hydrateThenRefetch }
 
 const { data: overview, refresh: refreshOverview } = await useAsyncData(
   'admin-finance-overview',

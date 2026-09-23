@@ -243,10 +243,12 @@ function ratePickupPoint(pointId: string) {
           <span class="amount">{{ formatGnf(sub.delivery_fee) }}</span>
         </div>
 
-        <div v-if="sub.delivery_token" class="qr-block mt-4">
-          <OrderDeliveryQrCode :token="sub.delivery_token" />
+        <div v-if="sub.handoff_ready" class="qr-block mt-4">
+          <OrderDeliveryQrCode :sub-order-id="sub.id" />
           <p class="text-muted mt-2 mb-0 text-meta" style="max-width: 220px">
-            Présentez ce code au livreur à la remise du colis — il confirme la livraison automatiquement.
+            Présente ce code {{ order.delivery_type === 'pickup_point' ? 'au gestionnaire du point de retrait' : 'au livreur' }}
+            à la remise du colis : son scan confirme la livraison. Le code change toutes les minutes, ne l'envoie pas
+            en photo.
           </p>
         </div>
 

@@ -1,7 +1,7 @@
 """Compose aggregate queries into the admin dashboard payload."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +9,7 @@ from app.admin import repository
 from app.admin.schemas import (
     ActiveDeliveryRead,
     AdminStats,
+    DailyActivity,
     DeliveryMonitorEntry,
     DeliveryMonitorRead,
     TopProduct,
@@ -26,6 +27,10 @@ from app.pickup_points import repository as pickup_points_repository
 from app.users import repository as users_repository
 
 
+# Fenêtre des courbes du tableau de bord admin.
+DASHBOARD_DAYS = 30
+
+
 async def get_stats(db: AsyncSession) -> AdminStats:
     vendor_counts = await repository.count_vendors_by_status(db)
     order_counts = await repository.count_orders_by_status(db)
@@ -33,6 +38,11 @@ async def get_stats(db: AsyncSession) -> AdminStats:
     total_sales, total_commission = await repository.sum_sales_and_commission(db)
     top_products_rows = await repository.top_products(db)
     top_vendors_rows = await repository.top_vendors(db)
+    today = datetime.now(UTC).date()
+    first_day = today - timedelta(days=DASHBOARD_DAYS - 1)
+    since = datetime.combine(first_day, time.min, tzinfo=UTC)
+    orders_per_day = await repository.daily_orders(db, since)
+    signups_per_day = await repository.daily_signups(db, since)
 
     return AdminStats(
         total_vendors=sum(vendor_counts.values()),
@@ -51,6 +61,17 @@ async def get_stats(db: AsyncSession) -> AdminStats:
             TopVendor(vendor_id=vendor_id, shop_name=name, revenue=int(revenue))
             for vendor_id, name, revenue in top_vendors_rows
         ],
+        daily_activity=[
+            DailyActivity(
+                date=day,
+                orders=orders_per_day.get(day, (0, 0))[0],
+                order_amount=orders_per_day.get(day, (0, 0))[1],
+                signups=signups_per_day.get(day, 0),
+            )
+            for day in (first_day + timedelta(days=i) for i in range(DASHBOARD_DAYS))
+        ],
+        orders_by_payment_method=await repository.count_orders_by_payment_method(db),
+        users_by_role=await repository.count_users_by_role(db),
     )
 
 

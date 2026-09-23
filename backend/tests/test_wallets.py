@@ -10,7 +10,7 @@ from app.catalog.models import Product
 from app.couriers.models import Courier
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor
-from tests.conftest import auth_headers, make_user
+from tests.conftest import auth_headers, make_user, scan_handoff
 from tests.test_payments import (
     CHECKOUT_PAYLOAD,
     _add_to_cart,
@@ -34,9 +34,7 @@ async def _deliver(client: AsyncClient, vendor_user: User, courier: Courier, cou
             f"/orders/sub-orders/{sub_order_id}/status", json={"status": status}, headers=vendor_headers
         )
         assert response.status_code == 200, response.text
-    response = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status", json={"status": "delivered"}, headers=auth_headers(courier_user)
-    )
+    response = await scan_handoff(client, courier_user, sub_order_id)
     assert response.status_code == 200, response.text
     return order["sub_orders"][0]
 

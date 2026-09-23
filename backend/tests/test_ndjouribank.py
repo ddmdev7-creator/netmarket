@@ -7,7 +7,7 @@ from app.catalog.models import Product
 from app.couriers.models import Courier
 from app.users.models import User
 from app.vendors.models import Vendor
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 from tests.test_payments import (
     _add_to_cart,
     _checkout_and_pay_online,
@@ -192,9 +192,7 @@ async def test_pay_with_wallet_then_delivery_splits_the_money(
     )
     for status in ("confirmed", "preparing", "shipped"):
         await client.patch(f"/orders/sub-orders/{sub_order_id}/status", json={"status": status}, headers=vendor_headers)
-    delivered = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status", json={"status": "delivered"}, headers=auth_headers(courier_user)
-    )
+    delivered = await scan_handoff(client, courier_user, sub_order_id)
     assert delivered.status_code == 200, delivered.text
 
     overview = await _overview(client, admin_user)

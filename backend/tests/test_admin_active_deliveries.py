@@ -7,7 +7,7 @@ from app.catalog.models import Product
 from app.couriers.models import Courier
 from app.users.models import User
 from app.vendors.models import Vendor
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 
 
 async def _checkout(client: AsyncClient, buyer: User, product: Product, **destination) -> str:
@@ -113,9 +113,7 @@ async def test_monitor_lists_in_flight_and_delivered_today(
     )
     for status in ["confirmed", "preparing", "shipped"]:
         await client.patch(f"/orders/sub-orders/{delivered}/status", json={"status": status}, headers=vendor_headers)
-    await client.patch(
-        f"/orders/sub-orders/{delivered}/status", json={"status": "delivered"}, headers=auth_headers(courier_user)
-    )
+    await scan_handoff(client, courier_user, delivered)
 
     pending = await _checkout(client, buyer_user, product)
 

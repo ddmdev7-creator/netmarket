@@ -12,13 +12,13 @@ const { locating, locate } = useGeolocation()
 const { data: points, pending, refresh } = await useAsyncData(
   'admin-pickup-points',
   () => apiFetch<PickupPointRead[]>('/admin/pickup-points'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 const { data: managers, refresh: refreshManagers } = await useAsyncData(
   'admin-pickup-point-managers',
   () => apiFetch<PickupPointManagerRead[]>('/admin/pickup-point-managers'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 // Pour proposer de rattacher un point à une boutique existante — un point de

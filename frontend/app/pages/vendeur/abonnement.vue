@@ -7,7 +7,7 @@ definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 const { apiFetch } = useApi()
 const toast = useToastStore()
 
-const alwaysRefetch = { getCachedData: () => undefined }
+const alwaysRefetch = { getCachedData: hydrateThenRefetch }
 
 const { data: plans } = await useAsyncData(
   'subscription-plans',

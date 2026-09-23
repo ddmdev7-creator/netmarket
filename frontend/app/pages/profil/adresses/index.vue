@@ -11,7 +11,7 @@ const toast = useToastStore()
 const { data: addresses, pending, error, refresh } = await useAsyncData(
   'my-addresses',
   () => apiFetch<AddressRead[]>('/addresses'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 const updatingId = ref<string | null>(null)

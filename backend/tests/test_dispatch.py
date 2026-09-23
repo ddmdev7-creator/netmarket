@@ -249,3 +249,37 @@ async def test_offer_next_skips_offline_and_exhausts_queue(db_session, vendor: V
     sub_order.dispatch_queue = []
     found_again = await orders_service._offer_next(db_session, sub_order, VENDOR_LAT, VENDOR_LNG)
     assert found_again is False
+
+
+async def test_delivery_offer_shows_courier_earning_but_never_the_item_price(
+    client: AsyncClient, db_session, monkeypatch, buyer_user: User, vendor_user: User, vendor: Vendor, product
+) -> None:
+    await _set_vendor_location(db_session, vendor, VENDOR_LAT, VENDOR_LNG)
+    near = await _make_online_courier(db_session, phone="+224621000090", lat=NEAR_LAT, lng=NEAR_LNG)
+    other = await _make_online_courier(db_session, phone="+224621000091", lat=FAR_LAT, lng=FAR_LNG)
+    sub_order_id = await _checkout(client, buyer_user, product)
+    sub_order = await orders_service.repository.get_sub_order_by_id(db_session, sub_order_id)
+    sub_order.delivery_fee = 20000
+    await db_session.flush()
+    bodies: list[str] = []
+
+    async def capture(db, *, courier_user_id, sub_order_id, shop_name, courier_earning, distance_km):
+        bodies.append(f"{shop_name}|{courier_earning}")
+
+    monkeypatch.setattr(orders_service.notifications_service, "notify_delivery_request", capture)
+    await client.post(f"/orders/sub-orders/{sub_order_id}/dispatch", json={}, headers=auth_headers(vendor_user))
+
+    near_user = await db_session.get(User, near.user_id)
+    response = await client.get(f"/orders/sub-orders/{sub_order_id}/delivery-offer", headers=auth_headers(near_user))
+    assert response.status_code == 200, response.text
+    offer = response.json()
+    assert offer["courier_earning"] == 16000  # 80 % de 20 000
+    assert offer["distance_to_shop_km"] is not None
+    assert "amount" not in offer and "total" not in offer
+    assert str(product.price) not in response.text
+    assert bodies == [f"{sub_order.shop_name}|16000"]
+
+    # Un autre livreur (pas celui sollicité) ne voit rien.
+    other_user = await db_session.get(User, other.user_id)
+    hidden = await client.get(f"/orders/sub-orders/{sub_order_id}/delivery-offer", headers=auth_headers(other_user))
+    assert hidden.status_code == 404

@@ -15,13 +15,13 @@ from app.catalog import repository as catalog_repository
 from app.catalog.models import ProductStatus
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
-from app.core.security import InvalidTokenError, TokenType, create_delivery_token, decode_token
 from app.couriers import repository as courier_repository
 from app.couriers.models import CourierStatus
 from app.delivery import repository as delivery_repository
 from app.delivery.service import compute_fee, compute_transit_days
 from app.notifications import service as notifications_service
 from app.orders import repository
+from app.orders import handoff
 from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder
 from app.orders.schemas import (
     OrderCancelRequest,
@@ -109,31 +109,31 @@ def _line_unit_price(product, variant) -> int:
 
 
 def _attach_payment_status(order: Order, payment_status: PaymentStatus | None) -> Order:
-    # Same transient-attribute pattern as delivery_token below: payment_status
+    # Same transient-attribute pattern as handoff_ready below: payment_status
     # isn't an Order column, it lives on the separate Payment row (app/payments/).
     order.payment_status = payment_status
     return order
 
 
-def _attach_delivery_tokens(order: Order) -> Order:
-    # Mirrors _attach_delivery_address below: delivery_token isn't a SubOrder
-    # column, it's minted on read. It's the buyer's own turn to be scanned —
-    # and so this only gets minted — at "shipped" for home_delivery (courier
-    # scans it, unchanged flow) or at "arrived_at_pickup_point" for
-    # pickup_point (the point manager scans it once the parcel is on-site).
-    # A pickup_point sub-order at "shipped" deliberately gets nothing here:
-    # that's the courier→point drop-off stage, the buyer isn't involved yet
-    # (see _attach_pickup_dropoff_token for the courier's own code at that
-    # stage). Anything else keeps the buyer's order screen from showing a
-    # scan code that can't do anything.
+def _is_buyers_turn(sub_order: SubOrder, delivery_type: DeliveryType) -> bool:
+    """C'est à l'acheteur de présenter son QR : à « shipped » pour une
+    livraison à domicile (le livreur scanne), à « arrived_at_pickup_point »
+    pour un point de retrait (le gestionnaire scanne)."""
+    return (sub_order.status == OrderStatus.SHIPPED and delivery_type == DeliveryType.HOME_DELIVERY) or (
+        sub_order.status == OrderStatus.ARRIVED_AT_PICKUP_POINT and delivery_type == DeliveryType.PICKUP_POINT
+    )
+
+
+def _is_couriers_dropoff_turn(sub_order: SubOrder) -> bool:
+    """Le livreur présente son QR « dépôt » au gestionnaire du point."""
+    return sub_order.status == OrderStatus.SHIPPED and sub_order.order.delivery_type == DeliveryType.PICKUP_POINT
+
+
+def _attach_handoff_flags(order: Order) -> Order:
+    # handoff_ready n'est pas une colonne : indique seulement qu'un QR est à
+    # afficher. Le code lui-même se demande à part (get_handoff_code).
     for sub_order in order.sub_orders:
-        is_buyers_turn = (
-            sub_order.status == OrderStatus.SHIPPED and order.delivery_type == DeliveryType.HOME_DELIVERY
-        ) or (
-            sub_order.status == OrderStatus.ARRIVED_AT_PICKUP_POINT
-            and order.delivery_type == DeliveryType.PICKUP_POINT
-        )
-        sub_order.delivery_token = create_delivery_token(str(sub_order.id)) if is_buyers_turn else None
+        sub_order.handoff_ready = _is_buyers_turn(sub_order, order.delivery_type)
     return order
 
 
@@ -329,7 +329,7 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
     for sub_order in order.sub_orders:
         await _attach_product_images(db, sub_order)
         await _attach_courier_info(db, sub_order)
-    return _attach_delivery_tokens(order)
+    return _attach_handoff_flags(order)
 
 
 async def sync_payment(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
@@ -356,7 +356,7 @@ async def list_my_orders(db: AsyncSession, user: User) -> list[Order]:
         for sub_order in order.sub_orders:
             await _attach_product_images(db, sub_order)
             await _attach_courier_info(db, sub_order)
-    return [_attach_delivery_tokens(order) for order in orders]
+    return [_attach_handoff_flags(order) for order in orders]
 
 
 async def cancel_order(
@@ -552,19 +552,8 @@ async def assign_courier(
     return await _attach_courier_info(db, updated)
 
 
-def _attach_pickup_dropoff_token(sub_order: SubOrder) -> SubOrder:
-    # The courier's own QR for the drop-off leg of a pickup_point order — the
-    # point manager scans it (see confirm_delivery_by_token) to confirm
-    # receipt. Same minting mechanism as _attach_delivery_tokens (a signed
-    # JWT keyed only on sub_order_id — there's nothing cryptographically
-    # tying it to "courier" vs "buyer", it's the audience/stage that gives it
-    # meaning), only ever shown while there's actually something for the
-    # courier to hand off.
-    sub_order.pickup_dropoff_token = (
-        create_delivery_token(str(sub_order.id))
-        if sub_order.status == OrderStatus.SHIPPED and sub_order.order.delivery_type == DeliveryType.PICKUP_POINT
-        else None
-    )
+def _attach_dropoff_flag(sub_order: SubOrder) -> SubOrder:
+    sub_order.dropoff_handoff_ready = _is_couriers_dropoff_turn(sub_order)
     return sub_order
 
 
@@ -574,7 +563,7 @@ async def list_my_deliveries(db: AsyncSession, user: User) -> list[SubOrder]:
         raise NotFoundError("Vous n'avez pas de profil livreur.")
     sub_orders = await repository.list_sub_orders_for_courier(db, courier.id)
     for so in sub_orders:
-        _attach_pickup_dropoff_token(_attach_delivery_address(so))
+        _attach_dropoff_flag(_attach_delivery_address(so))
         await _attach_pickup_point_contacts(db, so, so.order.pickup_point_id)
         await _attach_product_images(db, so)
     return sub_orders
@@ -621,8 +610,12 @@ async def update_storage_location(
     return updated
 
 
+# Étapes où le colis change de mains : scan obligatoire.
+HANDOFF_STATUSES = {OrderStatus.ARRIVED_AT_PICKUP_POINT, OrderStatus.DELIVERED}
+
+
 async def update_sub_order_status(
-    db: AsyncSession, user: User, sub_order_id: uuid.UUID, data: SubOrderStatusUpdate
+    db: AsyncSession, user: User, sub_order_id: uuid.UUID, data: SubOrderStatusUpdate, *, via_scan: bool = False
 ) -> SubOrder:
     sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
     if sub_order is None:
@@ -631,13 +624,17 @@ async def update_sub_order_status(
     vendor = await vendor_repository.get_by_id(db, sub_order.vendor_id)
     is_owner_vendor = vendor is not None and vendor.user_id == user.id
 
+    # Rôles évalués indépendamment : un même compte peut être à la fois le
+    # vendeur de la sous-commande et le gestionnaire du point de retrait (sa
+    # boutique EST le point, voir admin_link_vendor_as_manager) — il doit
+    # alors pouvoir confirmer la réception de ses propres colis au point.
     is_assigned_courier = False
-    if not is_owner_vendor and sub_order.courier_id is not None:
+    if sub_order.courier_id is not None:
         courier = await courier_repository.get_by_id(db, sub_order.courier_id)
         is_assigned_courier = courier is not None and courier.user_id == user.id
 
     is_assigned_point_manager = False
-    if not is_owner_vendor and not is_assigned_courier and sub_order.order.pickup_point_id is not None:
+    if sub_order.order.pickup_point_id is not None:
         manager = await pickup_point_manager_repository.get_by_user_id(db, user.id)
         is_assigned_point_manager = (
             manager is not None and manager.pickup_point_id == sub_order.order.pickup_point_id
@@ -645,38 +642,31 @@ async def update_sub_order_status(
 
     if not is_owner_vendor and not is_assigned_courier and not is_assigned_point_manager:
         raise ForbiddenError("Cette sous-commande ne fait pas partie de votre boutique.")
-    # Le vendeur pilote tout ce qui se passe avant que le colis ne quitte sa
-    # boutique (accepter, préparer, expédier, annuler) mais jamais sa
-    # réception/remise ensuite — ce n'est pas lui qui a physiquement le colis
-    # à ce stade, donc ni "arrivée au point" ni "remise au client" ne
-    # devraient pouvoir venir de lui, quel que soit le mode de livraison.
-    if is_owner_vendor and data.status in {OrderStatus.ARRIVED_AT_PICKUP_POINT, OrderStatus.DELIVERED}:
-        raise ForbiddenError(
-            "Cette confirmation revient au livreur ou au gestionnaire du point de retrait, pas au vendeur."
+
+    is_pickup = sub_order.order.delivery_type == DeliveryType.PICKUP_POINT
+    if data.status in HANDOFF_STATUSES:
+        # Remise physique du colis (au client, ou au point de retrait) :
+        # uniquement par scan du QR de la personne qui remet le colis —
+        # jamais par un bouton (voir confirm_delivery_by_code).
+        if not via_scan:
+            raise ForbiddenError(
+                "La remise d'un colis se confirme uniquement en scannant le QR code présenté "
+                "(client, ou livreur au point de retrait)."
+            )
+        # Le livreur scanne le client pour une livraison à domicile ; pour un
+        # point de retrait, c'est le gestionnaire qui scanne (livreur au
+        # dépôt, puis client au retrait).
+        allowed = is_assigned_point_manager if is_pickup else (
+            is_assigned_courier and data.status == OrderStatus.DELIVERED
         )
-    # Le livreur assigné confirme la remise directe au client (livraison à
-    # domicile). Pour un point de retrait, il n'a rien à confirmer lui-même :
-    # il montre son propre QR (pickup_dropoff_token) et c'est le gestionnaire
-    # qui le scanne — voir la branche is_assigned_point_manager ci-dessous.
-    if is_assigned_courier:
-        courier_allowed = (
-            set() if sub_order.order.delivery_type == DeliveryType.PICKUP_POINT else {OrderStatus.DELIVERED}
-        )
-        if data.status not in courier_allowed:
+        if not allowed:
             raise ForbiddenError(
                 "Un livreur confirme la remise au client pour une livraison à domicile ; pour un point de "
                 "retrait, c'est le gestionnaire du point qui confirme la réception et la remise."
             )
-    # Le gestionnaire du point confirme les deux étapes qui se passent chez
-    # lui : la réception du colis (en scannant le code du livreur, ou
-    # manuellement) puis la remise finale au client (en scannant le QR de
-    # l'acheteur, ou manuellement) — jamais les étapes en amont (accepter,
-    # préparer, expédier), qui restent au vendeur.
-    if is_assigned_point_manager and data.status not in {
-        OrderStatus.ARRIVED_AT_PICKUP_POINT,
-        OrderStatus.DELIVERED,
-    }:
-        raise ForbiddenError("Un gestionnaire de point de retrait ne peut que confirmer la réception ou la remise.")
+    elif not is_owner_vendor:
+        # Accepter, préparer, expédier, annuler : toujours le vendeur.
+        raise ForbiddenError("Seul le vendeur peut faire avancer cette commande avant son expédition.")
 
     if data.status not in _allowed_next_statuses(sub_order.status, sub_order.order.delivery_type):
         raise ConflictError(
@@ -700,6 +690,7 @@ async def update_sub_order_status(
                     variant.stock += item.quantity
 
     sub_order.status = data.status
+    handoff.reset(sub_order)
     await db.flush()
 
     order = await repository.get_order_by_id(db, sub_order.order_id)
@@ -743,38 +734,122 @@ async def update_sub_order_status(
     return await _attach_courier_info(db, updated)
 
 
-async def confirm_delivery_by_token(db: AsyncSession, user: User, token: str) -> SubOrder:
-    """Assigned courier or assigned pickup point manager scans a QR code (the
-    buyer's, or — for a pickup_point order's first leg — the courier's own
-    drop-off code, scanned by the manager) — decode it into a sub-order id,
-    work out the single legal next status for its current (status,
-    delivery_type), and run it through the exact same status-transition path
-    (and its ownership check) as the manual status-update button, so a
-    forged/reused/off-stage token fails the same way a bad manual transition
-    would.
+async def _handoff_candidates(db: AsyncSession, user: User) -> list[SubOrder]:
+    """Colis dont l'utilisateur peut scanner le QR à l'étape actuelle : ses
+    livraisons à domicile expédiées (livreur), et les colis de son point en
+    attente de dépôt ou de retrait (gestionnaire)."""
+    candidates: list[SubOrder] = []
+    courier = await courier_repository.get_by_user_id(db, user.id)
+    if courier is not None:
+        for so in await repository.list_sub_orders_for_courier(db, courier.id):
+            if so.status == OrderStatus.SHIPPED and so.order.delivery_type == DeliveryType.HOME_DELIVERY:
+                candidates.append(so)
+    manager = await pickup_point_manager_repository.get_by_user_id(db, user.id)
+    if manager is not None:
+        for so in await repository.list_sub_orders_for_pickup_point(db, manager.pickup_point_id):
+            if so.status in (OrderStatus.SHIPPED, OrderStatus.ARRIVED_AT_PICKUP_POINT):
+                candidates.append(so)
+    return candidates
 
-    home_delivery: shipped → delivered (buyer's QR, courier scans).
-    pickup_point: shipped → arrived_at_pickup_point (courier's QR, manager
-    scans) then arrived_at_pickup_point → delivered (buyer's QR, manager
-    scans)."""
-    try:
-        payload = decode_token(token, TokenType.DELIVERY)
-        sub_order_id = uuid.UUID(payload["sub"])
-    except (InvalidTokenError, ValueError, KeyError) as exc:
-        raise ConflictError("QR code invalide ou expiré.") from exc
 
+async def confirm_delivery_by_code(db: AsyncSession, user: User, raw_code: str) -> SubOrder:
+    """Le livreur ou le gestionnaire affecté scanne un QR de remise (celui du
+    client, ou — dépôt au point de retrait — celui du livreur). Le code est
+    comparé uniquement aux colis de cette personne (voir app/orders/handoff.py) ;
+    l'étape suivante passe ensuite par le même chemin que toute transition
+    (contrôle des rôles compris), en mode scan.
+
+    home_delivery : shipped → delivered (QR client, scanné par le livreur).
+    pickup_point : shipped → arrived_at_pickup_point (QR livreur, scanné par
+    le gestionnaire), puis arrived_at_pickup_point → delivered (QR client,
+    scanné par le gestionnaire)."""
+    code = handoff.normalize(raw_code)
+    match = next((so for so in await _handoff_candidates(db, user) if handoff.matches(so, code)), None)
+    if match is None:
+        raise ConflictError("QR code invalide, expiré ou ne concernant aucun de vos colis.")
+
+    next_statuses = _allowed_next_statuses(match.status, match.order.delivery_type)
+    next_status = next(iter(next_statuses & HANDOFF_STATUSES), None)
+    if next_status is None:
+        raise ConflictError("QR code invalide, expiré ou ne concernant aucun de vos colis.")
+    return await update_sub_order_status(
+        db, user, match.id, SubOrderStatusUpdate(status=next_status), via_scan=True
+    )
+
+
+async def get_handoff_code(db: AsyncSession, user: User, sub_order_id: uuid.UUID) -> tuple[str, int]:
+    """QR de remise à afficher : celui de l'acheteur (c'est son tour), ou celui
+    du livreur affecté pour un dépôt au point de retrait."""
     sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
     if sub_order is None:
-        raise ConflictError("QR code invalide ou expiré.")
+        raise NotFoundError("Sous-commande introuvable.")
+    order = sub_order.order
+    is_buyer = order.user_id == user.id and _is_buyers_turn(sub_order, order.delivery_type)
+    is_dropping_courier = False
+    if not is_buyer and sub_order.courier_id is not None and _is_couriers_dropoff_turn(sub_order):
+        courier = await courier_repository.get_by_id(db, sub_order.courier_id)
+        is_dropping_courier = courier is not None and courier.user_id == user.id
+    if not is_buyer and not is_dropping_courier:
+        raise NotFoundError("Aucun QR code à présenter pour ce colis.")
+    handoff.ensure_stage_nonce(sub_order)
+    await db.commit()
+    return handoff.current_code(sub_order)
 
-    next_statuses = _allowed_next_statuses(sub_order.status, sub_order.order.delivery_type)
-    if len(next_statuses) != 1:
-        # Rien à scanner à cet état (déjà livrée, annulée, pas encore
-        # expédiée...) — même message que pour un jeton mal formé/expiré.
-        raise ConflictError("QR code invalide ou expiré.")
-    next_status = next(iter(next_statuses))
 
-    return await update_sub_order_status(db, user, sub_order_id, SubOrderStatusUpdate(status=next_status))
+async def _courier_earning(db: AsyncSession, sub_order: SubOrder) -> int:
+    """Part des frais de livraison qui revient au livreur (réglage admin, voir
+    app/wallets/service.py::settle_sub_order)."""
+    settings_row = await payments_repository.get_settings(db)
+    return round((sub_order.delivery_fee or 0) * settings_row.courier_delivery_share_percent / 100)
+
+
+async def get_delivery_offer(db: AsyncSession, user: User, sub_order_id: uuid.UUID) -> dict:
+    """Détail d'une demande de livraison pour le livreur à qui elle est
+    proposée : son gain, les distances, où récupérer et où livrer — jamais le
+    prix des articles."""
+    courier = await courier_repository.get_by_user_id(db, user.id)
+    sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+    if courier is None or sub_order is None or sub_order.dispatch_offered_courier_id != courier.id:
+        raise NotFoundError("Cette demande de livraison n'est plus disponible.")
+    order = sub_order.order
+    vendor = await vendor_repository.get_by_id(db, sub_order.vendor_id)
+
+    def distance(a_lat, a_lng, b_lat, b_lng) -> float | None:
+        if None in (a_lat, a_lng, b_lat, b_lng):
+            return None
+        return round(haversine_km(a_lat, a_lng, b_lat, b_lng), 1)
+
+    offer = {
+        "sub_order_id": sub_order.id,
+        "shop_name": sub_order.shop_name,
+        "shop_zone": vendor.zone if vendor else None,
+        "distance_to_shop_km": distance(
+            courier.latitude, courier.longitude, vendor.latitude if vendor else None, vendor.longitude if vendor else None
+        ),
+        "delivery_distance_km": distance(
+            vendor.latitude if vendor else None,
+            vendor.longitude if vendor else None,
+            order.delivery_latitude,
+            order.delivery_longitude,
+        ),
+        "courier_earning": await _courier_earning(db, sub_order),
+        "item_count": sum(item.quantity for item in sub_order.items),
+        "delivery_type": order.delivery_type,
+        "destination_zone": order.delivery_zone or order.delivery_address,
+        "delivery_instructions": order.delivery_instructions,
+        "recipient_name": order.recipient_name,
+        "pickup_point_name": None,
+        "pickup_point_zone": None,
+        "pickup_point_contacts": [],
+        "expires_in_seconds": OFFER_TIMEOUT_SECONDS,
+    }
+    if order.delivery_type == DeliveryType.PICKUP_POINT and order.pickup_point_id is not None:
+        point = await pickup_points_repository.get_by_id(db, order.pickup_point_id)
+        managers = await pickup_point_manager_repository.list_by_pickup_point(db, order.pickup_point_id)
+        offer["pickup_point_name"] = point.name if point else None
+        offer["pickup_point_zone"] = point.zone if point else None
+        offer["pickup_point_contacts"] = [{"name": m.full_name, "phone": m.phone} for m in managers]
+    return offer
 
 
 def _wake_dispatch(sub_order_id: uuid.UUID) -> None:
@@ -823,7 +898,7 @@ async def start_dispatch(db: AsyncSession, user: User, sub_order_id: uuid.UUID, 
         courier_user_id=first.user_id,
         sub_order_id=sub_order.id,
         shop_name=sub_order.shop_name,
-        amount=sub_order.amount,
+        courier_earning=await _courier_earning(db, sub_order),
         distance_km=haversine_km(vendor.latitude, vendor.longitude, first.latitude, first.longitude),
     )
 
@@ -858,7 +933,7 @@ async def _offer_next(db: AsyncSession, sub_order: SubOrder, vendor_lat: float, 
             courier_user_id=courier.user_id,
             sub_order_id=sub_order.id,
             shop_name=sub_order.shop_name,
-            amount=sub_order.amount,
+            courier_earning=await _courier_earning(db, sub_order),
             distance_km=haversine_km(vendor_lat, vendor_lng, courier.latitude, courier.longitude),
         )
         return True

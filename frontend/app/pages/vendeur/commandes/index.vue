@@ -10,14 +10,14 @@ const route = useRoute()
 const router = useRouter()
 const apiBase = useApiBase()
 
-// getCachedData: () => undefined disables Nuxt's static cross-navigation
+// getCachedData: hydrateThenRefetch disables Nuxt's static cross-navigation
 // cache — without it, switching tabs in the vendor bottom nav and coming
 // back here re-mounts the page but silently reuses the stale pre-transition
 // list instead of refetching (see app/pages/vendeur/index.vue for the same fix).
 const { data: subOrders, pending, refresh } = await useAsyncData(
   'vendor-sub-orders',
   () => apiFetch<VendorSubOrderRead[]>('/orders/sub-orders'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 const { data: couriers } = await useAsyncData(

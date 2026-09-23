@@ -19,7 +19,7 @@ const toast = useToastStore()
 const { data: categories, pending, refresh } = await useAsyncData(
   'admin-categories',
   () => apiFetch<CategoryRead[]>('/categories'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 // --- Arborescence -----------------------------------------------------------

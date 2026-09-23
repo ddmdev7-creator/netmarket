@@ -8,9 +8,9 @@ const { apiFetch } = useApi()
 const toast = useToastStore()
 const { locating, locate } = useGeolocation()
 
-// getCachedData: () => undefined — see app/pages/vendeur/index.vue.
+// getCachedData: hydrateThenRefetch — see app/pages/vendeur/index.vue.
 const { data: vendor } = await useAsyncData('vendor-me-settings', () => apiFetch<VendorRead>('/vendors/me'), {
-  getCachedData: () => undefined,
+  getCachedData: hydrateThenRefetch,
 })
 
 const shopName = ref('')

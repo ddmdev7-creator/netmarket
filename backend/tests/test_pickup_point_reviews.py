@@ -8,7 +8,7 @@ from app.couriers.models import Courier
 from app.pickup_point_managers.models import PickupPointManager
 from app.pickup_points.models import PickupPoint
 from app.users.models import User
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 
 
 def _pickup_payload(point: PickupPoint) -> dict:
@@ -48,21 +48,10 @@ async def _buy_and_deliver_via_pickup_point(
         )
         assert step.status_code == 200, step.text
 
-    courier_listing = await client.get("/orders/courier-deliveries", headers=auth_headers(courier_user))
-    dropoff_token = next(so for so in courier_listing.json() if so["id"] == sub_order_id)["pickup_dropoff_token"]
-    step_a = await client.post(
-        "/orders/sub-orders/confirm-delivery", json={"token": dropoff_token}, headers=auth_headers(manager_user)
-    )
+    step_a = await scan_handoff(client, manager_user, sub_order_id)
     assert step_a.status_code == 200
 
-    orders = await client.get("/orders", headers=auth_headers(buyer))
-    order = next(o for o in orders.json() if any(so["id"] == sub_order_id for so in o["sub_orders"]))
-    sub_order = next(so for so in order["sub_orders"] if so["id"] == sub_order_id)
-    step_b = await client.post(
-        "/orders/sub-orders/confirm-delivery",
-        json={"token": sub_order["delivery_token"]},
-        headers=auth_headers(manager_user),
-    )
+    step_b = await scan_handoff(client, manager_user, sub_order_id)
     assert step_b.status_code == 200
     assert step_b.json()["status"] == "delivered"
 

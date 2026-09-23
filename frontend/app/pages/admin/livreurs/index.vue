@@ -18,7 +18,7 @@ const tabs: { value: CourierStatus; label: string }[] = [
 const { data: couriers, pending, refresh } = await useAsyncData(
   'admin-couriers',
   () => apiFetch<CourierDetailRead[]>('/admin/couriers', { query: { status: tab.value } }),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 watch(tab, () => refresh())
 

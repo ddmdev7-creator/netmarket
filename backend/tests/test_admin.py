@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.catalog.models import Category, Product
 from app.couriers.models import Courier
 from app.users.models import User, UserRole
-from tests.conftest import auth_headers, make_user, make_vendor
+from tests.conftest import auth_headers, make_user, make_vendor, scan_handoff
 
 CHECKOUT_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 
@@ -35,9 +35,7 @@ async def _deliver(
         await client.patch(
             f"/orders/sub-orders/{sub_order_id}/status", json={"status": status}, headers=auth_headers(vendor)
         )
-    await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status", json={"status": "delivered"}, headers=auth_headers(courier_user)
-    )
+    await scan_handoff(client, courier_user, sub_order_id)
 
 
 async def test_stats_requires_admin(client: AsyncClient, buyer_user: User) -> None:
@@ -179,3 +177,25 @@ async def test_admin_order_detail_requires_admin(client: AsyncClient, buyer_user
     response = await client.get(f"/admin/orders/{order['id']}", headers=auth_headers(buyer_user))
 
     assert response.status_code == 403
+
+
+async def test_stats_include_30_days_of_activity_and_splits(
+    client: AsyncClient, admin_user: User, buyer_user: User, product
+) -> None:
+    await client.post("/cart/items", json={"product_id": str(product.id), "quantity": 1}, headers=auth_headers(buyer_user))
+    await client.post(
+        "/orders/checkout",
+        json={"delivery_address": "Kaloum", "payment_method": "cash_on_delivery"},
+        headers=auth_headers(buyer_user),
+    )
+
+    stats = (await client.get("/admin/stats", headers=auth_headers(admin_user))).json()
+
+    assert len(stats["daily_activity"]) == 30
+    today = stats["daily_activity"][-1]
+    assert today["orders"] == 1
+    assert today["order_amount"] == product.price
+    assert today["signups"] >= 2
+    assert stats["orders_by_payment_method"]["cash_on_delivery"] == 1
+    assert stats["orders_by_payment_method"]["wallet"] == 0
+    assert stats["users_by_role"]["buyer"] >= 1

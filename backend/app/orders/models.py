@@ -169,6 +169,13 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # une livraison à domicile (delivery_type == home_delivery).
     storage_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Code de remise (QR) de l'étape en cours — voir app/orders/handoff.py.
+    # Seul un nombre aléatoire est stocké : le code affiché se calcule avec la
+    # clé du serveur et change toutes les 60 s. Renouvelé à chaque étape, donc
+    # un code scanné (ou d'une étape passée) ne sert plus jamais.
+    handoff_nonce: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    handoff_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
     order: Mapped["Order"] = relationship(back_populates="sub_orders")
     items: Mapped[list["OrderItem"]] = relationship(back_populates="sub_order", cascade="all, delete-orphan")
 

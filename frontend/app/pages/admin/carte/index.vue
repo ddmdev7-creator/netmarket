@@ -11,12 +11,12 @@ const { apiFetch } = useApi()
 const { data: vendors, pending: vendorsPending } = await useAsyncData(
   'admin-map-vendors',
   () => apiFetch<VendorRead[]>('/admin/vendors'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 const { data: points, pending: pointsPending } = await useAsyncData(
   'admin-map-pickup-points',
   () => apiFetch<PickupPointRead[]>('/admin/pickup-points'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 const loading = computed(() => vendorsPending.value || pointsPending.value)
 

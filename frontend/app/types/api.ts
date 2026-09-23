@@ -277,7 +277,7 @@ export interface PickupPointContactRead {
   phone: string
 }
 
-/** pickup_dropoff_token is the courier's own QR payload for a pickup_point sub-order (set only while status is "shipped" and delivery_type is "pickup_point") — the pickup point manager scans it to confirm drop-off. */
+/** dropoff_handoff_ready: the courier has a drop-off QR to show at the pickup point (code fetched from GET /orders/sub-orders/{id}/handoff-code). */
 export interface CourierSubOrderRead {
   id: string
   order_id: string
@@ -292,7 +292,7 @@ export interface CourierSubOrderRead {
   recipient_name: string | null
   recipient_phone: string | null
   pickup_point_contacts: PickupPointContactRead[]
-  pickup_dropoff_token: string | null
+  dropoff_handoff_ready: boolean
 }
 
 export interface PickupPointManagerRead {
@@ -575,9 +575,9 @@ interface SubOrderBase {
   estimated_delivery_max: string | null
 }
 
-/** Buyer-facing shape, nested under OrderRead. delivery_token is the buyer's own private QR payload (set only while status is "shipped") — the vendor never receives this field, only what their camera reads off it. */
+/** Buyer-facing shape, nested under OrderRead. handoff_ready: it's the buyer's turn to show their handoff QR (code fetched separately, rotates every 60 s). */
 export interface SubOrderRead extends SubOrderBase {
-  delivery_token: string | null
+  handoff_ready: boolean
   /** courier_id is a real column; the rest is looked up live (see backend service). No courier_phone here — unlike the vendor, a buyer has no need to call their courier directly. */
   courier_id: string | null
   courier_name: string | null
@@ -823,6 +823,18 @@ export interface AdminStats {
   total_commission: number
   top_products: AdminTopProduct[]
   top_vendors: AdminTopVendor[]
+  /** 30 derniers jours, jours sans activité inclus (à zéro). */
+  daily_activity: AdminDailyActivity[]
+  orders_by_payment_method: Record<PaymentMethod, number>
+  users_by_role: Record<UserRole, number>
+}
+
+export interface AdminDailyActivity {
+  date: string
+  orders: number
+  /** Montant des commandes passées ce jour-là, hors annulées. */
+  order_amount: number
+  signups: number
 }
 
 export interface ApiError {
@@ -1032,4 +1044,32 @@ export interface TopUpRead {
 export interface TopUpStarted {
   topup: TopUpRead
   redirect_url: string
+}
+
+// --- Remise des colis (QR opaques, backend app/orders/handoff.py) -----------------
+
+/** GET /orders/sub-orders/{id}/handoff-code — `code` est tout le contenu du QR. */
+export interface HandoffCodeRead {
+  code: string
+  expires_in: number
+  window_seconds: number
+}
+
+/** GET /orders/sub-orders/{id}/delivery-offer — jamais le prix des articles. */
+export interface DeliveryOfferRead {
+  sub_order_id: string
+  shop_name: string
+  shop_zone: string | null
+  distance_to_shop_km: number | null
+  delivery_distance_km: number | null
+  courier_earning: number
+  item_count: number
+  delivery_type: DeliveryType
+  destination_zone: string
+  delivery_instructions: string | null
+  recipient_name: string | null
+  pickup_point_name: string | null
+  pickup_point_zone: string | null
+  pickup_point_contacts: PickupPointContactRead[]
+  expires_in_seconds: number
 }

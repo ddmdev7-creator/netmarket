@@ -1,17 +1,17 @@
 """Aggregate read queries for the admin dashboard: counts, sales, top rankings."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.catalog.models import Product
 from app.core.pagination import PageParams
-from app.orders.models import Order, OrderItem, OrderStatus, SubOrder
+from app.orders.models import Order, OrderItem, OrderStatus, PaymentMethod, SubOrder
 from app.pickup_points.models import PickupPoint
-from app.users.models import User
+from app.users.models import User, UserRole
 from app.vendors.models import Vendor, VendorStatus
 
 
@@ -32,6 +32,43 @@ async def count_orders_by_status(db: AsyncSession) -> dict[str, int]:
     counts = {status.value: 0 for status in OrderStatus}
     for status, count in (await db.execute(stmt)).all():
         counts[status.value] = count
+    return counts
+
+
+async def daily_orders(db: AsyncSession, since: datetime) -> dict[date, tuple[int, int]]:
+    """Par jour : (commandes passées, montant commandé hors annulées)."""
+    day = func.date(Order.created_at)
+    stmt = (
+        select(
+            day,
+            func.count(),
+            func.coalesce(func.sum(case((Order.status != OrderStatus.CANCELLED, Order.total), else_=0)), 0),
+        )
+        .where(Order.created_at >= since)
+        .group_by(day)
+    )
+    return {d: (int(count), int(amount)) for d, count, amount in (await db.execute(stmt)).all()}
+
+
+async def daily_signups(db: AsyncSession, since: datetime) -> dict[date, int]:
+    day = func.date(User.created_at)
+    stmt = select(day, func.count()).where(User.created_at >= since).group_by(day)
+    return {d: int(count) for d, count in (await db.execute(stmt)).all()}
+
+
+async def count_orders_by_payment_method(db: AsyncSession) -> dict[str, int]:
+    stmt = select(Order.payment_method, func.count()).group_by(Order.payment_method)
+    counts = {method.value: 0 for method in PaymentMethod}
+    for method, count in (await db.execute(stmt)).all():
+        counts[method.value] = count
+    return counts
+
+
+async def count_users_by_role(db: AsyncSession) -> dict[str, int]:
+    stmt = select(User.role, func.count()).group_by(User.role)
+    counts = {role.value: 0 for role in UserRole}
+    for role, count in (await db.execute(stmt)).all():
+        counts[role.value] = count
     return counts
 
 

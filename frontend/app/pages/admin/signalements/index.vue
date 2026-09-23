@@ -17,7 +17,7 @@ const tabs: { value: ReportStatus; label: string }[] = [
 const { data: reports, pending, refresh } = await useAsyncData(
   'admin-reports',
   () => apiFetch<ReportRead[]>('/admin/reports', { query: { status: tab.value } }),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 watch(tab, () => refresh())
 

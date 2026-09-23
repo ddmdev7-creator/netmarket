@@ -10,7 +10,7 @@ const toast = useToastStore()
 const { data: deliveries, pending, refresh } = await useAsyncData(
   'pickup-manager-deliveries',
   () => apiFetch<PickupPointManagerSubOrderRead[]>('/orders/pickup-point-deliveries'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 // Retrouver un colis par son code, sa boutique ou l'emplacement de stockage
@@ -64,30 +64,16 @@ async function saveStorageLocation(subOrder: PickupPointManagerSubOrderRead) {
   }
 }
 
-const updatingId = ref<string | null>(null)
-
-async function markStatus(subOrder: PickupPointManagerSubOrderRead, status: string) {
-  updatingId.value = subOrder.id
-  try {
-    await apiFetch(`/orders/sub-orders/${subOrder.id}/status`, { method: 'PATCH', body: { status } })
-    await refresh()
-  } catch (e) {
-    toast.error(apiErrorMessage(e, 'Impossible de mettre à jour cette sous-commande.'))
-  } finally {
-    updatingId.value = null
-  }
-}
-
 // Un seul scanner, un seul handler : le backend détermine lui-même la bonne
 // cible (arrivée ou remise) selon l'état actuel de la sous-commande — pas
 // besoin de distinguer "quel bouton a ouvert le scan" côté frontend.
 const scannerOpen = ref(false)
 
-async function handleDecode(token: string) {
+async function handleDecode(code: string) {
   try {
     const updated = await apiFetch<{ order_id: string; status: string }>('/orders/sub-orders/confirm-delivery', {
       method: 'POST',
-      body: { token },
+      body: { code },
     })
     await refresh()
     const label = updated.status === 'delivered' ? 'Remise confirmée' : 'Réception confirmée'
@@ -187,15 +173,6 @@ function formatDate(iso: string) {
             <PhQrCode :size="16" class="mr-1" />
             Scanner le code du livreur
           </v-btn>
-          <v-btn
-            variant="outlined"
-            size="small"
-            class="flex-grow-1"
-            :loading="updatingId === so.id"
-            @click="markStatus(so, 'arrived_at_pickup_point')"
-          >
-            Marquer reçu
-          </v-btn>
         </div>
       </v-card>
     </template>
@@ -255,15 +232,6 @@ function formatDate(iso: string) {
           <v-btn color="primary" size="small" class="flex-grow-1" @click="scannerOpen = true">
             <PhQrCode :size="16" class="mr-1" />
             Scanner le QR du client
-          </v-btn>
-          <v-btn
-            variant="outlined"
-            size="small"
-            class="flex-grow-1"
-            :loading="updatingId === so.id"
-            @click="markStatus(so, 'delivered')"
-          >
-            Marquer remis
           </v-btn>
         </div>
       </v-card>

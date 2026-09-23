@@ -230,8 +230,8 @@ function goCheckout() {
 }
 
 .cart-row__thumb {
-  width: 56px;
-  height: 56px;
+  width: 84px;
+  height: 84px;
   flex: none;
   border-radius: var(--radius-sm);
   background: var(--color-neutral-800);
@@ -242,9 +242,10 @@ function goCheckout() {
 }
 
 .cart-row__thumb img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .cart-row__remove {

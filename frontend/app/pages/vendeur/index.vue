@@ -6,13 +6,13 @@ definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
 const { apiFetch } = useApi()
 
-// getCachedData: () => undefined disables Nuxt's static cross-navigation
+// getCachedData: hydrateThenRefetch disables Nuxt's static cross-navigation
 // cache. By default useAsyncData reuses whatever it fetched the last time
 // this page mounted (nuxtApp.static.data) instead of refetching — so
 // switching tabs (dashboard → commandes → dashboard) kept showing the stats
 // from before a status change, not after. These numbers move on every
 // vendor action, so they must never be served stale.
-const alwaysRefetch = { getCachedData: () => undefined }
+const alwaysRefetch = { getCachedData: hydrateThenRefetch }
 
 const { data: vendor } = await useAsyncData('vendor-me', () => apiFetch<VendorRead>('/vendors/me'), alwaysRefetch)
 const { data: dashboard, pending } = await useAsyncData(

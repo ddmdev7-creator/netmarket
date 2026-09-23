@@ -31,11 +31,26 @@ const REFRESH_MS = 15_000
 
 const { apiFetch } = useApi()
 
+// lazy : la page s'affiche tout de suite, avec une boîte de chargement
+// (voir loadingDialog) plutôt qu'une navigation figée le temps de la requête.
 const { data, pending, error, refresh } = await useAsyncData(
   'admin-delivery-monitor',
   () => apiFetch<DeliveryMonitorRead>('/admin/deliveries/monitor'),
-  { getCachedData: () => undefined },
+  { getCachedData: hydrateThenRefetch, lazy: true },
 )
+
+// Boîte de chargement au premier affichage et sur « Actualiser » ; les
+// rafraîchissements automatiques (toutes les 15 s) restent silencieux.
+const manualRefresh = ref(false)
+const loadingDialog = computed(() => pending.value && (!data.value || manualRefresh.value))
+async function refreshNow() {
+  manualRefresh.value = true
+  try {
+    await refresh()
+  } finally {
+    manualRefresh.value = false
+  }
+}
 
 const view = ref<'list' | 'map'>('list')
 
@@ -245,6 +260,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="dashboard-shell">
+    <v-dialog :model-value="loadingDialog" persistent max-width="320">
+      <v-card class="pa-6 text-center loading-card">
+        <v-progress-circular indeterminate color="primary" size="44" width="4" />
+        <div class="loading-card__title">Chargement des livraisons…</div>
+        <div class="text-muted text-meta">Récupération des positions et des statuts en cours.</div>
+      </v-card>
+    </v-dialog>
+
     <div class="monitor-header">
       <div>
         <h1 class="text-h6 mb-0">Suivi des livraisons</h1>
@@ -257,7 +280,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="d-flex align-center ga-2 flex-wrap">
         <v-switch v-model="autoRefresh" label="Auto" density="compact" hide-details color="primary" inset />
-        <v-btn variant="tonal" size="small" :loading="pending" @click="refresh()">
+        <v-btn variant="tonal" size="small" :loading="pending" @click="refreshNow()">
           <PhArrowsClockwise :size="15" class="mr-1" />
           Actualiser
         </v-btn>
@@ -403,6 +426,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.loading-card__title {
+  margin: 14px 0 4px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+}
+
 .monitor-header {
   display: flex;
   align-items: flex-start;

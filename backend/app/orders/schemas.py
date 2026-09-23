@@ -80,7 +80,17 @@ class StorageLocationUpdate(BaseModel):
 
 
 class DeliveryConfirmRequest(BaseModel):
-    token: str
+    # Contenu du QR scanné (« NDJ:… », voir app/orders/handoff.py).
+    code: str = Field(min_length=4, max_length=40)
+
+
+class HandoffCodeRead(BaseModel):
+    """QR de remise à afficher : `code` est tout le contenu du QR."""
+
+    code: str
+    # Secondes avant renouvellement ; le client redemande un code ensuite.
+    expires_in: int
+    window_seconds: int
 
 
 class CourierAssignRequest(BaseModel):
@@ -103,6 +113,28 @@ class PickupPointContactRead(BaseModel):
 
     name: str | None
     phone: str
+
+
+class DeliveryOfferRead(BaseModel):
+    """Demande de livraison vue par le livreur sollicité — sans le prix des
+    articles (voir service.get_delivery_offer)."""
+
+    sub_order_id: uuid.UUID
+    shop_name: str
+    shop_zone: str | None
+    distance_to_shop_km: float | None
+    delivery_distance_km: float | None
+    # Part des frais de livraison qui revient au livreur.
+    courier_earning: int
+    item_count: int
+    delivery_type: DeliveryType
+    destination_zone: str
+    delivery_instructions: str | None
+    recipient_name: str | None
+    pickup_point_name: str | None
+    pickup_point_zone: str | None
+    pickup_point_contacts: list[PickupPointContactRead]
+    expires_in_seconds: int
 
 
 class OrderItemRead(BaseModel):
@@ -143,13 +175,14 @@ class SubOrderBase(BaseModel):
 class SubOrderRead(SubOrderBase):
     """Buyer-facing sub-order, nested under OrderRead.
 
-    delivery_token is the buyer's own private delivery-confirmation code
-    (set only while status is "shipped") — it must NOT appear on
-    VendorSubOrderRead below: the whole point is that the vendor never sees
-    the value, only what their camera reads off the buyer's screen.
+    handoff_ready: c'est au tour de l'acheteur de présenter son QR de remise
+    (livraison à domicile expédiée, ou colis arrivé au point de retrait). Le
+    code lui-même n'est jamais dans cette réponse : il se demande à part et
+    change toutes les 60 s (GET /orders/sub-orders/{id}/handoff-code, voir
+    app/orders/handoff.py).
     """
 
-    delivery_token: str | None = None
+    handoff_ready: bool = False
     # courier_id est une vraie colonne (voir app/orders/models.py::SubOrder) ;
     # le reste est attaché en lecture depuis Courier (voir
     # app/orders/service.py::_attach_courier_info), même motif que
@@ -211,11 +244,11 @@ class CourierSubOrderRead(BaseModel):
     recipient_name: str | None = None
     recipient_phone: str | None = None
     pickup_point_contacts: list[PickupPointContactRead] = []
-    # Le propre QR "dépôt" du livreur pour une sous-commande pickup_point
-    # expédiée — le gestionnaire du point le scanne pour confirmer la
-    # réception (voir _attach_pickup_dropoff_token). None pour une livraison
-    # à domicile, ou une fois la sous-commande passée à l'étape suivante.
-    pickup_dropoff_token: str | None = None
+    # Le livreur a un QR « dépôt » à présenter : sous-commande pickup_point
+    # expédiée, que le gestionnaire du point scanne pour confirmer la
+    # réception. Le code se demande à part (GET …/handoff-code), il change
+    # toutes les 60 s.
+    dropoff_handoff_ready: bool = False
 
 
 class PickupPointManagerSubOrderRead(BaseModel):

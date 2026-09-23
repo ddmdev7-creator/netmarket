@@ -32,7 +32,7 @@ const { data: wallet, pending, refresh: refreshWallet } = await useAsyncData(
   'ndjouribank',
   () => apiFetch<BuyerWalletRead>('/ndjouribank'),
   // Un solde n'est jamais servi depuis un cache de navigation.
-  { getCachedData: (key, nuxtApp) => (nuxtApp.isHydrating ? nuxtApp.payload.data[key] : undefined) },
+  { getCachedData: hydrateThenRefetch },
 )
 
 // --- Historique et recharges --------------------------------------------------

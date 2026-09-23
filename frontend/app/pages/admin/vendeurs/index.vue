@@ -19,7 +19,7 @@ const tabs: { value: VendorStatus; label: string }[] = [
 const { data: vendors, pending, refresh } = await useAsyncData(
   'admin-vendors',
   () => apiFetch<VendorRead[]>('/admin/vendors', { query: { status: tab.value } }),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 watch(tab, () => refresh())
 

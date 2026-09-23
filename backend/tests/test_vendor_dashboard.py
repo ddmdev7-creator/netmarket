@@ -7,7 +7,7 @@ from app.catalog.models import Product
 from app.couriers.models import Courier
 from app.users.models import User
 from app.vendors.models import Vendor
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 
 CHECKOUT_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 
@@ -38,9 +38,7 @@ async def _advance_to(
         if status == target:
             return
     # La remise finale ("delivered") revient au livreur, pas au vendeur.
-    await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status", json={"status": "delivered"}, headers=auth_headers(courier_user)
-    )
+    await scan_handoff(client, courier_user, sub_order_id)
 
 
 async def test_dashboard_requires_vendor_registration(client: AsyncClient, buyer_user: User) -> None:

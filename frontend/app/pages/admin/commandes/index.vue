@@ -32,7 +32,7 @@ const {
     apiFetch<Page<OrderRead>>('/admin/orders', {
       query: { page: page.value, page_size: pageSize, status: statusFilter.value === 'all' ? undefined : statusFilter.value },
     }),
-  { default: () => emptyPage, getCachedData: () => undefined },
+  { default: () => emptyPage, getCachedData: hydrateThenRefetch },
 )
 
 watch([page, statusFilter], () => refresh())

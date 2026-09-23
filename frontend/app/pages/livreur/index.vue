@@ -11,13 +11,25 @@ const { locating, locate } = useGeolocation()
 const { data: deliveries, pending, refresh } = await useAsyncData(
   'courier-deliveries',
   () => apiFetch<CourierSubOrderRead[]>('/orders/courier-deliveries'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
+)
+
+// Temps réel : toute notification reçue pendant que la page est ouverte
+// (nouvelle affectation, statut d'une livraison…) relit la liste — la
+// demande de livraison acceptée depuis la fenêtre la rafraîchit aussi
+// (refreshNuxtData('courier-deliveries') dans DeliveryRequestModal).
+const notifications = useNotificationStore()
+watch(
+  () => notifications.items[0]?.id,
+  (id, previous) => {
+    if (id && id !== previous) refresh()
+  },
 )
 
 const { data: myCourier } = await useAsyncData(
   'courier-me-availability',
   () => apiFetch<CourierDetailRead>('/couriers/me'),
-  { getCachedData: () => undefined },
+  { getCachedData: hydrateThenRefetch },
 )
 const isOnline = ref(false)
 const togglingAvailability = ref(false)
@@ -54,30 +66,15 @@ async function toggleAvailability(value: boolean) {
   }
 }
 
-const updatingId = ref<string | null>(null)
-
-async function markDelivered(subOrder: CourierSubOrderRead) {
-  updatingId.value = subOrder.id
-  try {
-    await apiFetch<CourierSubOrderRead>(`/orders/sub-orders/${subOrder.id}/status`, {
-      method: 'PATCH',
-      body: { status: 'delivered' },
-    })
-    await refresh()
-  } catch (e) {
-    toast.error(apiErrorMessage(e, 'Impossible de mettre à jour cette livraison.'))
-  } finally {
-    updatingId.value = null
-  }
-}
-
 const scannerOpen = ref(false)
 
-async function handleDecode(token: string) {
+// La remise au client se confirme uniquement par scan de son QR (aucun
+// bouton manuel — voir backend update_sub_order_status).
+async function handleDecode(code: string) {
   try {
     const updated = await apiFetch<CourierSubOrderRead>('/orders/sub-orders/confirm-delivery', {
       method: 'POST',
-      body: { token },
+      body: { code },
     })
     await refresh()
     toast.success(`Livraison confirmée — ${shortId(updated.order_id)}.`)
@@ -223,28 +220,19 @@ const visible = computed(() => {
         />
 
         <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
-          <div v-if="so.pickup_dropoff_token" class="qr-block mb-2">
+          <div v-if="so.dropoff_handoff_ready" class="qr-block mb-2">
             <div class="qr-block__label">
               <PhQrCode :size="15" weight="bold" />
               Code de dépôt — à faire scanner par le point
             </div>
-            <OrderDeliveryQrCode :token="so.pickup_dropoff_token" />
+            <OrderDeliveryQrCode :sub-order-id="so.id" />
           </div>
         </template>
 
         <div v-else-if="so.status === 'shipped'" class="d-flex ga-2">
           <v-btn color="primary" size="small" class="flex-grow-1" @click="scannerOpen = true">
             <PhQrCode :size="16" class="mr-1" />
-            Scanner pour confirmer
-          </v-btn>
-          <v-btn
-            variant="outlined"
-            size="small"
-            class="flex-grow-1"
-            :loading="updatingId === so.id"
-            @click="markDelivered(so)"
-          >
-            Marquer livrée
+            Scanner le QR du client
           </v-btn>
         </div>
       </div>

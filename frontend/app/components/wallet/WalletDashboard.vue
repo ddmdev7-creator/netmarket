@@ -28,7 +28,7 @@ const { data: wallets, pending, refresh: refreshWallets } = await useAsyncData(
     default: () => [] as WalletRead[],
     // Données du rendu serveur à l'hydratation, puis toujours fraîches (un
     // solde ne doit jamais être servi depuis un cache de navigation).
-    getCachedData: (key, nuxtApp) => (nuxtApp.isHydrating ? nuxtApp.payload.data[key] : undefined),
+    getCachedData: hydrateThenRefetch,
   },
 )
 const wallet = computed(() => wallets.value.find((w) => w.kind === props.kind) ?? null)

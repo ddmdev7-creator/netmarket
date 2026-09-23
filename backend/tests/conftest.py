@@ -8,6 +8,7 @@ application code calls commit().
 """
 
 import os
+import uuid
 from collections.abc import AsyncGenerator
 
 import pytest_asyncio
@@ -202,3 +203,20 @@ async def manager(db_session: AsyncSession, manager_user: User) -> PickupPointMa
 def auth_headers(user: User) -> dict[str, str]:
     token = create_access_token(str(user.id), user.role.value)
     return {"Authorization": f"Bearer {token}"}
+
+
+async def scan_handoff(client: AsyncClient, scanner: User, sub_order_id):
+    """Remise d'un colis comme en vrai : calcule le QR affiché à cette étape
+    (celui du client, ou du livreur au dépôt — voir app/orders/handoff.py)
+    et le fait scanner par `scanner` via POST /orders/sub-orders/confirm-delivery."""
+    from app.orders import handoff
+
+    session = await anext(app.dependency_overrides[get_db]())
+    sub_order = await session.get(SubOrder, uuid.UUID(str(sub_order_id)))
+    await session.refresh(sub_order)
+    handoff.ensure_stage_nonce(sub_order)
+    await session.flush()
+    code, _ = handoff.current_code(sub_order)
+    return await client.post(
+        "/orders/sub-orders/confirm-delivery", json={"code": code}, headers=auth_headers(scanner)
+    )

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhKey, PhTrash, PhUsers } from '@phosphor-icons/vue'
+import { PhKey, PhMagnifyingGlass, PhTrash, PhUsers } from '@phosphor-icons/vue'
 import type { UserRead, UserRole } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -11,7 +11,7 @@ const auth = useAuthStore()
 const { data: users, pending, refresh } = await useAsyncData(
   'admin-users',
   () => apiFetch<UserRead[]>('/admin/users'),
-  { default: () => [], getCachedData: () => undefined },
+  { default: () => [], getCachedData: hydrateThenRefetch },
 )
 
 const roleMeta: Record<UserRole, { label: string; color: string }> = {
@@ -32,9 +32,27 @@ const tabs: { value: UserRole | 'all'; label: string }[] = [
   { value: 'admin', label: 'Admins' },
 ]
 
-const filteredUsers = computed(() =>
-  filter.value === 'all' ? users.value : users.value.filter((u) => u.role === filter.value),
-)
+// null quand le champ est vidé par sa croix (clearable).
+const search = ref<string | null>('')
+const searchTerm = computed(() => (search.value ?? '').trim())
+
+// Insensible à la casse et aux accents ; les espaces du téléphone sont ignorés.
+function normalize(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+const filteredUsers = computed(() => {
+  const term = normalize(searchTerm.value)
+  const digits = term.replace(/[\s+]/g, '')
+  return users.value.filter((u) => {
+    if (filter.value !== 'all' && u.role !== filter.value) return false
+    if (!term) return true
+    const name = normalize([u.first_name, u.last_name].filter(Boolean).join(' '))
+    const email = normalize(u.email ?? '')
+    const phone = u.phone.replace(/[\s+]/g, '')
+    return name.includes(term) || email.includes(term) || (!!digits && phone.includes(digits))
+  })
+})
 
 function displayName(user: UserRead): string {
   const full = [user.first_name, user.last_name].filter(Boolean).join(' ')
@@ -96,11 +114,29 @@ async function resetPassword() {
   <div class="dashboard-shell">
     <h1 class="text-h6 mb-4">Utilisateurs ({{ users.length }})</h1>
 
+    <v-text-field
+      v-model="search"
+      placeholder="Rechercher par nom, téléphone ou e-mail…"
+      density="compact"
+      variant="outlined"
+      hide-details
+      clearable
+      class="mb-3"
+      style="max-width: 420px"
+    >
+      <template #prepend-inner><PhMagnifyingGlass :size="16" /></template>
+    </v-text-field>
+
     <v-btn-toggle v-model="filter" mandatory density="comfortable" divided class="mb-4 flex-wrap">
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
     </v-btn-toggle>
 
-    <CommonEmptyState v-if="!pending && filteredUsers.length === 0" message="Aucun utilisateur dans cette catégorie." />
+    <p v-if="searchTerm" class="text-muted text-meta mb-2">{{ filteredUsers.length }} résultat(s)</p>
+
+    <CommonEmptyState
+      v-if="!pending && filteredUsers.length === 0"
+      :message="searchTerm ? 'Aucun utilisateur ne correspond à cette recherche.' : 'Aucun utilisateur dans cette catégorie.'"
+    />
 
     <v-card v-for="user in filteredUsers" :key="user.id" class="mb-2 pa-3">
       <div class="d-flex justify-space-between align-center">

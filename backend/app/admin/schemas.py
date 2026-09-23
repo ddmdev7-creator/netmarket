@@ -20,6 +20,14 @@ class TopVendor(BaseModel):
     revenue: int
 
 
+class DailyActivity(BaseModel):
+    date: date
+    orders: int
+    # Montant des commandes passées ce jour-là (hors annulées).
+    order_amount: int
+    signups: int
+
+
 class AdminStats(BaseModel):
     total_vendors: int
     pending_vendors: int
@@ -33,6 +41,11 @@ class AdminStats(BaseModel):
     total_commission: int
     top_products: list[TopProduct]
     top_vendors: list[TopVendor]
+    # Graphiques du tableau de bord : 30 derniers jours, jour par jour (jours
+    # sans activité inclus, à zéro), et répartitions.
+    daily_activity: list[DailyActivity]
+    orders_by_payment_method: dict[str, int]
+    users_by_role: dict[str, int]
 
 
 class ActiveDeliveryRead(BaseModel):

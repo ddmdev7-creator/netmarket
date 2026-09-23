@@ -9,11 +9,11 @@ const apiBase = useApiBase()
 const toast = useToastStore()
 const pageSize = 20
 
-// getCachedData: () => undefined — see app/pages/vendeur/index.vue for why:
+// getCachedData: hydrateThenRefetch — see app/pages/vendeur/index.vue for why:
 // without it, switching tabs in the vendor bottom nav re-serves whatever was
 // fetched last time this page mounted instead of the current stock/status.
 const { data: vendor } = await useAsyncData('vendor-me-products-page', () => apiFetch<VendorRead>('/vendors/me'), {
-  getCachedData: () => undefined,
+  getCachedData: hydrateThenRefetch,
 })
 
 const { data: categories } = await useAsyncData('vendor-products-categories', () => apiFetch<CategoryRead[]>('/categories'), {
@@ -53,7 +53,7 @@ const {
         stock_level: stockFilter.value === 'all' ? undefined : stockFilter.value,
       },
     }),
-  { default: () => emptyPage, getCachedData: () => undefined },
+  { default: () => emptyPage, getCachedData: hydrateThenRefetch },
 )
 
 const products = computed(() => productsPage.value?.items ?? [])

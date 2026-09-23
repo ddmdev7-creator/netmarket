@@ -14,7 +14,7 @@ from app.couriers.models import Courier
 from app.pickup_point_managers.models import PickupPointManager
 from app.pickup_points.models import PickupPoint
 from app.users.models import User
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 
 CHECKOUT_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 
@@ -95,11 +95,7 @@ async def test_home_delivery_emails_buyer_on_delivered(
             json={"status": target_status},
             headers=auth_headers(vendor_user),
         )
-    response = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(courier_user),
-    )
+    response = await scan_handoff(client, courier_user, sub_order_id)
 
     assert response.status_code == 200
     assert len(calls) == 1
@@ -155,20 +151,12 @@ async def test_pickup_point_emails_buyer_on_arrival_not_on_final_handoff(
             headers=auth_headers(vendor_user),
         )
 
-    arrival = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "arrived_at_pickup_point"},
-        headers=auth_headers(manager_user),
-    )
+    arrival = await scan_handoff(client, manager_user, sub_order_id)
     assert arrival.status_code == 200
     assert len(calls) == 1
     assert "arrivée" in calls[0][1]
 
-    handoff = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(manager_user),
-    )
+    handoff = await scan_handoff(client, manager_user, sub_order_id)
     assert handoff.status_code == 200
     assert len(calls) == 1
 
@@ -197,11 +185,7 @@ async def test_status_change_skips_email_when_buyer_has_no_email(
             json={"status": target_status},
             headers=auth_headers(vendor_user),
         )
-    response = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(courier_user),
-    )
+    response = await scan_handoff(client, courier_user, sub_order_id)
 
     assert response.status_code == 200
     assert calls == []

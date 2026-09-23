@@ -10,7 +10,7 @@ from app.pickup_point_managers.models import PickupPointManager
 from app.pickup_points.models import PickupPoint
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor
-from tests.conftest import auth_headers, make_user
+from tests.conftest import auth_headers, make_user, scan_handoff
 
 HOME_DELIVERY_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 
@@ -71,14 +71,34 @@ async def test_home_delivery_still_ships_directly_to_delivered(
         )
         assert step.status_code == 200
 
+    response = await scan_handoff(client, courier_user, sub_order_id)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "delivered"
+
+
+async def test_courier_cannot_mark_delivered_without_scanning(
+    client: AsyncClient, buyer_user: User, vendor_user: User, courier_user: User, courier: Courier, product
+) -> None:
+    """La remise se confirme uniquement par scan du QR du client."""
+    sub_order_id = await _checkout(client, buyer_user, product, HOME_DELIVERY_PAYLOAD)
+    await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/courier",
+        json={"courier_id": str(courier.id)},
+        headers=auth_headers(vendor_user),
+    )
+    for target_status in ("confirmed", "preparing", "shipped"):
+        await client.patch(
+            f"/orders/sub-orders/{sub_order_id}/status", json={"status": target_status}, headers=auth_headers(vendor_user)
+        )
+
     response = await client.patch(
         f"/orders/sub-orders/{sub_order_id}/status",
         json={"status": "delivered"},
         headers=auth_headers(courier_user),
     )
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "delivered"
+    assert response.status_code == 403
 
 
 async def test_pickup_point_courier_cannot_mark_delivered_directly(
@@ -115,23 +135,23 @@ async def test_courier_cannot_confirm_arrival_manually(
 async def test_courier_cannot_confirm_arrival_via_own_qr_token(
     client: AsyncClient, buyer_user: User, vendor_user: User, courier_user: User, courier: Courier, product, pickup_point: PickupPoint
 ) -> None:
-    """Having a valid drop-off token isn't enough — confirm-delivery still
-    authorizes on who's calling it (see confirm_delivery_by_token), and the
-    courier submitting their own token is still the courier, not the manager
-    meant to scan it."""
+    """Avoir son propre code de dépôt ne suffit pas : un code n'est comparé
+    qu'aux colis que la personne qui scanne doit réceptionner (voir
+    confirm_delivery_by_code) — le livreur n'en fait pas partie."""
     sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
 
     listing = await client.get("/orders/courier-deliveries", headers=auth_headers(courier_user))
     entry = next(so for so in listing.json() if so["id"] == sub_order_id)
-    assert entry["pickup_dropoff_token"] is not None
+    assert entry["dropoff_handoff_ready"] is True
+    code = (
+        await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(courier_user))
+    ).json()["code"]
 
     response = await client.post(
-        "/orders/sub-orders/confirm-delivery",
-        json={"token": entry["pickup_dropoff_token"]},
-        headers=auth_headers(courier_user),
+        "/orders/sub-orders/confirm-delivery", json={"code": code}, headers=auth_headers(courier_user)
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 409
 
 
 async def test_vendor_cannot_confirm_arrival_at_pickup_point(
@@ -193,28 +213,36 @@ async def test_manager_confirms_arrival_then_final_handoff_via_scan(
 ) -> None:
     sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
 
-    # Étape A : le gestionnaire scanne le code de dépôt du livreur.
-    courier_listing = await client.get("/orders/courier-deliveries", headers=auth_headers(courier_user))
-    dropoff_token = next(so for so in courier_listing.json() if so["id"] == sub_order_id)["pickup_dropoff_token"]
+    # Étape A : le gestionnaire scanne le code de dépôt affiché par le livreur.
+    dropoff = await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(courier_user))
+    assert dropoff.status_code == 200
+    dropoff_code = dropoff.json()["code"]
+    # Le QR ne contient aucune information lisible.
+    assert dropoff_code.startswith("NDJ:") and sub_order_id not in dropoff_code
 
     step_a = await client.post(
-        "/orders/sub-orders/confirm-delivery",
-        json={"token": dropoff_token},
-        headers=auth_headers(manager_user),
+        "/orders/sub-orders/confirm-delivery", json={"code": dropoff_code}, headers=auth_headers(manager_user)
     )
     assert step_a.status_code == 200
     assert step_a.json()["status"] == "arrived_at_pickup_point"
+
+    # Un code déjà scanné ne sert plus.
+    replay = await client.post(
+        "/orders/sub-orders/confirm-delivery", json={"code": dropoff_code}, headers=auth_headers(manager_user)
+    )
+    assert replay.status_code == 409
 
     # Étape B : le gestionnaire scanne le QR de l'acheteur.
     order_view = await client.get("/orders", headers=auth_headers(buyer_user))
     order = next(o for o in order_view.json() if any(so["id"] == sub_order_id for so in o["sub_orders"]))
     sub_order = next(so for so in order["sub_orders"] if so["id"] == sub_order_id)
-    assert sub_order["delivery_token"] is not None
+    assert sub_order["handoff_ready"] is True
+    buyer_code = (
+        await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(buyer_user))
+    ).json()["code"]
 
     step_b = await client.post(
-        "/orders/sub-orders/confirm-delivery",
-        json={"token": sub_order["delivery_token"]},
-        headers=auth_headers(manager_user),
+        "/orders/sub-orders/confirm-delivery", json={"code": buyer_code}, headers=auth_headers(manager_user)
     )
     assert step_b.status_code == 200
     assert step_b.json()["status"] == "delivered"
@@ -233,17 +261,15 @@ async def test_manager_cannot_skip_to_delivered_before_arrival(
 ) -> None:
     sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
 
-    # Le gestionnaire est bien autorisé à agir sur cette sous-commande (pas de
-    # 403) mais la machine à états lui refuse de sauter l'étape "arrivée au
-    # point" (409) — même verdict que pour n'importe quel acteur essayant une
-    # transition hors séquence.
+    # Remise uniquement par scan : le bouton manuel est refusé, quelle que
+    # soit l'étape.
     response = await client.patch(
         f"/orders/sub-orders/{sub_order_id}/status",
         json={"status": "delivered"},
         headers=auth_headers(manager_user),
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 403
 
 
 async def test_vendor_cannot_ship_without_assigning_a_courier(
@@ -432,3 +458,110 @@ async def test_vendor_linked_as_manager_can_use_pickup_manager_endpoints(
     )
     assert storage.status_code == 200
     assert storage.json()["storage_location"] == "Étagère B3"
+
+
+async def test_manager_of_another_point_cannot_redeem_a_valid_code(
+    client: AsyncClient,
+    db_session,
+    buyer_user: User,
+    vendor_user: User,
+    courier_user: User,
+    courier: Courier,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    other_point = PickupPoint(name="Autre point", zone="Matam")
+    db_session.add(other_point)
+    await db_session.flush()
+    other_manager_user = await make_user(db_session, phone="+224620009993", role=UserRole.PICKUP_POINT_MANAGER)
+    db_session.add(PickupPointManager(user_id=other_manager_user.id, pickup_point_id=other_point.id))
+    await db_session.flush()
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+
+    response = await scan_handoff(client, other_manager_user, sub_order_id)
+
+    assert response.status_code == 409
+
+
+async def test_handoff_code_rotates_and_expires(
+    client: AsyncClient, monkeypatch, buyer_user: User, vendor_user: User, courier_user: User, courier: Courier, product
+) -> None:
+    import app.orders.handoff as handoff_module
+
+    clock = {"now": 1_000_000.0}
+    monkeypatch.setattr(handoff_module.time, "time", lambda: clock["now"])
+
+    sub_order_id = await _checkout(client, buyer_user, product, HOME_DELIVERY_PAYLOAD)
+    await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/courier", json={"courier_id": str(courier.id)}, headers=auth_headers(vendor_user)
+    )
+    for target_status in ("confirmed", "preparing", "shipped"):
+        await client.patch(
+            f"/orders/sub-orders/{sub_order_id}/status", json={"status": target_status}, headers=auth_headers(vendor_user)
+        )
+
+    first = (await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(buyer_user))).json()
+    clock["now"] += 60
+    second = (await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(buyer_user))).json()
+    assert first["code"] != second["code"]
+
+    # Deux créneaux plus tard, le premier code (photographié, par exemple) ne vaut plus rien.
+    clock["now"] += 60
+    stale = await client.post(
+        "/orders/sub-orders/confirm-delivery", json={"code": first["code"]}, headers=auth_headers(courier_user)
+    )
+    assert stale.status_code == 409
+
+    # Le code du créneau précédent est encore accepté (QR renouvelé pendant le scan).
+    ok = await client.post(
+        "/orders/sub-orders/confirm-delivery", json={"code": second["code"]}, headers=auth_headers(courier_user)
+    )
+    assert ok.status_code == 200
+    assert ok.json()["status"] == "delivered"
+
+
+async def test_only_the_buyer_or_dropping_courier_gets_a_code(
+    client: AsyncClient, db_session, buyer_user: User, vendor_user: User, courier_user: User, courier: Courier, product
+) -> None:
+    sub_order_id = await _checkout(client, buyer_user, product, HOME_DELIVERY_PAYLOAD)
+    # Pas encore expédiée : rien à présenter.
+    early = await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(buyer_user))
+    assert early.status_code == 404
+    await client.patch(
+        f"/orders/sub-orders/{sub_order_id}/courier", json={"courier_id": str(courier.id)}, headers=auth_headers(vendor_user)
+    )
+    for target_status in ("confirmed", "preparing", "shipped"):
+        await client.patch(
+            f"/orders/sub-orders/{sub_order_id}/status", json={"status": target_status}, headers=auth_headers(vendor_user)
+        )
+    for someone in (vendor_user, courier_user):
+        response = await client.get(f"/orders/sub-orders/{sub_order_id}/handoff-code", headers=auth_headers(someone))
+        assert response.status_code == 404
+
+
+async def test_vendor_whose_shop_is_the_pickup_point_can_scan_the_courier_dropoff(
+    client: AsyncClient,
+    db_session,
+    admin_user: User,
+    vendor_user: User,
+    vendor: Vendor,
+    buyer_user: User,
+    courier_user: User,
+    courier: Courier,
+    product,
+    pickup_point: PickupPoint,
+) -> None:
+    """Régression : un vendeur également gestionnaire du point de retrait
+    (sa boutique EST le point) doit pouvoir réceptionner ses propres colis."""
+    pickup_point.vendor_id = vendor.id
+    await db_session.flush()
+    await client.post(f"/admin/pickup-points/{pickup_point.id}/link-vendor-manager", headers=auth_headers(admin_user))
+    sub_order_id = await _ship_pickup_order(client, buyer_user, vendor_user, courier_user, courier, product, pickup_point)
+
+    arrival = await scan_handoff(client, vendor_user, sub_order_id)
+    assert arrival.status_code == 200, arrival.text
+    assert arrival.json()["status"] == "arrived_at_pickup_point"
+
+    handed = await scan_handoff(client, vendor_user, sub_order_id)
+    assert handed.status_code == 200, handed.text
+    assert handed.json()["status"] == "delivered"

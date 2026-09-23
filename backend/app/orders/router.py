@@ -10,8 +10,10 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db, get_pickup_point_manager, require_role
-from app.orders import service
+from app.orders import handoff, service
 from app.orders.schemas import (
+    DeliveryOfferRead,
+    HandoffCodeRead,
     OrderCancelRequest,
     CheckoutRequest,
     CourierAssignRequest,
@@ -98,7 +100,33 @@ async def confirm_delivery(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> VendorSubOrderRead:
-    return await service.confirm_delivery_by_token(db, current_user, payload.token)
+    """Scan d'un QR de remise (voir app/orders/handoff.py)."""
+    return await service.confirm_delivery_by_code(db, current_user, payload.code)
+
+
+@router.get(
+    "/sub-orders/{sub_order_id}/delivery-offer",
+    response_model=DeliveryOfferRead,
+    dependencies=[Depends(require_role(UserRole.COURIER))],
+)
+async def get_delivery_offer(
+    sub_order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DeliveryOfferRead:
+    """Détail de la demande de livraison proposée au livreur connecté."""
+    return await service.get_delivery_offer(db, current_user, sub_order_id)
+
+
+@router.get("/sub-orders/{sub_order_id}/handoff-code", response_model=HandoffCodeRead)
+async def get_handoff_code(
+    sub_order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> HandoffCodeRead:
+    """QR de remise à afficher (acheteur, ou livreur au dépôt) — change toutes les 60 s."""
+    code, expires_in = await service.get_handoff_code(db, current_user, sub_order_id)
+    return HandoffCodeRead(code=code, expires_in=expires_in, window_seconds=handoff.WINDOW_SECONDS)
 
 
 @router.patch(

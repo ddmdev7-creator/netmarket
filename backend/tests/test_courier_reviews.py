@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from app.catalog.models import Product
 from app.couriers.models import Courier
 from app.users.models import User
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers, scan_handoff
 
 CHECKOUT_PAYLOAD = {"delivery_address": "Kaloum, près du marché", "payment_method": "cash_on_delivery"}
 
@@ -32,11 +32,7 @@ async def _buy_and_deliver(
             f"/orders/sub-orders/{sub_order_id}/status", json={"status": target_status}, headers=vendor_headers
         )
         assert step.status_code == 200
-    delivered_step = await client.patch(
-        f"/orders/sub-orders/{sub_order_id}/status",
-        json={"status": "delivered"},
-        headers=auth_headers(courier_user),
-    )
+    delivered_step = await scan_handoff(client, courier_user, sub_order_id)
     assert delivered_step.status_code == 200
     return sub_order_id
 
