@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { PhEnvelope, PhPhone, PhStorefront, PhUser } from '@phosphor-icons/vue'
+import { PhEnvelope, PhMapPin, PhPhone, PhStorefront, PhUser, PhWarningCircle } from '@phosphor-icons/vue'
+import type { OverviewMapItem } from '~/components/admin/OverviewMap.vue'
 import type { VendorAdminUpdate, VendorRead, VendorStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -42,6 +43,44 @@ const statusMeta: Record<VendorStatus, { label: string; color: string }> = {
   suspended: { label: 'Suspendue', color: 'error' },
 }
 
+// --- Vue carte ----------------------------------------------------------------
+// Mêmes boutiques que la liste (onglet + recherche) : la carte n'est qu'une
+// autre façon de les regarder, pas un écran à part.
+const view = ref<'list' | 'map'>('list')
+const selectedId = ref<string | null>(null)
+
+const hasPosition = (v: VendorRead) => v.latitude !== null && v.longitude !== null
+
+const mapItems = computed<OverviewMapItem[]>(() =>
+  visibleVendors.value.filter(hasPosition).map((vendor) => ({
+    id: vendor.id,
+    kind: 'shop',
+    name: vendor.shop_name,
+    subtitle: vendor.zone,
+    lat: vendor.latitude!,
+    lng: vendor.longitude!,
+    muted: vendor.status === 'rejected' || vendor.status === 'suspended',
+    attention: vendor.status === 'pending',
+    statusLabel: statusMeta[vendor.status].label,
+    statusTone: statusMeta[vendor.status].color as OverviewMapItem['statusTone'],
+    details: [
+      { label: 'Propriétaire', value: vendor.owner_full_name || vendor.owner_phone || '—' },
+      ...(vendor.owner_full_name && vendor.owner_phone ? [{ label: 'Téléphone', value: vendor.owner_phone }] : []),
+      { label: 'Commission', value: `${vendor.commission_rate} %` },
+    ],
+  })),
+)
+const unplacedCount = computed(() => visibleVendors.value.filter((v) => !hasPosition(v)).length)
+
+function showOnMap(vendor: VendorRead) {
+  selectedId.value = vendor.id
+  view.value = 'map'
+}
+
+watch(mapItems, (items) => {
+  if (selectedId.value && !items.some((item) => item.id === selectedId.value)) selectedId.value = null
+})
+
 // La liste courante ne montre que le statut de l'onglet actif : après une
 // action on la retire localement plutôt que de la re-classer, pour ne pas
 // devoir dupliquer la logique de filtrage côté client.
@@ -72,7 +111,10 @@ async function update(vendor: VendorRead, payload: VendorAdminUpdate) {
 
 <template>
   <div class="dashboard-shell">
-    <h1 class="text-h6 mb-4">Vendeurs</h1>
+    <div class="d-flex justify-space-between align-center mb-4 ga-2">
+      <h1 class="text-h6 mb-0">Vendeurs</h1>
+      <AdminViewToggle v-model="view" />
+    </div>
 
     <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-3 flex-wrap">
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
@@ -88,6 +130,24 @@ async function update(vendor: VendorRead, payload: VendorAdminUpdate) {
       class="mb-4"
     />
 
+    <template v-if="view === 'map'">
+      <p v-if="unplacedCount" class="admin-map-note">
+        <PhWarningCircle :size="15" weight="fill" color="#e0822e" />
+        {{ unplacedCount }} boutique{{ unplacedCount > 1 ? 's' : '' }} sans position GPS, absente{{ unplacedCount > 1 ? 's' : '' }} de la carte.
+      </p>
+      <div class="admin-map-frame">
+        <AdminOverviewMap
+          :items="mapItems"
+          :selected-id="selectedId"
+          :legend-kinds="['shop']"
+          aria-label="Carte des boutiques"
+          empty-text="Aucune boutique localisée dans cette catégorie."
+          @select="selectedId = $event"
+        />
+      </div>
+    </template>
+
+    <template v-else>
     <CommonEmptyState v-if="!pending && vendors.length === 0" message="Aucune boutique dans cette catégorie." />
     <CommonEmptyState
       v-else-if="!pending && visibleVendors.length === 0"
@@ -107,7 +167,13 @@ async function update(vendor: VendorRead, payload: VendorAdminUpdate) {
             {{ statusMeta[vendor.status].label }}
           </v-chip>
         </div>
-        <div v-if="vendor.zone" class="text-muted mb-2 text-meta" style="padding-left: 32px">{{ vendor.zone }}</div>
+        <div class="d-flex align-center ga-2 mb-2 text-meta" style="padding-left: 32px">
+          <span v-if="vendor.zone" class="text-muted">{{ vendor.zone }}</span>
+          <button v-if="hasPosition(vendor)" type="button" class="map-link ms-auto" @click="showOnMap(vendor)">
+            <PhMapPin :size="13" /> Voir sur la carte
+          </button>
+          <span v-else class="map-link map-link--off ms-auto">Sans position GPS</span>
+        </div>
 
         <div class="owner-block mb-3">
           <div class="owner-block__title">Compte lié</div>
@@ -167,6 +233,7 @@ async function update(vendor: VendorRead, payload: VendorAdminUpdate) {
         </div>
       </v-card>
     </div>
+    </template>
   </div>
 </template>
 

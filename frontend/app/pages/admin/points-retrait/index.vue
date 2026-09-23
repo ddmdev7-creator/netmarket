@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { PhCheckCircle, PhMapPin, PhPencilSimple, PhPlus, PhStorefront, PhTrash, PhUser } from '@phosphor-icons/vue'
+import { PhCheckCircle, PhMapPin, PhPencilSimple, PhPlus, PhStorefront, PhTrash, PhUser, PhWarningCircle } from '@phosphor-icons/vue'
+import type { OverviewMapItem } from '~/components/admin/OverviewMap.vue'
 import type { PickupPointManagerAdminCreate, PickupPointManagerRead, PickupPointRead, VendorRead } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -39,6 +40,44 @@ const managersByPoint = computed(() => {
   }
   return grouped
 })
+
+// --- Vue carte ----------------------------------------------------------------
+// Un point rattaché à une boutique prend le repère « boutique + point de
+// retrait », comme sur /admin/carte.
+const view = ref<'list' | 'map'>('list')
+const selectedId = ref<string | null>(null)
+
+const hasPosition = (p: PickupPointRead) => p.latitude !== null && p.longitude !== null
+
+const mapItems = computed<OverviewMapItem[]>(() =>
+  points.value.filter(hasPosition).map((point) => {
+    const pointManagers = managersByPoint.value[point.id] ?? []
+    return {
+      id: point.id,
+      kind: point.vendor_id ? 'shop_pickup' : 'pickup',
+      name: point.name,
+      subtitle: point.zone,
+      lat: point.latitude!,
+      lng: point.longitude!,
+      muted: !point.is_active,
+      statusLabel: point.is_active ? 'Actif' : 'Inactif',
+      statusTone: point.is_active ? 'success' : 'neutral',
+      details: [
+        ...(point.vendor_shop_name ? [{ label: 'Boutique liée', value: point.vendor_shop_name }] : []),
+        {
+          label: 'Gestionnaires',
+          value: pointManagers.length ? pointManagers.map((m) => m.full_name ?? m.phone).join(', ') : 'Aucun',
+        },
+      ],
+    }
+  }),
+)
+const unplacedCount = computed(() => points.value.filter((p) => !hasPosition(p)).length)
+
+function showOnMap(point: PickupPointRead) {
+  selectedId.value = point.id
+  view.value = 'map'
+}
 
 // Le bouton "utiliser le compte de la boutique" n'a de sens que si le point
 // est lié à un vendeur ET que ce vendeur ne gère pas déjà ce point (sinon
@@ -245,10 +284,13 @@ async function removeManager(managerId: string) {
   <div class="dashboard-shell">
     <div class="d-flex justify-space-between align-center mb-4">
       <h1 class="text-h6">Points de retrait</h1>
-      <v-btn color="primary" size="small" @click="startCreate">
-        <PhPlus :size="16" class="mr-1" />
-        Nouveau
-      </v-btn>
+      <div class="d-flex align-center ga-2">
+        <AdminViewToggle v-model="view" />
+        <v-btn color="primary" size="small" @click="startCreate">
+          <PhPlus :size="16" class="mr-1" />
+          Nouveau
+        </v-btn>
+      </div>
     </div>
 
     <v-card v-if="showForm" class="mb-4 pa-3">
@@ -302,9 +344,26 @@ async function removeManager(managerId: string) {
       </div>
     </v-card>
 
-    <CommonEmptyState v-if="!pending && points.length === 0" message="Aucun point de retrait pour l'instant." />
+    <template v-if="view === 'map'">
+      <p v-if="unplacedCount" class="admin-map-note">
+        <PhWarningCircle :size="15" weight="fill" color="#e0822e" />
+        {{ unplacedCount }} point{{ unplacedCount > 1 ? 's' : '' }} sans position GPS, absent{{ unplacedCount > 1 ? 's' : '' }} de la carte.
+      </p>
+      <div class="admin-map-frame">
+        <AdminOverviewMap
+          :items="mapItems"
+          :selected-id="selectedId"
+          :legend-kinds="['pickup', 'shop_pickup']"
+          aria-label="Carte des points de retrait"
+          empty-text="Aucun point de retrait localisé."
+          @select="selectedId = $event"
+        />
+      </div>
+    </template>
 
-    <div class="points-grid">
+    <CommonEmptyState v-else-if="!pending && points.length === 0" message="Aucun point de retrait pour l'instant." />
+
+    <div v-if="view === 'list'" class="points-grid">
       <v-card v-for="p in points" :key="p.id" class="points-grid__card pa-3">
         <div class="d-flex justify-space-between align-center mb-1">
           <span style="font-weight: 600">{{ p.name }}</span>
@@ -316,7 +375,11 @@ async function removeManager(managerId: string) {
           <PhStorefront :size="13" />
           <span>Boutique : {{ p.vendor_shop_name }}</span>
         </div>
-        <div class="text-muted mb-3" style="font-size: 12.5px">{{ p.zone }}</div>
+        <div class="text-muted mb-1" style="font-size: 12.5px">{{ p.zone }}</div>
+        <button v-if="hasPosition(p)" type="button" class="map-link mb-3" @click="showOnMap(p)">
+          <PhMapPin :size="13" /> Voir sur la carte
+        </button>
+        <span v-else class="map-link map-link--off mb-3">Sans position GPS</span>
 
         <div class="d-flex ga-2 mb-3">
           <v-btn variant="outlined" size="small" class="flex-grow-1" :loading="togglingId === p.id" @click="toggleActive(p)">

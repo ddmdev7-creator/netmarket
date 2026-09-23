@@ -22,6 +22,11 @@ const { data: couriers, pending, refresh } = await useAsyncData(
 )
 watch(tab, () => refresh())
 
+// Vue carte : composant autonome (components/admin/CourierDeliveriesMap.vue),
+// qui charge tous les livreurs approuvés + les courses en cours quel que soit
+// l'onglet de statut ci-dessus.
+const view = ref<'list' | 'map'>('list')
+
 const search = ref('')
 const visibleCouriers = computed(() => {
   const query = search.value.trim().toLowerCase()
@@ -267,12 +272,18 @@ async function createCourier() {
   <div class="dashboard-shell">
     <div class="d-flex justify-space-between align-center mb-4">
       <h1 class="text-h6 mb-0">Livreurs</h1>
-      <v-btn size="small" color="primary" variant="tonal" @click="createOpen = true">
-        <PhPlus :size="16" class="mr-1" />
-        Créer un compte livreur
-      </v-btn>
+      <div class="d-flex align-center ga-2 flex-wrap justify-end">
+        <AdminViewToggle v-model="view" />
+        <v-btn size="small" color="primary" variant="tonal" @click="createOpen = true">
+          <PhPlus :size="16" class="mr-1" />
+          Créer un compte livreur
+        </v-btn>
+      </div>
     </div>
 
+    <AdminCourierDeliveriesMap v-if="view === 'map'" />
+
+    <template v-else>
     <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-4 flex-wrap">
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
     </v-btn-toggle>
@@ -415,6 +426,7 @@ async function createCourier() {
       </div>
     </v-card>
     </div>
+    </template>
 
     <v-dialog :model-value="!!viewerCourierId" max-width="480" @update:model-value="(v) => !v && closeViewer()">
       <v-card class="pa-3">

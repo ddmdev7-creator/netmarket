@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { PhCheckCircle, PhMapPin } from '@phosphor-icons/vue'
-import type { DeliveryType, PickupPointRead } from '~/types/api'
+import type { MapContextPin } from '~/components/common/MapPicker.vue'
+import type { DeliveryType, PickupPointRead, VendorRead } from '~/types/api'
 
 export interface AddressFormValues {
   label: string
@@ -72,6 +73,42 @@ const { data: pickupPoints } = await useAsyncData('address-form-pickup-points', 
   apiFetch<PickupPointRead[]>('/pickup-points'), { default: () => [] },
 )
 
+// Repères de contexte sur la carte du domicile (boutiques + points de
+// retrait) : aide l'acheteur à se situer, sans rien sélectionner. Une
+// boutique qui est aussi un point de retrait n'a qu'un repère, comme sur la
+// carte admin. /vendors ne renvoie que les boutiques approuvées.
+const { data: shops } = await useAsyncData('address-form-shops', () => apiFetch<VendorRead[]>('/vendors'), {
+  default: () => [],
+})
+
+const mapContext = computed<MapContextPin[]>(() => {
+  const located = <T extends { latitude: number | null; longitude: number | null }>(list: T[]) =>
+    list.filter((entry) => entry.latitude !== null && entry.longitude !== null)
+  const locatedShops = located(shops.value)
+  const shopIds = new Set(locatedShops.map((shop) => shop.id))
+  const pointVendorIds = new Set(pickupPoints.value.map((point) => point.vendor_id).filter(Boolean))
+  return [
+    ...locatedShops.map((shop) => ({
+      id: `shop:${shop.id}`,
+      kind: pointVendorIds.has(shop.id) ? ('shop_pickup' as const) : ('shop' as const),
+      name: shop.shop_name,
+      subtitle: shop.zone,
+      lat: shop.latitude!,
+      lng: shop.longitude!,
+    })),
+    ...located(pickupPoints.value)
+      .filter((point) => !point.vendor_id || !shopIds.has(point.vendor_id))
+      .map((point) => ({
+        id: `pickup:${point.id}`,
+        kind: 'pickup' as const,
+        name: point.name,
+        subtitle: point.zone,
+        lat: point.latitude!,
+        lng: point.longitude!,
+      })),
+  ]
+})
+
 function selectPickupPoint(pointId: string | null) {
   model.value.pickup_point_id = pointId
   const point = pickupPoints.value.find((p) => p.id === pointId)
@@ -142,6 +179,7 @@ async function useCurrentPosition() {
       <CommonMapPicker
         v-model:latitude="model.latitude"
         v-model:longitude="model.longitude"
+        :context="mapContext"
         class="mb-2"
       />
 

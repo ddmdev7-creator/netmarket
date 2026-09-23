@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import service
-from app.admin.schemas import AdminStats
+from app.admin.schemas import ActiveDeliveryRead, AdminStats
 from app.core.deps import get_db, require_role
 from app.core.pagination import Page, PageParams, pagination_params
 from app.orders.models import OrderStatus
@@ -24,6 +24,11 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 @router.get("/stats", response_model=AdminStats)
 async def get_stats(db: AsyncSession = Depends(get_db)) -> AdminStats:
     return await service.get_stats(db)
+
+
+@router.get("/deliveries/active", response_model=list[ActiveDeliveryRead])
+async def list_active_deliveries(db: AsyncSession = Depends(get_db)) -> list[ActiveDeliveryRead]:
+    return await service.list_active_deliveries(db)
 
 
 @router.get("/orders", response_model=Page[OrderRead])

@@ -8,6 +8,9 @@
  *  - boutique + retrait    : sarcelle, vitrine avec pastille colis (une boutique
  *                            qui EST aussi un point de retrait — un seul repère
  *                            plutôt que deux empilés au même endroit)
+ *  - livreur               : orange, moto (carte des livreurs uniquement)
+ *  - domicile              : rose, maison — destination d'une livraison à
+ *                            domicile en cours (carte des livreurs uniquement)
  *
  * Les icônes sont les composants Phosphor de l'app rendus dans le DOM du
  * repère via render() de Vue, plutôt que des chemins SVG recopiés à la main.
@@ -17,14 +20,17 @@
  * positionnement de MapLibre.
  */
 import { h, render, type Component } from 'vue'
-import { PhPackage, PhStorefront } from '@phosphor-icons/vue'
+import '~/assets/styles/map-pins.css'
+import { PhHouse, PhMotorcycle, PhPackage, PhStorefront } from '@phosphor-icons/vue'
 
-export type MapPinKind = 'shop' | 'pickup' | 'shop_pickup'
+export type MapPinKind = 'shop' | 'pickup' | 'shop_pickup' | 'courier' | 'home'
 
 export const MAP_PIN_META: Record<MapPinKind, { label: string; color: string; icon: Component }> = {
   shop: { label: 'Boutique', color: '#7c3aed', icon: PhStorefront },
   pickup: { label: 'Point de retrait', color: '#0a66f5', icon: PhPackage },
   shop_pickup: { label: 'Boutique + point de retrait', color: '#0d9488', icon: PhStorefront },
+  courier: { label: 'Livreur', color: '#ea580c', icon: PhMotorcycle },
+  home: { label: 'Livraison à domicile', color: '#db2777', icon: PhHouse },
 }
 
 const MUTED_COLOR = '#8b8d97'
@@ -41,6 +47,8 @@ export interface PinOptions {
   /** Petit point d'alerte (ex. boutique en attente de validation). */
   attention: boolean
   label: string
+  /** Repère réduit, pour un simple repère de contexte (voir MapPicker.vue). */
+  small?: boolean
 }
 
 function mount(host: HTMLElement, icon: Component, size: number): () => void {
@@ -53,7 +61,7 @@ export function createPin(kind: MapPinKind, options: PinOptions): PinHandle {
   const disposers: Array<() => void> = []
 
   const root = document.createElement('div')
-  root.className = 'om-pin' + (options.selected ? ' om-pin--selected' : '')
+  root.className = 'om-pin' + (options.selected ? ' om-pin--selected' : '') + (options.small ? ' om-pin--small' : '')
   root.style.zIndex = options.selected ? '10' : '1'
 
   const body = document.createElement('button')
@@ -66,7 +74,7 @@ export function createPin(kind: MapPinKind, options: PinOptions): PinHandle {
   const icon = document.createElement('span')
   icon.className = 'om-pin__icon'
   body.append(icon)
-  disposers.push(mount(icon, meta.icon, 17))
+  disposers.push(mount(icon, meta.icon, options.small ? 12 : 17))
 
   if (kind === 'shop_pickup') {
     const mini = document.createElement('span')

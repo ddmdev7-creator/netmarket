@@ -195,6 +195,28 @@ export interface CourierDetailRead extends CourierRead {
   longitude: number | null
 }
 
+/** GET /admin/deliveries/active — colis confirmés, en préparation ou en route. */
+export interface ActiveDeliveryRead {
+  sub_order_id: string
+  order_id: string
+  status: OrderStatus
+  vendor_id: string
+  shop_name: string
+  created_at: string
+  /** Position actuelle de la boutique (lue en direct). */
+  origin_latitude: number | null
+  origin_longitude: number | null
+  delivery_type: DeliveryType
+  delivery_zone: string | null
+  delivery_address: string
+  pickup_point_name: string | null
+  /** Figée au checkout ; absente pour un domicile sans GPS ou une commande antérieure. */
+  destination_latitude: number | null
+  destination_longitude: number | null
+  courier_id: string | null
+  dispatch_offered_courier_id: string | null
+}
+
 export interface CourierAvailabilityUpdate {
   is_online: boolean
   latitude?: number | null

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.catalog.models import Product
 from app.core.pagination import PageParams
 from app.orders.models import Order, OrderItem, OrderStatus, SubOrder
+from app.pickup_points.models import PickupPoint
 from app.users.models import User
 from app.vendors.models import Vendor, VendorStatus
 
@@ -89,3 +90,25 @@ async def list_all_orders(
     )
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
+
+
+# Colis pas encore arrivés à destination : acceptés par la boutique, en
+# préparation ou en route. PENDING (pas encore confirmé) n'a ni livreur ni
+# dispatch ; ARRIVED_AT_PICKUP_POINT n'attend plus que l'acheteur.
+ACTIVE_DELIVERY_STATUSES = (OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.SHIPPED)
+
+
+async def list_active_deliveries(db: AsyncSession) -> list[tuple]:
+    """(SubOrder, Order, vendor lat, vendor lng, pickup point name) pour la
+    carte admin des livraisons en cours. La position de la boutique est lue
+    en direct (pas figée au checkout) : c'est là que le livreur va chercher
+    le colis aujourd'hui."""
+    stmt = (
+        select(SubOrder, Order, Vendor.latitude, Vendor.longitude, PickupPoint.name)
+        .join(Order, SubOrder.order_id == Order.id)
+        .join(Vendor, SubOrder.vendor_id == Vendor.id)
+        .outerjoin(PickupPoint, Order.pickup_point_id == PickupPoint.id)
+        .where(SubOrder.status.in_(ACTIVE_DELIVERY_STATUSES))
+        .order_by(SubOrder.created_at.desc())
+    )
+    return list((await db.execute(stmt)).all())

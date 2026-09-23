@@ -68,6 +68,8 @@ async def create_order(
     delivery_instructions: str | None = None,
     recipient_name: str | None = None,
     recipient_phone: str | None = None,
+    delivery_latitude: float | None = None,
+    delivery_longitude: float | None = None,
 ) -> Order:
     order = Order(
         user_id=user_id,
@@ -80,6 +82,8 @@ async def create_order(
         delivery_instructions=delivery_instructions,
         recipient_name=recipient_name,
         recipient_phone=recipient_phone,
+        delivery_latitude=delivery_latitude,
+        delivery_longitude=delivery_longitude,
     )
     db.add(order)
     await db.flush()

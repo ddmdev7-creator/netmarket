@@ -9,7 +9,7 @@ import uuid
 from datetime import date
 from enum import StrEnum
 
-from sqlalchemy import ARRAY, CheckConstraint, Date, Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import ARRAY, CheckConstraint, Date, Enum as SAEnum, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -98,6 +98,13 @@ class Order(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     pickup_point_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("pickup_points.id"), nullable=True
     )
+    # Position GPS de destination, figée au checkout (voir
+    # app/orders/service.py::_resolve_destination) : celle soumise par
+    # l'acheteur pour un domicile, celle du point pour un point de retrait.
+    # Nullable : domicile sans position, et commandes passées avant l'ajout
+    # de ces colonnes (elles ne servaient alors qu'au calcul des frais).
+    delivery_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     sub_orders: Mapped[list["SubOrder"]] = relationship(back_populates="order", cascade="all, delete-orphan")
 

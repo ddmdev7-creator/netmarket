@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import repository
-from app.admin.schemas import AdminStats, TopProduct, TopVendor
+from app.admin.schemas import ActiveDeliveryRead, AdminStats, TopProduct, TopVendor
 from app.core.exceptions import NotFoundError
 from app.core.pagination import PageParams
 from app.orders import repository as orders_repository
@@ -80,3 +80,27 @@ async def get_order_detail(db: AsyncSession, order_id: uuid.UUID) -> Order:
         sub_order.vendor_owner_full_name = _full_name(owner.first_name, owner.last_name) if owner else None
 
     return order
+
+
+async def list_active_deliveries(db: AsyncSession) -> list[ActiveDeliveryRead]:
+    return [
+        ActiveDeliveryRead(
+            sub_order_id=sub_order.id,
+            order_id=order.id,
+            status=sub_order.status,
+            vendor_id=sub_order.vendor_id,
+            shop_name=sub_order.shop_name,
+            created_at=sub_order.created_at,
+            origin_latitude=vendor_lat,
+            origin_longitude=vendor_lng,
+            delivery_type=order.delivery_type,
+            delivery_zone=order.delivery_zone,
+            delivery_address=order.delivery_address,
+            pickup_point_name=pickup_point_name,
+            destination_latitude=order.delivery_latitude,
+            destination_longitude=order.delivery_longitude,
+            courier_id=sub_order.courier_id,
+            dispatch_offered_courier_id=sub_order.dispatch_offered_courier_id,
+        )
+        for sub_order, order, vendor_lat, vendor_lng, pickup_point_name in await repository.list_active_deliveries(db)
+    ]

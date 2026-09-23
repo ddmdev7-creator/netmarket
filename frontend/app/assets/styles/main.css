@@ -494,3 +494,48 @@ h1, h2, h3, h4, h5, h6,
   color: var(--color-neutral-400) !important;
   font-size: 16px !important;
 }
+
+/* Vue « Carte » des écrans admin vendeurs/livreurs/points de retrait
+   (voir components/admin/OverviewMap.vue). */
+.admin-map-frame {
+  height: calc(100dvh - 260px);
+  min-height: 380px;
+}
+
+.admin-map-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+}
+
+/* Lien « Voir sur la carte » des cartes de liste (bascule en vue Carte). */
+.map-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-link:hover {
+  text-decoration: underline;
+}
+
+.map-link--off {
+  color: var(--color-neutral-500);
+  font-weight: 500;
+  cursor: default;
+}
+
+.map-link--off:hover {
+  text-decoration: none;
+}

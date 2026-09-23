@@ -238,6 +238,8 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
         delivery_instructions=data.delivery_instructions,
         recipient_name=None if is_pickup else data.recipient_name,
         recipient_phone=None if is_pickup else data.recipient_phone,
+        delivery_latitude=destination[0],
+        delivery_longitude=destination[1],
     )
     redirect_url = await payments_service.create_payment_for_order(
         db, order, payer_phone=data.payer_phone or user.phone

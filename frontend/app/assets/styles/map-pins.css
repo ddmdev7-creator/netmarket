@@ -1,0 +1,126 @@
+/*
+ * Repères de carte (utils/mapPins.ts) — feuille globale importée par
+ * mapPins.ts lui-même : les repères sont créés hors du DOM des composants et
+ * injectés par MapLibre, un style scoped ne les atteindrait pas.
+ */
+.om-pin {
+  width: 34px;
+  padding-bottom: 9px;
+  cursor: pointer;
+}
+
+.om-pin__body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: var(--pin-color);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Pointe du repère. */
+.om-pin__body::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 9px solid var(--pin-color);
+}
+
+.om-pin:hover .om-pin__body {
+  transform: scale(1.12);
+}
+
+.om-pin--selected .om-pin__body {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--pin-color) 32%, transparent), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.om-pin--small {
+  width: 24px;
+  padding-bottom: 6px;
+}
+
+.om-pin--small .om-pin__body {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+.om-pin--small .om-pin__body::after {
+  bottom: -8px;
+  border-left-width: 5px;
+  border-right-width: 5px;
+  border-top-width: 7px;
+}
+
+.om-pin__icon {
+  display: flex;
+}
+
+.om-pin__mini {
+  position: absolute;
+  right: -7px;
+  top: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--pin-color);
+  box-sizing: border-box;
+}
+
+.om-pin__attention {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #e0822e;
+  box-sizing: border-box;
+}
+
+.om-cluster {
+  cursor: pointer;
+}
+
+.om-cluster__body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 6px;
+  border: 3px solid #ffffff;
+  border-radius: 999px;
+  background: #1f2937;
+  color: #ffffff;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 0 0 4px rgba(31, 41, 55, 0.22), 0 3px 8px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.om-cluster:hover .om-cluster__body {
+  transform: scale(1.1);
+}

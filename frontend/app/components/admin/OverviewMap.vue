@@ -1,9 +1,16 @@
 <script setup lang="ts">
 /**
- * Carte d'ensemble admin : boutiques et points de retrait sur un même fond,
- * avec repères distincts par type (voir utils/mapPins.ts), regroupement des
- * repères proches en grappes numérotées, fiche détaillée de l'élément
- * sélectionné, légende, recherche de lieu et plein écran.
+ * Carte d'ensemble admin : boutiques, points de retrait, livreurs… sur un
+ * même fond, avec repères distincts par type (voir utils/mapPins.ts),
+ * regroupement des repères proches en grappes numérotées, fiche détaillée de
+ * l'élément sélectionné, légende, recherche de lieu et plein écran.
+ * Utilisée par /admin/carte et par la vue « Carte » des écrans vendeurs,
+ * livreurs et points de retrait.
+ *
+ * Les tracés (prop lines, ex. boutique → destination d'une livraison en
+ * cours) sont, eux, une vraie couche GeoJSON : setStyle() l'efface, d'où
+ * addLineLayers() rappelé à chaque 'style.load'. Un tracé touchant
+ * l'élément sélectionné passe en surbrillance.
  *
  * Le regroupement est fait ici plutôt que par une couche GeoJSON MapLibre :
  * les repères sont des éléments DOM (icônes Phosphor) qui survivent aux
@@ -41,10 +48,31 @@ export interface OverviewMapItem {
   hrefLabel?: string
 }
 
-const props = defineProps<{
-  items: OverviewMapItem[]
-  selectedId: string | null
-}>()
+export interface OverviewMapLine {
+  id: string
+  /** [lng, lat], comme MapLibre. */
+  from: [number, number]
+  to: [number, number]
+  /** Éléments reliés par ce tracé : le sélectionner le met en surbrillance. */
+  itemIds: string[]
+}
+
+const props = withDefaults(
+  defineProps<{
+    items: OverviewMapItem[]
+    selectedId: string | null
+    lines?: OverviewMapLine[]
+    legendKinds?: MapPinKind[]
+    ariaLabel?: string
+    emptyText?: string
+  }>(),
+  {
+    lines: () => [],
+    legendKinds: () => ['shop', 'pickup', 'shop_pickup'],
+    ariaLabel: 'Carte des boutiques et points de retrait',
+    emptyText: 'Aucun élément à afficher avec ces filtres.',
+  },
+)
 
 const emit = defineEmits<{ select: [id: string | null] }>()
 
@@ -165,6 +193,45 @@ function onSearchSelect({ lat, lng }: { lat: number; lng: number }) {
   map?.flyTo({ center: [lng, lat], zoom: 15 })
 }
 
+const LINE_SOURCE = 'om-lines'
+
+function linesData(): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: props.lines.map((line) => ({
+      type: 'Feature',
+      properties: { highlighted: props.selectedId !== null && line.itemIds.includes(props.selectedId) },
+      geometry: { type: 'LineString', coordinates: [line.from, line.to] },
+    })),
+  }
+}
+
+function addLineLayers() {
+  if (!map || map.getSource(LINE_SOURCE)) return
+  map.addSource(LINE_SOURCE, { type: 'geojson', data: linesData() })
+  map.addLayer({
+    id: 'om-lines-base',
+    type: 'line',
+    source: LINE_SOURCE,
+    filter: ['!', ['get', 'highlighted']],
+    layout: { 'line-cap': 'round' },
+    paint: { 'line-color': '#64748b', 'line-width': 2, 'line-opacity': 0.6, 'line-dasharray': [2, 2] },
+  })
+  map.addLayer({
+    id: 'om-lines-highlight',
+    type: 'line',
+    source: LINE_SOURCE,
+    filter: ['get', 'highlighted'],
+    layout: { 'line-cap': 'round' },
+    paint: { 'line-color': MAP_PIN_META.courier.color, 'line-width': 4, 'line-opacity': 0.9 },
+  })
+}
+
+function refreshLines() {
+  const source = map?.getSource(LINE_SOURCE) as MapLibreGL.GeoJSONSource | undefined
+  source?.setData(linesData())
+}
+
 const itemsKey = computed(() => props.items.map((item) => item.id).join('|'))
 
 onMounted(async () => {
@@ -190,12 +257,17 @@ onMounted(async () => {
   if (wrap.value) map.addControl(new maplibregl.FullscreenControl({ container: wrap.value }), 'bottom-right')
 
   map.on('zoomend', rebuildMarkers)
+  map.on('style.load', addLineLayers)
   // Un clic dans le vide referme la fiche.
   map.on('click', () => emit('select', null))
   map.once('load', () => {
     map?.resize()
     rebuildMarkers()
-    fitToItems()
+    // Ouverte depuis « Voir sur la carte » : on part de l'élément visé
+    // plutôt que de la vue d'ensemble.
+    const item = selectedItem.value
+    if (item) map?.jumpTo({ center: [item.lng, item.lat], zoom: 15 })
+    else fitToItems()
   })
 
   // Le conteneur change de taille (panneau latéral replié, plein écran,
@@ -213,6 +285,7 @@ watch(
   () => props.selectedId,
   () => {
     rebuildMarkers()
+    refreshLines()
     const item = selectedItem.value
     if (item && map) map.easeTo({ center: [item.lng, item.lat], zoom: Math.max(map.getZoom(), 15), duration: 500 })
   },
@@ -220,6 +293,7 @@ watch(
 
 // Le contenu d'un élément peut changer sans que la liste d'ids change (statut).
 watch(() => props.items, rebuildMarkers, { deep: false })
+watch(() => props.lines, refreshLines)
 
 // Un seul style à la fois dépend des deux (voir getMapStyle) : la satellite
 // n'a pas de variante claire/sombre, mais garder theme dans le tableau
@@ -257,7 +331,7 @@ async function copyCoordinates() {
   }
 }
 
-const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) => ({ kind, ...MAP_PIN_META[kind] }))
+const legend = computed(() => props.legendKinds.map((kind) => ({ kind, ...MAP_PIN_META[kind] })))
 </script>
 
 <template>
@@ -265,7 +339,7 @@ const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) =>
     Carte indisponible sur cet appareil (WebGL requis). La liste reste utilisable.
   </div>
   <div v-else ref="wrap" class="om-wrap">
-    <div ref="mapContainer" class="om-map" role="application" aria-label="Carte des boutiques et points de retrait" />
+    <div ref="mapContainer" class="om-map" role="application" :aria-label="ariaLabel" />
 
     <div class="om-search">
       <CommonMapSearchBox @select="onSearchSelect" />
@@ -292,7 +366,7 @@ const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) =>
       </li>
     </ul>
 
-    <div v-if="items.length === 0" class="om-empty">Aucun élément à afficher avec ces filtres.</div>
+    <div v-if="items.length === 0" class="om-empty">{{ emptyText }}</div>
 
     <Transition name="om-card">
       <aside v-if="selectedItem" class="om-card" :aria-label="`Détails : ${selectedItem.name}`">
@@ -628,112 +702,5 @@ const legend = (['shop', 'pickup', 'shop_pickup'] as MapPinKind[]).map((kind) =>
   .om-card {
     max-width: none;
   }
-}
-</style>
-
-<style>
-/* Repères — non scoped : créés hors du DOM du composant, injectés par MapLibre. */
-.om-pin {
-  width: 34px;
-  padding-bottom: 9px;
-  cursor: pointer;
-}
-
-.om-pin__body {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 3px solid #ffffff;
-  border-radius: 50%;
-  background: var(--pin-color);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-  transform-origin: 50% 100%;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-
-/* Pointe du repère. */
-.om-pin__body::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -11px;
-  transform: translateX(-50%);
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 9px solid var(--pin-color);
-}
-
-.om-pin:hover .om-pin__body {
-  transform: scale(1.12);
-}
-
-.om-pin--selected .om-pin__body {
-  transform: scale(1.2);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--pin-color) 32%, transparent), 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-.om-pin__icon {
-  display: flex;
-}
-
-.om-pin__mini {
-  position: absolute;
-  right: -7px;
-  top: -7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  background: var(--pin-color);
-  box-sizing: border-box;
-}
-
-.om-pin__attention {
-  position: absolute;
-  left: -3px;
-  top: -3px;
-  width: 11px;
-  height: 11px;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  background: #e0822e;
-  box-sizing: border-box;
-}
-
-.om-cluster {
-  cursor: pointer;
-}
-
-.om-cluster__body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 40px;
-  height: 40px;
-  padding: 0 6px;
-  border: 3px solid #ffffff;
-  border-radius: 999px;
-  background: #1f2937;
-  color: #ffffff;
-  font-family: var(--font-heading);
-  font-size: 13px;
-  font-weight: 800;
-  box-shadow: 0 0 0 4px rgba(31, 41, 55, 0.22), 0 3px 8px rgba(0, 0, 0, 0.35);
-  cursor: pointer;
-  transition: transform 0.12s ease;
-}
-
-.om-cluster:hover .om-cluster__body {
-  transform: scale(1.1);
 }
 </style>
