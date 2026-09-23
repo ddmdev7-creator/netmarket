@@ -1,173 +1,693 @@
 <script setup lang="ts">
-import { PhCaretRight, PhImage, PhTruck, PhWarningCircle } from '@phosphor-icons/vue'
-import type { OrderRead } from '~/types/api'
+import {
+  PhArrowRight,
+  PhFunnelSimple,
+  PhImage,
+  PhMagnifyingGlass,
+  PhPackage,
+  PhStorefront,
+  PhTruck,
+  PhWarningCircle,
+  PhX,
+} from '@phosphor-icons/vue'
+import type { OrderRead, OrderStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
 const { apiFetch } = useApi()
 const apiBase = useApiBase()
+const route = useRoute()
+const router = useRouter()
 
-// Pas plus de 4 vignettes par commande — au-delà, "+N" plutôt que de
-// surcharger une ligne de liste censée rester un aperçu, pas le détail
-// (déjà disponible en ouvrant la commande).
+// Pas plus de 4 vignettes par commande — au-delà, "+N" : la carte reste un
+// aperçu, le détail est à un clic (commandes/[id].vue).
 const MAX_THUMBS = 4
-
-function orderItems(order: OrderRead) {
-  return order.sub_orders.flatMap((so) => so.items)
-}
 
 const { data: orders, pending, error } = await useAsyncData('my-orders', () => apiFetch<OrderRead[]>('/orders'), {
   default: () => [],
 })
 
-const tab = ref<'ongoing' | 'done'>('ongoing')
+// --- Filtres -------------------------------------------------------------------
+// Synchronisés avec l'URL (?q=…&statut=…&periode=…&tri=…) : un retour
+// arrière depuis le détail d'une commande retrouve la même vue.
 
-const ongoing = computed(() => orders.value.filter((o) => !['delivered', 'cancelled'].includes(o.status)))
-const done = computed(() => orders.value.filter((o) => ['delivered', 'cancelled'].includes(o.status)))
-const visible = computed(() => (tab.value === 'ongoing' ? ongoing.value : done.value))
+type StatusFilter = 'all' | 'ongoing' | 'pickup' | 'delivered' | 'cancelled'
+type Period = 'all' | '30d' | '90d' | 'year'
+type Sort = 'recent' | 'oldest' | 'amount_desc' | 'amount_asc'
 
-// Un seul délai pour toute la commande (aperçu, pas le détail — voir
-// commandes/[id].vue pour le délai par boutique) : la fourchette la plus
-// large parmi les sous-commandes pas encore livrées/annulées, même logique
-// d'exclusion que sur la page de détail.
+const STATUS_FILTERS: { value: StatusFilter; label: string; match: (s: OrderStatus) => boolean }[] = [
+  { value: 'all', label: 'Toutes', match: () => true },
+  { value: 'ongoing', label: 'En cours', match: (s) => ['pending', 'confirmed', 'preparing', 'shipped'].includes(s) },
+  { value: 'pickup', label: 'À récupérer', match: (s) => s === 'arrived_at_pickup_point' },
+  { value: 'delivered', label: 'Livrées', match: (s) => s === 'delivered' },
+  { value: 'cancelled', label: 'Annulées', match: (s) => s === 'cancelled' },
+]
+const PERIODS: { value: Period; title: string }[] = [
+  { value: 'all', title: 'Toutes les dates' },
+  { value: '30d', title: '30 derniers jours' },
+  { value: '90d', title: '3 derniers mois' },
+  { value: 'year', title: 'Cette année' },
+]
+const SORTS: { value: Sort; title: string }[] = [
+  { value: 'recent', title: 'Plus récentes' },
+  { value: 'oldest', title: 'Plus anciennes' },
+  { value: 'amount_desc', title: 'Montant décroissant' },
+  { value: 'amount_asc', title: 'Montant croissant' },
+]
+
+function queryValue<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  const value = route.query[key]
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+}
+
+const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const status = ref<StatusFilter>(queryValue('statut', STATUS_FILTERS.map((f) => f.value), 'all'))
+const period = ref<Period>(queryValue('periode', PERIODS.map((p) => p.value), 'all'))
+const sort = ref<Sort>(queryValue('tri', SORTS.map((s) => s.value), 'recent'))
+
+watch([search, status, period, sort], () => {
+  router.replace({
+    query: {
+      ...(search.value.trim() ? { q: search.value.trim() } : {}),
+      ...(status.value !== 'all' ? { statut: status.value } : {}),
+      ...(period.value !== 'all' ? { periode: period.value } : {}),
+      ...(sort.value !== 'recent' ? { tri: sort.value } : {}),
+    },
+  })
+})
+
+const hasActiveFilters = computed(
+  () => !!search.value.trim() || status.value !== 'all' || period.value !== 'all' || sort.value !== 'recent',
+)
+function resetFilters() {
+  search.value = ''
+  status.value = 'all'
+  period.value = 'all'
+  sort.value = 'recent'
+}
+
+function normalize(text: string) {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
+}
+
+function periodStart(p: Period): number | null {
+  const now = new Date()
+  if (p === '30d') return now.getTime() - 30 * 86_400_000
+  if (p === '90d') return now.getTime() - 90 * 86_400_000
+  if (p === 'year') return new Date(now.getFullYear(), 0, 1).getTime()
+  return null
+}
+
+// Recherche : numéro de commande (avec ou sans « #GN- »), produit, variante, boutique.
+const searchIndex = computed(
+  () =>
+    new Map(
+      orders.value.map((o) => [
+        o.id,
+        normalize(
+          [
+            shortId(o.id),
+            o.id.slice(0, 5),
+            ...o.sub_orders.map((so) => so.shop_name),
+            ...orderItems(o).flatMap((i) => [i.product_name, i.variant_label ?? '']),
+          ].join(' '),
+        ),
+      ]),
+    ),
+)
+
+// Compteurs par statut, calculés sur les autres filtres (recherche + période)
+// pour que les pastilles disent combien de résultats chaque onglet donnerait.
+const baseFiltered = computed(() => {
+  const term = normalize(search.value).replace(/^#?gn-/, '')
+  const since = periodStart(period.value)
+  return orders.value.filter(
+    (o) =>
+      (!term || searchIndex.value.get(o.id)!.includes(term)) &&
+      (since === null || new Date(o.created_at).getTime() >= since),
+  )
+})
+
+const statusCounts = computed(
+  () =>
+    Object.fromEntries(
+      STATUS_FILTERS.map((f) => [f.value, baseFiltered.value.filter((o) => f.match(o.status)).length]),
+    ) as Record<StatusFilter, number>,
+)
+
+const visible = computed(() => {
+  const matcher = STATUS_FILTERS.find((f) => f.value === status.value)!.match
+  const list = baseFiltered.value.filter((o) => matcher(o.status))
+  const byDate = (o: OrderRead) => new Date(o.created_at).getTime()
+  const sorters: Record<Sort, (a: OrderRead, b: OrderRead) => number> = {
+    recent: (a, b) => byDate(b) - byDate(a),
+    oldest: (a, b) => byDate(a) - byDate(b),
+    amount_desc: (a, b) => b.total - a.total,
+    amount_asc: (a, b) => a.total - b.total,
+  }
+  return [...list].sort(sorters[sort.value])
+})
+
+// --- Présentation --------------------------------------------------------------
+
+function orderItems(order: OrderRead) {
+  return order.sub_orders.flatMap((so) => so.items)
+}
+
+// Un seul délai pour toute la commande (aperçu — voir commandes/[id].vue
+// pour le délai par boutique) : la fourchette la plus large parmi les
+// sous-commandes pas encore livrées/annulées.
 function orderDeliveryEstimate(order: OrderRead): string | null {
-  const pending = order.sub_orders.filter(
+  const open = order.sub_orders.filter(
     (so) => so.estimated_delivery_min && so.estimated_delivery_max && !['delivered', 'cancelled'].includes(so.status),
   )
-  if (pending.length === 0) return null
-  const min = pending.map((so) => so.estimated_delivery_min!).sort()[0]!
-  const max = pending.map((so) => so.estimated_delivery_max!).sort().at(-1)!
+  if (open.length === 0) return null
+  const min = open.map((so) => so.estimated_delivery_min!).sort()[0]!
+  const max = open.map((so) => so.estimated_delivery_max!).sort().at(-1)!
   return formatDeliveryEstimate(min, max)
 }
 
-function vendorCount(order: OrderRead) {
-  return order.sub_orders.length
-}
 function itemCount(order: OrderRead) {
   return order.sub_orders.reduce((sum, so) => sum + so.items.reduce((s, i) => s + i.quantity, 0), 0)
+}
+function orderTitle(order: OrderRead) {
+  const items = orderItems(order)
+  if (!items.length) return 'Commande'
+  return items.length > 1 ? `${items[0]!.product_name} et ${items.length - 1} autre${items.length > 2 ? 's' : ''}` : items[0]!.product_name
+}
+function shopsLabel(order: OrderRead) {
+  const names = [...new Set(order.sub_orders.map((so) => so.shop_name))]
+  return names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ')
 }
 function shortId(id: string) {
   return `#GN-${id.slice(0, 5).toUpperCase()}`
 }
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// Liseré haut de carte, même code couleur que StatusBadge.
+const statusAccent: Record<OrderStatus, string> = {
+  pending: 'var(--color-neutral-500)',
+  confirmed: 'var(--color-primary)',
+  preparing: 'var(--color-primary)',
+  shipped: 'rgb(var(--v-theme-info))',
+  arrived_at_pickup_point: 'rgb(var(--v-theme-warning))',
+  delivered: 'rgb(var(--v-theme-success))',
+  cancelled: 'rgb(var(--v-theme-error))',
 }
 </script>
 
 <template>
-  <!-- Pas de .app-shell ici : layouts/default.vue en fournit déjà un (avec
-       app-shell--catalog pour cette route, voir ce fichier) -- un deuxième
-       wrapper imbriqué ici replafonnerait à 720px, annulant l'élargissement
-       du bandeau du haut. .detail-card (main.css) recentre LE CONTENU en
-       une carte détachée, sans replafonner LayoutTopBar avec -- impose son
-       propre padding (plus de .pa-4 ici), la marge sous la bottom nav
-       mobile vient déjà de .buyer-shell (layouts/default.vue). -->
-  <div class="detail-card">
-    <h1 class="text-h6 mb-3">Mes commandes</h1>
+  <div class="orders-page">
+    <header class="orders-head">
+      <div>
+        <h1 class="orders-head__title">Mes commandes</h1>
+        <p class="orders-head__sub">
+          {{ orders.length }} commande{{ orders.length > 1 ? 's' : '' }} au total
+        </p>
+      </div>
+    </header>
 
-    <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-4">
-      <v-btn value="ongoing">En cours</v-btn>
-      <v-btn value="done">Terminées</v-btn>
-    </v-btn-toggle>
+    <!-- Barre de recherche et filtres -->
+    <section class="toolbar" aria-label="Rechercher et filtrer">
+      <div class="toolbar__row">
+        <v-text-field
+          v-model="search"
+          placeholder="N° de commande, produit ou boutique…"
+          density="comfortable"
+          variant="outlined"
+          hide-details
+          clearable
+          class="toolbar__search"
+          aria-label="Rechercher une commande"
+        >
+          <template #prepend-inner>
+            <PhMagnifyingGlass :size="18" color="var(--color-neutral-400)" />
+          </template>
+        </v-text-field>
+        <v-select
+          v-model="period"
+          :items="PERIODS"
+          density="comfortable"
+          variant="outlined"
+          hide-details
+          class="toolbar__select"
+          aria-label="Période"
+        />
+        <v-select
+          v-model="sort"
+          :items="SORTS"
+          density="comfortable"
+          variant="outlined"
+          hide-details
+          class="toolbar__select"
+          aria-label="Trier par"
+        >
+          <template #prepend-inner>
+            <PhFunnelSimple :size="16" color="var(--color-neutral-400)" />
+          </template>
+        </v-select>
+      </div>
 
-    <div v-if="pending">
-      <v-skeleton-loader v-for="n in 3" :key="n" type="list-item-two-line" class="mb-2" />
+      <div class="toolbar__row toolbar__row--chips">
+        <div class="chips" role="group" aria-label="Statut">
+          <button
+            v-for="f in STATUS_FILTERS"
+            :key="f.value"
+            type="button"
+            class="chip"
+            :class="{ 'chip--active': status === f.value }"
+            :aria-pressed="status === f.value"
+            @click="status = f.value"
+          >
+            {{ f.label }}
+            <span class="chip__count">{{ statusCounts[f.value] }}</span>
+          </button>
+        </div>
+        <div class="toolbar__meta">
+          <span>{{ visible.length }} résultat{{ visible.length > 1 ? 's' : '' }}</span>
+          <button v-if="hasActiveFilters" type="button" class="reset" @click="resetFilters">
+            <PhX :size="13" weight="bold" /> Réinitialiser
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="pending" class="orders-grid">
+      <v-skeleton-loader v-for="n in 8" :key="n" type="article" class="skeleton" />
     </div>
     <CommonEmptyState
       v-else-if="error"
       :icon="PhWarningCircle"
       message="Impossible de charger vos commandes. Réessayez plus tard."
     />
-    <CommonEmptyState v-else-if="visible.length === 0" message="Aucune commande ici pour le moment." />
+    <CommonEmptyState v-else-if="orders.length === 0" :icon="PhPackage" message="Vous n'avez encore passé aucune commande." />
+    <div v-else-if="visible.length === 0" class="no-result">
+      <CommonEmptyState message="Aucune commande ne correspond à votre recherche." />
+      <v-btn variant="tonal" color="primary" @click="resetFilters">Réinitialiser les filtres</v-btn>
+    </div>
 
-    <NuxtLink v-for="order in visible" :key="order.id" :to="`/commandes/${order.id}`" class="order-row">
-      <div class="d-flex justify-space-between align-center">
-        <span style="font-weight: 600">{{ shortId(order.id) }}</span>
-        <div class="d-flex align-center ga-1">
+    <div v-else class="orders-grid">
+      <NuxtLink
+        v-for="order in visible"
+        :key="order.id"
+        :to="`/commandes/${order.id}`"
+        class="order-card"
+        :style="{ '--accent': statusAccent[order.status] }"
+      >
+        <div class="order-card__head">
+          <div>
+            <div class="order-card__id">{{ shortId(order.id) }}</div>
+            <div class="order-card__date">{{ formatDate(order.created_at) }}</div>
+          </div>
           <StatusBadge :status="order.status" />
-          <PhCaretRight :size="16" color="var(--color-neutral-500)" />
         </div>
-      </div>
-      <div class="order-thumbs mt-2">
-        <div v-for="item in orderItems(order).slice(0, MAX_THUMBS)" :key="item.id" class="order-thumbs__item">
-          <img
-            v-if="item.product_image"
-            :src="resolveImageUrl(item.product_image, apiBase)"
-            :alt="item.product_name"
-            loading="lazy"
-          />
-          <PhImage v-else :size="14" weight="light" color="var(--color-neutral-500)" />
+
+        <div class="order-card__thumbs">
+          <div v-for="item in orderItems(order).slice(0, MAX_THUMBS)" :key="item.id" class="thumb">
+            <img
+              v-if="item.product_image"
+              :src="resolveImageUrl(item.product_image, apiBase)"
+              :alt="item.product_name"
+              loading="lazy"
+            />
+            <PhImage v-else :size="18" weight="light" color="var(--color-neutral-500)" />
+          </div>
+          <div v-if="orderItems(order).length > MAX_THUMBS" class="thumb thumb--more">
+            +{{ orderItems(order).length - MAX_THUMBS }}
+          </div>
         </div>
-        <div v-if="orderItems(order).length > MAX_THUMBS" class="order-thumbs__more">
-          +{{ orderItems(order).length - MAX_THUMBS }}
+
+        <div class="order-card__title">{{ orderTitle(order) }}</div>
+
+        <ul class="order-card__facts">
+          <li>
+            <PhStorefront :size="15" />
+            <span class="truncate">{{ shopsLabel(order) }}</span>
+          </li>
+          <li>
+            <PhPackage :size="15" />
+            <span>
+              {{ itemCount(order) }} article{{ itemCount(order) > 1 ? 's' : '' }} ·
+              {{ order.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Livraison à domicile' }}
+            </span>
+          </li>
+          <li v-if="orderDeliveryEstimate(order)" class="order-card__eta">
+            <PhTruck :size="15" />
+            <span>Estimée : <strong>{{ orderDeliveryEstimate(order) }}</strong></span>
+          </li>
+        </ul>
+
+        <div class="order-card__foot">
+          <div>
+            <div class="order-card__total-label">Total</div>
+            <div class="order-card__total">{{ formatGnf(order.total) }}</div>
+          </div>
+          <span class="order-card__cta">Détails <PhArrowRight :size="14" weight="bold" /></span>
         </div>
-      </div>
-      <div class="text-muted mt-1 text-meta">
-        {{ formatDate(order.created_at) }} · {{ itemCount(order) }} article{{ itemCount(order) > 1 ? 's' : '' }} ·
-        {{ vendorCount(order) }} boutique{{ vendorCount(order) > 1 ? 's' : '' }}
-      </div>
-      <div v-if="orderDeliveryEstimate(order)" class="text-meta delivery-estimate mt-1">
-        <PhTruck :size="12" weight="bold" />
-        Livraison estimée : <strong>{{ orderDeliveryEstimate(order) }}</strong>
-      </div>
-      <div class="d-flex justify-space-between mt-1">
-        <span class="text-muted text-meta">Total</span>
-        <span class="text-meta">{{ formatGnf(order.total) }}</span>
-      </div>
-    </NuxtLink>
+      </NuxtLink>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.order-row {
-  display: block;
-  padding: 12px 8px;
-  margin: 0 -8px;
-  border-radius: var(--radius-sm);
-  border-bottom: 1px solid var(--color-divider);
-  text-decoration: none;
-  color: inherit;
-  transition: background 0.15s ease;
+/* Pas de .detail-card ici (plafonnée à 640px) : la grille a besoin de la
+   largeur de l'écran — la route est en app-shell--catalog (layouts/default.vue). */
+.orders-page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 16px 16px 24px;
 }
 
-.order-row:hover {
-  background: var(--color-neutral-800);
-}
-
-.order-thumbs {
+.orders-head {
   display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.orders-head__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--color-neutral-200);
+}
+
+.orders-head__sub {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--color-neutral-400);
+}
+
+/* --- Barre d'outils ------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 20px;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 10px;
+}
+
+.toolbar__search {
+  flex: 1 1 320px;
+}
+
+.toolbar__select {
+  flex: 0 1 210px;
+  min-width: 170px;
+}
+
+.toolbar__row--chips {
+  justify-content: space-between;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
-.order-thumbs__item {
-  width: 30px;
-  height: 30px;
-  flex: none;
-  border-radius: var(--radius-sm);
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--color-divider-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-neutral-300);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.chip:hover {
   background: var(--color-neutral-800);
+}
+
+.chip--active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.chip--active:hover {
+  background: var(--color-primary-darken-1);
+}
+
+.chip__count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-300);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.chip--active .chip__count {
+  background: rgb(255 255 255 / 22%);
+  color: #fff;
+}
+
+.toolbar__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+.reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-primary-300);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.no-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* --- Grille --------------------------------------------------------------- */
+
+/* 4 cartes par ligne sur grand écran, puis 3, 2, 1. */
+.orders-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1280px) {
+  .orders-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 960px) {
+  .orders-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .orders-grid { grid-template-columns: minmax(0, 1fr); }
+  .toolbar__select { flex: 1 1 140px; min-width: 0; }
+}
+
+.skeleton {
+  border-radius: var(--radius-lg);
+}
+
+.order-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-neutral-200);
+  text-decoration: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.order-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-divider-strong);
+  border-top-color: var(--accent);
+}
+
+.order-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.order-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.order-card__id {
+  font-family: var(--font-heading);
+  font-size: 15.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--color-neutral-200);
+}
+
+.order-card__date {
+  margin-top: 1px;
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+}
+
+.order-card__thumbs {
+  display: flex;
+  gap: 8px;
+}
+
+.thumb {
+  width: 52px;
+  height: 52px;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: #fff;
 }
 
-.order-thumbs__item img {
+.thumb img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.order-thumbs__more {
-  font-size: 11px;
-  font-weight: 600;
+.thumb--more {
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-300);
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.order-card__title {
+  font-family: var(--font-heading);
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-neutral-200);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.order-card__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--color-neutral-300);
+}
+
+.order-card__facts li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.order-card__facts svg {
+  flex: none;
   color: var(--color-neutral-400);
 }
 
-.delivery-estimate {
+.order-card__eta strong {
+  color: var(--color-neutral-200);
+}
+
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-card__foot {
   display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.order-card__total-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-neutral-400);
+}
+
+.order-card__total {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-neutral-200);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-card__cta {
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: var(--color-neutral-300);
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary-300);
+}
+
+.order-card:hover .order-card__cta svg {
+  transform: translateX(2px);
+}
+
+.order-card__cta svg {
+  transition: transform 0.15s ease;
 }
 </style>
