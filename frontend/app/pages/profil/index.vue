@@ -170,7 +170,14 @@ async function logout() {
   background: none;
 }
 
+/* Distinct de .list-item tout court (couleur d'icône seule ne suffisait
+   pas : "Mes commandes"/"Devenir vendeur" utilisent la même teinte neutre
+   pour leur icône alors qu'ils sont bien cliquables) -- l'opacité réduite
+   et l'absence de chevron signalent sans ambiguïté que cette ligne ne mène
+   nulle part pour l'instant. */
 .list-item--disabled {
   color: var(--color-neutral-400);
+  opacity: 0.6;
+  cursor: default;
 }
 </style>

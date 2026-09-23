@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhPlus, PhTrash } from '@phosphor-icons/vue'
+import { PhCaretRight, PhImage, PhPlus, PhTrash } from '@phosphor-icons/vue'
 import type { CategoryRead, Page, ProductRead, ProductStatus, StockLevel, VendorRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -175,6 +175,7 @@ async function deleteProduct() {
       <v-chip :color="p.status === 'active' ? 'success' : 'default'" size="x-small" variant="tonal">
         {{ p.status === 'active' ? 'Actif' : 'Inactif' }}
       </v-chip>
+      <PhCaretRight :size="16" color="var(--color-neutral-500)" class="flex-shrink-0" />
       <button
         type="button"
         class="product-row__delete"
@@ -238,10 +239,17 @@ async function deleteProduct() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 10px 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius-sm);
   border-bottom: 1px solid var(--color-divider);
   text-decoration: none;
   color: inherit;
+  transition: background 0.15s ease;
+}
+
+.product-row:hover {
+  background: var(--color-neutral-800);
 }
 
 .product-row__thumb {

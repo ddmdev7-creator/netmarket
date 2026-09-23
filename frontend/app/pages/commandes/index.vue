@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhTruck, PhWarningCircle } from '@phosphor-icons/vue'
+import { PhCaretRight, PhImage, PhTruck, PhWarningCircle } from '@phosphor-icons/vue'
 import type { OrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
@@ -83,7 +83,10 @@ function formatDate(iso: string) {
     <NuxtLink v-for="order in visible" :key="order.id" :to="`/commandes/${order.id}`" class="order-row">
       <div class="d-flex justify-space-between align-center">
         <span style="font-weight: 600">{{ shortId(order.id) }}</span>
-        <StatusBadge :status="order.status" />
+        <div class="d-flex align-center ga-1">
+          <StatusBadge :status="order.status" />
+          <PhCaretRight :size="16" color="var(--color-neutral-500)" />
+        </div>
       </div>
       <div class="order-thumbs mt-2">
         <div v-for="item in orderItems(order).slice(0, MAX_THUMBS)" :key="item.id" class="order-thumbs__item">
@@ -118,10 +121,17 @@ function formatDate(iso: string) {
 <style scoped>
 .order-row {
   display: block;
-  padding: 12px 0;
+  padding: 12px 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius-sm);
   border-bottom: 1px solid var(--color-divider);
   text-decoration: none;
   color: inherit;
+  transition: background 0.15s ease;
+}
+
+.order-row:hover {
+  background: var(--color-neutral-800);
 }
 
 .order-thumbs {

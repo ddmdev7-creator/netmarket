@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhWarningCircle } from '@phosphor-icons/vue'
+import { PhCaretRight, PhWarningCircle } from '@phosphor-icons/vue'
 import type { DailyOrderCount, VendorDashboard, VendorRead, VendorStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -115,7 +115,10 @@ const tiles = computed(() => {
             class="low-stock-row"
           >
             <span>{{ p.name }}</span>
-            <span class="text-muted">Épuisé</span>
+            <span class="d-flex align-center ga-1">
+              <span class="text-muted">Épuisé</span>
+              <PhCaretRight :size="14" color="var(--color-neutral-500)" />
+            </span>
           </NuxtLink>
         </v-expansion-panel-text>
       </v-expansion-panel>
@@ -133,7 +136,10 @@ const tiles = computed(() => {
         class="low-stock-row"
       >
         <span>{{ p.name }}</span>
-        <span class="text-muted">{{ p.stock }} en stock</span>
+        <span class="d-flex align-center ga-1">
+          <span class="text-muted">{{ p.stock }} en stock</span>
+          <PhCaretRight :size="14" color="var(--color-neutral-500)" />
+        </span>
       </NuxtLink>
     </div>
   </div>
@@ -183,10 +189,18 @@ const tiles = computed(() => {
 .low-stock-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  align-items: center;
+  padding: 8px;
+  margin: 0 -8px;
+  border-radius: var(--radius-sm);
   border-bottom: 1px solid var(--color-divider);
   text-decoration: none;
   color: inherit;
   font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+.low-stock-row:hover {
+  background: var(--color-neutral-800);
 }
 </style>
