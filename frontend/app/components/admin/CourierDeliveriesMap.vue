@@ -8,7 +8,9 @@
  * mention dans sa fiche. Les tracés sont donc boutique → destination, jamais
  * livreur → quoi que ce soit, qui laisserait croire à un suivi réel.
  * Sélectionner un livreur met en surbrillance les courses qui lui sont
- * attribuées (ou proposées, dispatch en cours).
+ * attribuées (ou proposées, dispatch en cours). Les repères d'une course en
+ * route (statut « shipped ») — son livreur et sa destination — sont animés
+ * (halo pulsant, voir utils/mapPins.ts), comme les cartes de /admin/livraisons.
  *
  * Charge ses propres données (tous les livreurs approuvés, indépendamment de
  * l'onglet de statut de la liste) et seulement quand la vue est ouverte.
@@ -56,6 +58,7 @@ function carrierLabel(delivery: ActiveDeliveryRead): string {
   return 'Aucun livreur'
 }
 
+const isInTransit = (d: ActiveDeliveryRead) => d.status === 'shipped'
 const hasOrigin = (d: ActiveDeliveryRead) => d.origin_latitude !== null && d.origin_longitude !== null
 const hasDestination = (d: ActiveDeliveryRead) => d.destination_latitude !== null && d.destination_longitude !== null
 
@@ -89,6 +92,7 @@ const built = computed(() => {
         lat: courier.latitude,
         lng: courier.longitude,
         muted: !courier.is_online,
+        live: deliveries.some((d) => d.courier_id === courier.id && isInTransit(d)),
         statusLabel: courier.is_online ? 'En ligne' : 'Hors ligne',
         statusTone: courier.is_online ? 'success' : 'neutral',
         details: [
@@ -132,6 +136,7 @@ const built = computed(() => {
       items.push({
         id,
         kind: isPickup ? 'pickup' : 'home',
+        live: group.some(isInTransit),
         name: isPickup ? (first!.pickup_point_name ?? 'Point de retrait') : (first!.delivery_zone || first!.delivery_address),
         subtitle: `Destination · ${group.length} colis`,
         lat: first!.destination_latitude!,
@@ -170,6 +175,7 @@ const stats = computed(() => {
     online: couriers.filter((c) => c.is_online).length,
     unplacedCouriers: couriers.filter((c) => c.latitude === null || c.longitude === null).length,
     deliveries: deliveries.length,
+    inTransit: deliveries.filter(isInTransit).length,
     unplacedDeliveries: deliveries.filter((d) => !hasOrigin(d) || !hasDestination(d)).length,
   }
 })
@@ -208,6 +214,10 @@ watch(built, ({ items }) => {
         Courses en cours
         <span class="cdm-chip__count">{{ stats.deliveries }}</span>
       </button>
+      <span v-if="stats.inTransit" class="cdm-live-hint">
+        <span class="cdm-live-hint__dot" aria-hidden="true" />
+        {{ stats.inTransit }} en route · repères animés
+      </span>
       <v-btn variant="text" size="small" :loading="pending" class="ms-auto" @click="refresh()">
         <PhArrowsClockwise :size="15" class="mr-1" />
         Actualiser
@@ -278,6 +288,31 @@ watch(built, ({ items }) => {
   width: 18px;
   height: 18px;
   border-radius: 50%;
+}
+
+.cdm-live-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.cdm-live-hint__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ea580c;
+  animation: cdm-live 2.2s ease-out infinite;
+}
+
+@keyframes cdm-live {
+  0% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.55); }
+  100% { box-shadow: 0 0 0 8px rgba(234, 88, 12, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cdm-live-hint__dot { animation: none; }
 }
 
 .cdm-chip__count {

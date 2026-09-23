@@ -49,6 +49,8 @@ export interface PinOptions {
   label: string
   /** Repère réduit, pour un simple repère de contexte (voir MapPicker.vue). */
   small?: boolean
+  /** Livraison en cours : halo pulsant autour du repère. */
+  live?: boolean
 }
 
 function mount(host: HTMLElement, icon: Component, size: number): () => void {
@@ -61,7 +63,11 @@ export function createPin(kind: MapPinKind, options: PinOptions): PinHandle {
   const disposers: Array<() => void> = []
 
   const root = document.createElement('div')
-  root.className = 'om-pin' + (options.selected ? ' om-pin--selected' : '') + (options.small ? ' om-pin--small' : '')
+  root.className =
+    'om-pin' +
+    (options.selected ? ' om-pin--selected' : '') +
+    (options.small ? ' om-pin--small' : '') +
+    (options.live ? ' om-pin--live' : '')
   root.style.zIndex = options.selected ? '10' : '1'
 
   const body = document.createElement('button')
@@ -69,6 +75,13 @@ export function createPin(kind: MapPinKind, options: PinOptions): PinHandle {
   body.className = 'om-pin__body'
   body.style.setProperty('--pin-color', options.muted ? MUTED_COLOR : meta.color)
   body.setAttribute('aria-label', options.label)
+  if (options.live) {
+    // Frère du corps, pas enfant : l'onde ne doit pas hériter du scale au survol.
+    const pulse = document.createElement('span')
+    pulse.className = 'om-pin__pulse'
+    pulse.style.setProperty('--pin-color', meta.color)
+    root.append(pulse)
+  }
   root.append(body)
 
   const icon = document.createElement('span')
@@ -93,9 +106,9 @@ export function createPin(kind: MapPinKind, options: PinOptions): PinHandle {
   return { el: root, dispose: () => disposers.forEach((dispose) => dispose()) }
 }
 
-export function createClusterPin(count: number, label: string): PinHandle {
+export function createClusterPin(count: number, label: string, live = false): PinHandle {
   const root = document.createElement('div')
-  root.className = 'om-cluster'
+  root.className = 'om-cluster' + (live ? ' om-cluster--live' : '')
   const body = document.createElement('button')
   body.type = 'button'
   body.className = 'om-cluster__body'

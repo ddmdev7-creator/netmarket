@@ -6,8 +6,9 @@
  * « Temps réel » = rafraîchissement automatique toutes les REFRESH_MS (mis
  * en pause quand l'onglet est masqué, relancé dès qu'il revient) : le
  * backend ne pousse pas encore d'événements admin sur la WebSocket. Les
- * lignes dont le statut ou le livreur a changé depuis le dernier passage
- * clignotent brièvement pour que le changement se voie.
+ * cartes dont le statut ou le livreur a changé depuis le dernier passage
+ * s'illuminent brièvement ; celles en route « respirent » en continu, comme
+ * leurs repères sur la vue Carte (voir CourierDeliveriesMap.vue).
  *
  * Les alertes « immobile depuis » s'appuient sur SubOrder.updated_at, qui
  * bouge à chaque changement de statut/livreur/dispatch — pas sur la position
@@ -15,7 +16,6 @@
  * app/couriers/models.py).
  */
 import {
-  PhArrowRight,
   PhArrowsClockwise,
   PhClock,
   PhMagnifyingGlass,
@@ -312,64 +312,87 @@ onBeforeUnmount(() => {
       />
       <CommonEmptyState v-else-if="data && !visibleRows.length" message="Aucune livraison ne correspond à ce filtre." />
 
-      <TransitionGroup name="row" tag="div" class="rows">
+      <TransitionGroup name="card" tag="div" class="cards">
         <NuxtLink
           v-for="row in visibleRows"
           :key="row.entry.sub_order_id"
           :to="`/admin/commandes/${row.entry.order_id}`"
-          class="row"
-          :class="{ 'row--changed': changedIds.has(row.entry.sub_order_id), 'row--done': row.stage === 'delivered' }"
+          class="card"
+          :class="{
+            'card--changed': changedIds.has(row.entry.sub_order_id),
+            'card--done': row.stage === 'delivered',
+            'card--live': row.stage === 'in_transit',
+          }"
           :style="{ '--stage-color': stageMeta[row.stage].color }"
         >
-          <div class="row__top">
-            <span class="row__id">{{ shortId(row.entry.order_id) }}</span>
-            <span class="row__stage">{{ stageMeta[row.stage].label }}</span>
-            <span v-if="row.late" class="row__flag"><PhWarningCircle :size="13" weight="fill" /> En retard</span>
-            <span v-if="row.stale" class="row__flag">
+          <div class="card__top">
+            <span class="card__id">{{ shortId(row.entry.order_id) }}</span>
+            <span class="card__stage">
+              <span v-if="row.stage === 'in_transit'" class="card__live-dot" aria-hidden="true" />
+              {{ stageMeta[row.stage].label }}
+            </span>
+          </div>
+
+          <div v-if="row.late || row.stale" class="card__flags">
+            <span v-if="row.late" class="card__flag"><PhWarningCircle :size="13" weight="fill" /> En retard</span>
+            <span v-if="row.stale" class="card__flag">
               <PhClock :size="13" weight="fill" /> Immobile depuis {{ formatDuration(row.idleMin) }}
             </span>
-            <span class="row__time">
-              <template v-if="row.stage === 'delivered'">Livrée à {{ formatTime(row.entry.updated_at) }}</template>
-              <template v-else>Dernier changement il y a {{ formatDuration(row.idleMin) }}</template>
-            </span>
           </div>
 
-          <div class="row__route">
-            <span class="row__place">
-              <strong>{{ row.entry.shop_name }}</strong>
-              <span v-if="row.entry.vendor_zone" class="text-muted"> · {{ row.entry.vendor_zone }}</span>
-            </span>
-            <PhArrowRight :size="14" class="row__arrow" />
-            <span class="row__place">
-              <strong>{{ destinationLabel(row.entry) }}</strong>
-              <span class="text-muted"> · {{ row.entry.delivery_type === 'pickup_point' ? 'point de retrait' : 'domicile' }}</span>
-              <span v-if="row.entry.storage_location" class="text-muted"> · emplacement {{ row.entry.storage_location }}</span>
-            </span>
+          <div class="card__route">
+            <div class="card__place">
+              <span class="card__place-dot" />
+              <div>
+                <strong>{{ row.entry.shop_name }}</strong>
+                <div v-if="row.entry.vendor_zone" class="text-muted">{{ row.entry.vendor_zone }}</div>
+              </div>
+            </div>
+            <div class="card__place">
+              <span class="card__place-dot card__place-dot--end" />
+              <div>
+                <strong>{{ destinationLabel(row.entry) }}</strong>
+                <div class="text-muted">
+                  {{ row.entry.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Domicile' }}
+                  <span v-if="row.entry.storage_location"> · emplacement {{ row.entry.storage_location }}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="row__people">
-            <span class="row__person">
-              <PhMotorcycle :size="15" />
+          <div class="card__people">
+            <span class="card__person">
+              <PhMotorcycle :size="15" class="flex-none" />
               <template v-if="row.entry.courier_name">
                 <span class="online-dot" :class="{ 'online-dot--on': row.entry.courier_is_online }" />
-                {{ row.entry.courier_name }}<span v-if="row.entry.courier_phone" class="text-muted"> · {{ row.entry.courier_phone }}</span>
+                <span>{{ row.entry.courier_name }}<span v-if="row.entry.courier_phone" class="text-muted"> · {{ row.entry.courier_phone }}</span></span>
               </template>
               <span v-else-if="row.entry.dispatch_offered_courier_name" class="text-muted">
                 Proposée à {{ row.entry.dispatch_offered_courier_name }}…
               </span>
-              <span v-else class="row__missing">Aucun livreur</span>
+              <span v-else class="card__missing">Aucun livreur</span>
             </span>
-            <span class="row__person">
-              <PhUser :size="15" />
-              {{ row.entry.buyer_name ?? 'Client' }}<span v-if="row.entry.buyer_phone" class="text-muted"> · {{ row.entry.buyer_phone }}</span>
+            <span class="card__person">
+              <PhUser :size="15" class="flex-none" />
+              <span>{{ row.entry.buyer_name ?? 'Client' }}<span v-if="row.entry.buyer_phone" class="text-muted"> · {{ row.entry.buyer_phone }}</span></span>
             </span>
-            <span class="row__person text-muted">
-              {{ formatGnf(row.entry.amount + row.entry.delivery_fee) }}
-              · {{ row.entry.payment_method === 'cash_on_delivery' ? 'à encaisser' : 'payé en ligne' }}
-              <template v-if="row.entry.estimated_delivery_min && row.entry.estimated_delivery_max && row.stage !== 'delivered'">
-                · prévu {{ formatDeliveryEstimate(row.entry.estimated_delivery_min, row.entry.estimated_delivery_max) }}
-              </template>
+          </div>
+
+          <div class="card__foot">
+            <span>
+              <strong>{{ formatGnf(row.entry.amount + row.entry.delivery_fee) }}</strong>
+              <span class="text-muted"> · {{ row.entry.payment_method === 'cash_on_delivery' ? 'à encaisser' : 'payé en ligne' }}</span>
             </span>
+            <span class="text-muted">
+              <template v-if="row.stage === 'delivered'">Livrée à {{ formatTime(row.entry.updated_at) }}</template>
+              <template v-else>Il y a {{ formatDuration(row.idleMin) }}</template>
+            </span>
+          </div>
+          <div
+            v-if="row.entry.estimated_delivery_min && row.entry.estimated_delivery_max && row.stage !== 'delivered'"
+            class="card__eta text-muted"
+          >
+            Prévu {{ formatDeliveryEstimate(row.entry.estimated_delivery_min, row.entry.estimated_delivery_max) }}
           </div>
         </NuxtLink>
       </TransitionGroup>
@@ -471,114 +494,207 @@ onBeforeUnmount(() => {
   color: var(--color-neutral-400);
 }
 
-/* --- Lignes -------------------------------------------------------------- */
+/* --- Cartes -------------------------------------------------------------- */
 
-.rows {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* 4 cartes par ligne sur grand écran, puis 3, 2, 1. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
-.row {
+@media (max-width: 1400px) {
+  .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1000px) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+}
+
+.card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   padding: 12px 14px;
   border: 1px solid var(--color-divider);
-  border-left: 5px solid var(--stage-color);
+  border-top: 4px solid var(--stage-color);
   border-radius: var(--radius-md);
   background: var(--color-neutral-900);
   color: inherit;
   text-decoration: none;
-  transition: background-color 0.6s ease;
+  transition: background-color 0.6s ease, border-color 0.15s ease;
 }
 
-.row:hover {
+.card:hover {
   border-color: var(--color-divider-strong);
-  border-left-color: var(--stage-color);
+  border-top-color: var(--stage-color);
 }
 
-.row--done {
+.card--done {
   opacity: 0.7;
 }
 
-.row--changed {
+.card--changed {
   background: color-mix(in srgb, var(--stage-color) 18%, var(--color-neutral-900));
 }
 
-.row__top {
+/* Livraison en route : halo qui respire doucement autour de la carte. */
+.card--live {
+  animation: live-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes live-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--stage-color) 0%, transparent);
+    border-color: var(--color-divider);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--stage-color) 28%, transparent),
+      0 0 18px 2px color-mix(in srgb, var(--stage-color) 30%, transparent);
+    border-color: color-mix(in srgb, var(--stage-color) 60%, transparent);
+  }
+}
+
+.card__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--stage-color);
+  animation: live-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes live-dot {
+  0%,
+  100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
+.card__top {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 12.5px;
 }
 
-.row__id {
+.card__id {
   font-family: var(--font-heading);
   font-weight: 700;
 }
 
-.row__stage {
-  padding: 1px 8px;
+.card__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 9px;
   border-radius: 999px;
   font-weight: 600;
   color: var(--stage-color);
   background: color-mix(in srgb, var(--stage-color) 14%, transparent);
+  white-space: nowrap;
 }
 
-.row__flag {
+.card__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card__flag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   padding: 1px 8px;
   border-radius: 999px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-error);
   background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
-.row__time {
-  margin-left: auto;
-  color: var(--color-neutral-400);
-}
-
-.row__route {
+.card__route {
+  position: relative;
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  font-size: 14px;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
 }
 
-.row__place {
+/* Trait vertical entre départ et arrivée. */
+.card__route::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 12px;
+  bottom: 22px;
+  border-left: 2px dotted var(--color-divider-strong);
+}
+
+.card__place {
+  display: flex;
+  gap: 10px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.row__arrow {
-  flex: none;
-  color: var(--color-neutral-500);
+.card__place .text-muted {
+  font-size: 12px;
 }
 
-.row__people {
+.card__place-dot {
+  position: relative;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 2px solid var(--stage-color);
+  background: var(--color-neutral-900);
+}
+
+.card__place-dot--end {
+  background: var(--stage-color);
+}
+
+.card__people {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 18px;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-divider);
   font-size: 12.5px;
 }
 
-.row__person {
-  display: inline-flex;
+.card__person {
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.row__missing {
+.card__missing {
   color: var(--color-error);
   font-weight: 600;
+}
+
+.card__foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: auto;
+  font-size: 12.5px;
+}
+
+.card__eta {
+  font-size: 12px;
+  margin-top: -6px;
 }
 
 .online-dot {
@@ -593,25 +709,26 @@ onBeforeUnmount(() => {
   background: var(--color-success);
 }
 
-.row-enter-from,
-.row-leave-to {
+.card-enter-from,
+.card-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: scale(0.97);
 }
 
-.row-enter-active,
-.row-leave-active {
+.card-enter-active,
+.card-leave-active {
   transition: all 0.25s ease;
 }
 
-.row-move {
+.card-move {
   transition: transform 0.3s ease;
 }
 
-@media (max-width: 600px) {
-  .row__time {
-    margin-left: 0;
-    width: 100%;
+@media (prefers-reduced-motion: reduce) {
+  .card--live,
+  .card__live-dot,
+  .live-dot--on {
+    animation: none;
   }
 }
 </style>

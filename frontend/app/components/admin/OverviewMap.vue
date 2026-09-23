@@ -41,6 +41,8 @@ export interface OverviewMapItem {
   muted?: boolean
   /** Petit point d'alerte sur le repère (ex. en attente de validation). */
   attention?: boolean
+  /** Livraison en cours : repère animé (halo pulsant). */
+  live?: boolean
   statusLabel?: string
   statusTone?: 'success' | 'warning' | 'error' | 'neutral'
   details?: { label: string; value: string }[]
@@ -158,7 +160,8 @@ function rebuildMarkers() {
     }
     const lng = group.reduce((sum, item) => sum + item.lng, 0) / group.length
     const lat = group.reduce((sum, item) => sum + item.lat, 0) / group.length
-    addMarker(createClusterPin(group.length, `${group.length} éléments — zoomer`), [lng, lat], () => {
+    const live = group.some((item) => item.live)
+    addMarker(createClusterPin(group.length, `${group.length} éléments — zoomer`, live), [lng, lat], () => {
       const bounds = boundsOf(group)
       const sameSpot = bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 5
       if (sameSpot) map?.easeTo({ center: [lng, lat], zoom: (map?.getZoom() ?? 15) + 2 })
@@ -172,6 +175,7 @@ function rebuildMarkers() {
       selected: item.id === props.selectedId,
       muted: item.muted ?? false,
       attention: item.attention ?? false,
+      live: item.live ?? false,
       label: `${MAP_PIN_META[item.kind].label} : ${item.name}`,
     })
     addMarker(pin, [item.lng, item.lat], () => emit('select', item.id))

@@ -66,6 +66,77 @@
   border-top-width: 7px;
 }
 
+/* Livraison en cours : deux ondes décalées qui s'élargissent et s'estompent
+   derrière le repère — mouvement continu et doux plutôt qu'un clignotement sec. */
+.om-pin__pulse,
+.om-pin__pulse::after {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pin-color) 45%, transparent);
+  pointer-events: none;
+  animation: om-pin-pulse 2.2s cubic-bezier(0.25, 0.6, 0.35, 1) infinite;
+}
+
+.om-pin__pulse::after {
+  content: '';
+  animation-delay: 1.1s;
+}
+
+/* Pas de position: relative sur .om-pin pour ancrer l'onde : MapLibre le
+   positionne déjà en absolu (.maplibregl-marker), ce qui suffit. */
+
+.om-pin--live:not(.om-pin--selected) .om-pin__body {
+  animation: om-pin-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes om-pin-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@keyframes om-pin-breathe {
+  0%,
+  100% {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin-color) 40%, transparent), 0 3px 10px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.om-cluster--live .om-cluster__body {
+  animation: om-cluster-breathe 2.2s ease-in-out infinite;
+}
+
+@keyframes om-cluster-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(31, 41, 55, 0.22), 0 3px 8px rgba(0, 0, 0, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(234, 88, 12, 0.3), 0 3px 8px rgba(0, 0, 0, 0.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .om-pin__pulse,
+  .om-pin__pulse::after,
+  .om-pin--live:not(.om-pin--selected) .om-pin__body,
+  .om-cluster--live .om-cluster__body {
+    animation: none;
+  }
+}
+
 .om-pin__icon {
   display: flex;
 }
