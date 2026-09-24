@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { PhArrowLeft, PhFlag, PhMapPin, PhShoppingCart, PhStar, PhTruck } from '@phosphor-icons/vue'
-import type { ProductRead, ReviewRead } from '~/types/api'
+import type { ProductRead, ProductVariantRead, ReviewRead } from '~/types/api'
 
 definePageMeta({ layout: 'blank' })
 
@@ -55,7 +55,23 @@ const selected = reactive<Record<string, string>>({})
 
 const hasVariants = computed(() => (product.value?.variants.length ?? 0) > 0)
 
-const attributeGroups = computed(() => {
+function variantHasValue(variant: ProductVariantRead, name: string, value: string) {
+  return variant.attributes.some((a) => a.name === name && a.value === value)
+}
+
+const COLOR_ATTRIBUTE_NAMES = ['couleur', 'color', 'coloris']
+
+interface AttributeGroup {
+  name: string
+  values: string[]
+  /** Photo représentative de chaque valeur (1re variante qui en a une). */
+  images: Record<string, string | null>
+  /** Groupe "visuel" (ex. Couleur) : ses valeurs ont des photos distinctes,
+      affichées en vignettes plutôt qu'en simples pastilles de texte. */
+  visual: boolean
+}
+
+const attributeGroups = computed<AttributeGroup[]>(() => {
   if (!product.value) return []
   const order: string[] = []
   const values = new Map<string, string[]>()
@@ -69,31 +85,64 @@ const attributeGroups = computed(() => {
       if (!list.includes(attr.value)) list.push(attr.value)
     }
   }
-  return order.map((name) => ({ name, values: values.get(name)! }))
+  const groups = order.map((name) => {
+    const groupValues = values.get(name)!
+    const images: Record<string, string | null> = {}
+    for (const value of groupValues) {
+      const withImage = product.value!.variants.find((v) => variantHasValue(v, name, value) && v.images?.length)
+      images[value] = withImage?.images?.[0] ?? null
+    }
+    const distinct = new Set(Object.values(images).filter(Boolean))
+    const eligible = groupValues.every((v) => images[v]) && distinct.size > 1
+    return { name, values: groupValues, images, visual: eligible }
+  })
+  // Un seul groupe en vignettes : la couleur de préférence, sinon le premier
+  // éligible — une RAM ou une taille en photos n'apporterait rien.
+  const visualGroup =
+    groups.find((g) => g.visual && COLOR_ATTRIBUTE_NAMES.includes(g.name.toLowerCase())) ?? groups.find((g) => g.visual)
+  for (const g of groups) g.visual = g === visualGroup
+  return groups
 })
 
 // Variantes encore possibles compte tenu de la sélection (même partielle) —
-// sert à la fois à filtrer les valeurs proposées (on ne laisse jamais
-// construire une combinaison qui n'existe pas) et à prévisualiser une image
-// dès qu'un seul attribut est choisi, sans attendre que la combinaison soit
-// complète.
+// sert à la fois à marquer les valeurs incompatibles et à prévisualiser une
+// image dès qu'un seul attribut est choisi.
 function variantsMatchingSelection(partial: Record<string, string>) {
   if (!product.value) return []
   const entries = Object.entries(partial)
-  return product.value.variants.filter((v) =>
-    entries.every(([name, value]) => v.attributes.some((a) => a.name === name && a.value === value)),
-  )
+  return product.value.variants.filter((v) => entries.every(([name, value]) => variantHasValue(v, name, value)))
 }
 
 const possibleVariants = computed(() => (hasVariants.value ? variantsMatchingSelection(selected) : []))
 
-// Une valeur reste proposable si, en l'ajoutant à la sélection actuelle des
-// AUTRES attributs, au moins une variante correspond encore — évite de
-// pouvoir construire un choix qui ne mène à aucune variante (ex. Rouge
-// n'existe qu'en M/L : XS devient grisé dès que Rouge est choisi).
-function isValueAvailable(groupName: string, value: string): boolean {
-  return variantsMatchingSelection({ ...selected, [groupName]: value }).length > 0
+function selectionWithout(name: string) {
+  const rest: Record<string, string> = {}
+  for (const [key, value] of Object.entries(selected)) if (key !== name) rest[key] = value
+  return rest
 }
+
+// Chaque valeur reste TOUJOURS cliquable : une valeur incompatible avec le
+// reste de la sélection est seulement signalée (pointillés), et la choisir
+// bascule dessus en retirant les choix qui la contredisent (voir
+// selectAttribute) — plus besoin de "Réinitialiser" pour changer d'avis.
+const groupsView = computed(() =>
+  attributeGroups.value.map((group) => {
+    const others = selectionWithout(group.name)
+    return {
+      ...group,
+      options: group.values.map((value) => {
+        const matches = variantsMatchingSelection({ ...others, [group.name]: value })
+        const everMatches = matches.length ? matches : variantsMatchingSelection({ [group.name]: value })
+        return {
+          value,
+          image: group.images[value],
+          compatible: matches.length > 0,
+          soldOut: everMatches.every((v) => v.stock === 0),
+        }
+      }),
+    }
+  }),
+)
 
 const activeVariant = computed(() => {
   if (!product.value || !hasVariants.value) return null
@@ -106,21 +155,12 @@ const activeVariant = computed(() => {
   )
 })
 
-// Sélection complète (une valeur par attribut) mais qui ne correspond à
-// aucune variante existante — ne devrait plus guère arriver maintenant que
-// les valeurs impossibles sont grisées au fur et à mesure (voir
-// isValueAvailable), gardé comme filet de sécurité.
-const selectionIncomplete = computed(
-  () => hasVariants.value && Object.keys(selected).length === attributeGroups.value.length && !activeVariant.value,
-)
+const missingGroups = computed(() => attributeGroups.value.filter((g) => !selected[g.name]).map((g) => g.name))
 
 // Pour la galerie uniquement : dès qu'un attribut est choisi (même sans
 // combinaison complète), montre la photo de la première variante encore
-// possible qui en a une — ex. choisir "Noir" affiche tout de suite une
-// variante noire, avant même d'avoir choisi la taille. Le prix/stock reste
-// lui piloté par activeVariant (correspondance exacte) : ils ne doivent
-// jamais laisser croire qu'une variante précise est sélectionnée avant que
-// ce soit vraiment le cas.
+// possible qui en a une. Le prix/stock reste lui piloté par activeVariant
+// (correspondance exacte).
 const previewVariant = computed(() => {
   if (!hasVariants.value || Object.keys(selected).length === 0) return null
   if (activeVariant.value) return activeVariant.value
@@ -137,67 +177,160 @@ const effectivePrice = computed(() => {
   return activeVariant.value?.price ?? product.value.price
 })
 
+// Tant que la combinaison n'est pas complète, les variantes encore possibles
+// peuvent avoir des prix différents : on affiche "À partir de" plutôt qu'un
+// prix qui risque de changer au dernier choix.
+const priceFrom = computed(() => {
+  if (!product.value || activeVariant.value || !hasVariants.value) return null
+  const prices = possibleVariants.value.map((v) => v.price ?? product.value!.price)
+  if (prices.length < 2) return null
+  const min = Math.min(...prices)
+  return min === Math.max(...prices) ? null : min
+})
+
 const effectiveImages = computed(() => {
   if (!product.value) return []
   return previewVariant.value?.images?.length ? previewVariant.value.images : product.value.images
 })
 
 const stockLabel = computed(() => {
-  if (hasVariants.value && !activeVariant.value) return 'Choisissez une variante'
-  return effectiveStock.value > 0 ? 'En stock' : 'Épuisé'
+  if (hasVariants.value && !activeVariant.value) return null
+  if (effectiveStock.value === 0) return 'Épuisé'
+  return effectiveStock.value <= 5 ? `Plus que ${effectiveStock.value}` : 'En stock'
 })
 const stockChipColor = computed(() => {
-  if (hasVariants.value && !activeVariant.value) return undefined
-  return effectiveStock.value > 0 ? 'success' : 'error'
-})
-
-const addDisabled = computed(() => {
-  if (!product.value) return true
-  return hasVariants.value ? !activeVariant.value || activeVariant.value.stock === 0 : product.value.stock === 0
+  if (effectiveStock.value === 0) return 'error'
+  return effectiveStock.value <= 5 ? 'warning' : 'success'
 })
 
 // Dès qu'un choix ne laisse plus qu'une seule valeur possible pour un autre
-// attribut (ex. "Rouge" n'existe qu'en taille M), on la coche directement —
-// évite à l'acheteur de cliquer sur un groupe qui n'a de toute façon plus
-// qu'une réponse possible avant de pouvoir toucher "Ajouter au panier". En
-// boucle car cocher un groupe peut à son tour rendre un troisième groupe non
-// ambigu (au-delà de 2 attributs).
+// attribut (ex. "Rouge" n'existe qu'en taille M), on la coche directement.
+// En boucle car cocher un groupe peut à son tour rendre un troisième groupe
+// non ambigu (au-delà de 2 attributs).
 function autoSelectUnambiguousAttributes() {
   let changed = true
   while (changed) {
     changed = false
     for (const group of attributeGroups.value) {
       if (selected[group.name]) continue
-      const stillPossible = group.values.filter((value) => isValueAvailable(group.name, value))
+      const stillPossible = group.values.filter(
+        (value) => variantsMatchingSelection({ ...selected, [group.name]: value }).length > 0,
+      )
       if (stillPossible.length === 1) {
-        selected[group.name] = stillPossible[0]
+        selected[group.name] = stillPossible[0]!
         changed = true
       }
     }
   }
 }
 
+// Message discret quand un choix en a retiré un autre (ex. "32Go n'existe
+// pas en Noire : choix ajusté"), pour que la bascule ne passe pas inaperçue.
+const switchNotice = ref<string | null>(null)
+let switchNoticeTimer: ReturnType<typeof setTimeout> | undefined
+
 function selectAttribute(name: string, value: string) {
-  // Recliquer la valeur déjà choisie revient dessus (désélection) plutôt que
-  // de rester bloqué dessus — sans ça, une fois un choix fait il était
-  // impossible de revenir à l'état "rien de sélectionné" pour ce groupe.
+  // Recliquer la valeur déjà choisie revient dessus (désélection).
+  clearTimeout(switchNoticeTimer)
+  switchNotice.value = null
   if (selected[name] === value) {
     delete selected[name]
   } else {
     selected[name] = value
+    const dropped: string[] = []
+    // D'abord les choix directement contradictoires avec la nouvelle valeur…
+    for (const key of Object.keys(selected)) {
+      if (key === name) continue
+      if (variantsMatchingSelection({ [name]: value, [key]: selected[key]! }).length === 0) {
+        dropped.push(selected[key]!)
+        delete selected[key]
+      }
+    }
+    // … puis, au-delà de 2 attributs, ceux qui ne tiennent qu'ensemble.
+    while (variantsMatchingSelection(selected).length === 0) {
+      const key = Object.keys(selected).reverse().find((k) => k !== name)
+      if (!key) break
+      dropped.push(selected[key]!)
+      delete selected[key]
+    }
     autoSelectUnambiguousAttributes()
+    switchNotice.value = dropped.length ? `${dropped.join(', ')} n'existe pas en ${value} : choix ajusté.` : null
+    if (dropped.length) switchNoticeTimer = setTimeout(() => (switchNotice.value = null), 4000)
   }
   quantity.value = 1
   justAdded.value = false
 }
 
-const hasSelection = computed(() => Object.keys(selected).length > 0)
-
-function resetSelection() {
-  for (const key of Object.keys(selected)) delete selected[key]
-  quantity.value = 1
-  justAdded.value = false
+// À l'ouverture : on présélectionne la valeur "visuelle" (ex. la couleur) de
+// la première variante en stock — la photo et les tailles disponibles
+// s'affichent tout de suite. Les autres groupes (taille…) restent un choix
+// conscient de l'acheteur, sauf s'ils n'ont qu'une réponse possible.
+function preselectDefaults() {
+  const firstInStock = product.value?.variants.find((v) => v.stock > 0)
+  const visualGroup = attributeGroups.value.find((g) => g.visual)
+  if (firstInStock && visualGroup) {
+    const attr = firstInStock.attributes.find((a) => a.name === visualGroup.name)
+    if (attr) selected[attr.name] = attr.value
+  }
+  autoSelectUnambiguousAttributes()
 }
+preselectDefaults()
+
+const selectionSummary = computed(() =>
+  attributeGroups.value
+    .map((g) => selected[g.name])
+    .filter(Boolean)
+    .join(' · '),
+)
+
+// Bouton principal : tant qu'il manque un choix, il le dit ("Choisir :
+// Taille") et amène directement au groupe concerné au lieu d'être grisé.
+const optionsEl = ref<HTMLElement | null>(null)
+const flashGroup = ref<string | null>(null)
+
+function goToMissingGroup() {
+  const name = missingGroups.value[0]
+  if (!name) return
+  const el = optionsEl.value?.querySelector<HTMLElement>(`[data-group="${CSS.escape(name)}"]`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  flashGroup.value = name
+  setTimeout(() => (flashGroup.value = null), 1200)
+}
+
+// Barre compacte (téléphone) : dès que la galerie sort de l'écran, une
+// vignette de la photo en cours + le prix restent visibles en haut — plus
+// besoin de remonter voir l'image après chaque choix d'option.
+const mediaEl = ref<HTMLElement | null>(null)
+const mediaOutOfView = ref(false)
+let mediaObserver: IntersectionObserver | null = null
+
+onMounted(() => {
+  if (!mediaEl.value) return
+  mediaObserver = new IntersectionObserver(
+    ([entry]) => {
+      mediaOutOfView.value = !!entry && !entry.isIntersecting
+    },
+    { threshold: 0, rootMargin: '-40% 0px 0px 0px' },
+  )
+  mediaObserver.observe(mediaEl.value)
+})
+onBeforeUnmount(() => {
+  mediaObserver?.disconnect()
+  clearTimeout(switchNoticeTimer)
+})
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const addDisabled = computed(() => {
+  if (!product.value) return true
+  if (hasVariants.value) return !!activeVariant.value && activeVariant.value.stock === 0
+  return product.value.stock === 0
+})
+
+const apiBase = useApiBase()
+const miniThumb = computed(() => (effectiveImages.value[0] ? resolveImageUrl(effectiveImages.value[0], apiBase) : null))
 
 function incr() {
   if (quantity.value < effectiveStock.value) quantity.value++
@@ -238,8 +371,21 @@ async function addToCart() {
       <LayoutHomeLink />
     </div>
 
+    <Transition name="mini-bar">
+      <button v-if="mediaOutOfView" type="button" class="mini-bar" aria-label="Revoir les photos" @click="scrollToTop">
+        <img v-if="miniThumb" :src="miniThumb" :alt="product.name" class="mini-bar__thumb" />
+        <span class="mini-bar__text">
+          <span class="mini-bar__name">{{ product.name }}</span>
+          <span class="mini-bar__meta">
+            <strong><template v-if="priceFrom !== null">dès </template>{{ formatGnf(priceFrom ?? effectivePrice) }}</strong>
+            <template v-if="selectionSummary"> · {{ selectionSummary }}</template>
+          </span>
+        </span>
+      </button>
+    </Transition>
+
     <div class="px-4 product-detail">
-      <div class="product-detail__media">
+      <div ref="mediaEl" class="product-detail__media">
         <ProductImageGallery :images="effectiveImages" :alt="product.name" />
       </div>
 
@@ -258,43 +404,57 @@ async function addToCart() {
         </div>
         <div v-else class="text-muted mb-3 text-meta">Aucun avis pour l'instant</div>
 
-        <div class="d-flex align-center ga-3 mb-4">
-          <span class="text-heading" style="font-size: 22px; font-weight: 600; color: var(--color-accent)">{{
-            formatGnf(effectivePrice)
-          }}</span>
-          <v-chip size="small" :color="stockChipColor" variant="tonal">
+        <div class="price-row mb-4">
+          <span v-if="priceFrom !== null" class="price-row__from">À partir de</span>
+          <span class="price-row__amount">{{ formatGnf(priceFrom ?? effectivePrice) }}</span>
+          <v-chip v-if="stockLabel" size="small" :color="stockChipColor" variant="tonal">
             {{ stockLabel }}
           </v-chip>
         </div>
 
-        <div v-if="hasVariants" class="mb-4">
-          <div class="d-flex justify-space-between align-center mb-1">
-            <div class="text-muted text-meta">Choisissez vos options</div>
-            <button v-if="hasSelection" type="button" class="reset-selection-btn" @click="resetSelection">
-              Réinitialiser
-            </button>
-          </div>
-          <div class="attribute-groups">
-            <div v-for="group in attributeGroups" :key="group.name" class="attribute-group">
-              <div class="text-muted mb-1 text-meta">{{ group.name }}</div>
-              <div class="d-flex flex-wrap ga-2">
-                <v-chip
-                  v-for="value in group.values"
-                  :key="value"
-                  :variant="selected[group.name] === value ? 'flat' : 'outlined'"
-                  :color="selected[group.name] === value ? 'primary' : undefined"
-                  :disabled="selected[group.name] !== value && !isValueAvailable(group.name, value)"
-                  @click="selectAttribute(group.name, value)"
-                >
-                  {{ value }}
-                </v-chip>
-              </div>
+        <section v-if="hasVariants" ref="optionsEl" class="options mb-4" aria-label="Options du produit">
+          <div
+            v-for="group in groupsView"
+            :key="group.name"
+            :data-group="group.name"
+            class="option-group"
+            :class="{ 'option-group--flash': flashGroup === group.name }"
+          >
+            <div class="option-group__label">
+              <span>{{ group.name }}</span>
+              <strong v-if="selected[group.name]">{{ selected[group.name] }}</strong>
+              <span v-else class="option-group__todo">à choisir</span>
+            </div>
+            <div class="option-values" :class="{ 'option-values--swatches': group.visual }">
+              <button
+                v-for="opt in group.options"
+                :key="opt.value"
+                type="button"
+                class="option-value"
+                :class="{
+                  'is-selected': selected[group.name] === opt.value,
+                  'is-incompatible': !opt.compatible,
+                  'is-soldout': opt.soldOut,
+                }"
+                :aria-pressed="selected[group.name] === opt.value"
+                :title="opt.soldOut ? `${opt.value} — épuisé` : !opt.compatible ? `${opt.value} — change les autres choix` : opt.value"
+                @click="selectAttribute(group.name, opt.value)"
+              >
+                <img
+                  v-if="group.visual && opt.image"
+                  :src="resolveImageUrl(opt.image, apiBase)"
+                  :alt="opt.value"
+                  class="option-value__img"
+                  loading="lazy"
+                />
+                <span class="option-value__label">{{ opt.value }}</span>
+              </button>
             </div>
           </div>
-          <p v-if="selectionIncomplete" class="mt-3 mb-0 text-meta" style="color: var(--color-error)">
-            Cette combinaison n'est pas disponible.
-          </p>
-        </div>
+          <Transition name="fade">
+            <p v-if="switchNotice" class="options__notice">{{ switchNotice }}</p>
+          </Transition>
+        </section>
 
         <v-divider class="mb-4" />
 
@@ -380,6 +540,9 @@ async function addToCart() {
         </v-btn>
         <v-btn variant="outlined" block @click="justAdded = false">Continuer mes achats</v-btn>
       </div>
+      <v-btn v-else-if="hasVariants && missingGroups.length" color="primary" variant="tonal" block size="large" @click="goToMissingGroup">
+        Choisir : {{ missingGroups.join(', ') }}
+      </v-btn>
       <v-btn
         v-else
         color="primary"
@@ -389,7 +552,8 @@ async function addToCart() {
         :disabled="addDisabled"
         @click="addToCart"
       >
-        Ajouter au panier — {{ formatGnf(effectivePrice * quantity) }}
+        <template v-if="addDisabled">Épuisé</template>
+        <template v-else>Ajouter au panier — {{ formatGnf(effectivePrice * quantity) }}</template>
       </v-btn>
     </div>
   </div>
@@ -428,39 +592,248 @@ async function addToCart() {
   padding-left: 20px;
 }
 
-/* Un groupe d'attributs (ex. "Couleur") par colonne dès qu'il y a la place
-   — auto-fit plutôt qu'une media query : deux groupes courts (ex. "Couleur"
-   et "Taille") tiennent déjà côte à côte sur un écran de téléphone, pas la
-   peine d'attendre le format desktop pour ça. Ne repasse à une seule
-   colonne que si un groupe a trop de valeurs pour tenir sur 130px. */
-.attribute-groups {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 12px 16px;
+.price-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
 
-/* Sépare visuellement les groupes (Couleur / Taille...) l'un de l'autre —
-   sans backdrop-filter ni pseudo-élément par ligne, juste un liseré sur
-   chaque groupe qui n'est pas premier de sa rangée (le cas courant : 2
-   groupes sur une seule rangée dès qu'ils tiennent, voir le commentaire de
-   .attribute-groups ci-dessus). */
-.attribute-group:not(:first-child) {
-  border-left: 1px solid var(--color-divider);
-  padding-left: 14px;
+.price-row__from {
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
 }
 
-.reset-selection-btn {
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 12px;
+.price-row__amount {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.price-row .v-chip {
+  align-self: center;
+}
+
+/* Options empilées (une rangée par attribut), libellé + valeur choisie sur
+   la même ligne : on voit d'un coup d'œil ce qui est choisi et ce qui manque. */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-neutral-900);
+}
+
+.option-group {
+  border-radius: var(--radius-md);
+  transition: box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.option-group--flash {
+  animation: option-flash 1.2s ease;
+}
+
+@keyframes option-flash {
+  0%,
+  60% {
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+.option-group__label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+.option-group__label span:first-child::after {
+  content: ' :';
+}
+
+.option-group__label strong {
+  color: var(--color-neutral-100);
+  font-weight: 700;
+}
+
+.option-group__todo {
+  color: var(--color-accent);
   font-weight: 600;
+}
+
+.option-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-value {
+  position: relative;
+  min-width: 48px;
+  min-height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1.5px solid var(--color-divider-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-200);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.option-value:active {
+  transform: scale(0.96);
+}
+
+.option-value.is-selected {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-neutral-900));
   color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+/* Incompatible avec les autres choix : reste cliquable (bascule), juste
+   atténué en pointillés. */
+.option-value.is-incompatible:not(.is-selected) {
+  border-style: dashed;
+  color: var(--color-neutral-500);
+}
+
+.option-value.is-soldout .option-value__label {
+  text-decoration: line-through;
+  color: var(--color-neutral-500);
+}
+
+/* Vignettes photo (groupe visuel, ex. Couleur) : l'acheteur voit la
+   couleur sans remonter jusqu'à la galerie. */
+.option-values--swatches .option-value {
+  width: 76px;
+  padding: 4px 4px 6px;
+}
+
+.option-value__img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: #fff;
+}
+
+.option-values--swatches .option-value__label {
+  max-width: 100%;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.options__notice {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-accent);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Barre compacte du haut (téléphone uniquement) — voir mediaOutOfView. */
+.mini-bar {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  border: none;
+  border-bottom: 1px solid var(--color-divider);
+  background: var(--color-neutral-900);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+  color: inherit;
   cursor: pointer;
 }
 
-.reset-selection-btn:hover {
-  text-decoration: underline;
+.mini-bar__thumb {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  border: 1px solid var(--color-divider);
+}
+
+.mini-bar__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mini-bar__name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-bar__meta {
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mini-bar__meta strong {
+  color: var(--color-accent);
+}
+
+.mini-bar-enter-active,
+.mini-bar-leave-active {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.mini-bar-enter-from,
+.mini-bar-leave-to {
+  transform: translate(-50%, -100%);
+  opacity: 0;
+}
+
+@media (min-width: 960px) {
+  .mini-bar {
+    display: none;
+  }
 }
 
 @media (min-width: 960px) {

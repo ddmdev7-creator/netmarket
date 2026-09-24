@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhTrash } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhArrowSquareOut, PhImage, PhTrash } from '@phosphor-icons/vue'
 import type { CategoryRead, ProductRead, ProductVariantRead } from '~/types/api'
 import type { ProductFormValues, VariantFormRow } from '~/components/vendor/ProductForm.vue'
 
@@ -23,6 +23,7 @@ function toVariantRow(v: ProductVariantRead): VariantFormRow {
     _key: v.id,
     id: v.id,
     sku: v.sku ?? '',
+    skuManual: !!v.sku,
     price: v.price,
     stock: v.stock,
     images: v.images ? [...v.images] : [],
@@ -154,6 +155,13 @@ async function toggleStatus(active: boolean) {
   }
 }
 
+const apiBase = useApiBase()
+const coverUrl = computed(() => {
+  const image = product.value?.images[0]
+  return image ? resolveImageUrl(image, apiBase) : null
+})
+const categoryName = computed(() => categories.value.find((c) => c.id === product.value?.category_id)?.name ?? null)
+
 const confirmDelete = ref(false)
 const deleting = ref(false)
 async function deleteProduct() {
@@ -179,40 +187,85 @@ async function deleteProduct() {
   <div v-if="loadError" class="pa-6">
     <CommonEmptyState message="Produit introuvable." />
   </div>
-  <div v-else class="dashboard-shell">
-    <div class="d-flex align-center justify-space-between ga-2 mb-4 flex-wrap">
-      <div class="d-flex align-center ga-2">
-        <v-btn icon variant="text" @click="router.back()">
-          <PhArrowLeft :size="20" />
-        </v-btn>
-        <h1 class="text-h6 mb-0">Modifier le produit</h1>
-      </div>
-      <div v-if="product" class="d-flex align-center ga-2">
-        <span class="text-muted" style="font-size: 13px">{{ product.status === 'active' ? 'Actif' : 'Inactif' }}</span>
-        <v-switch
-          :model-value="product.status === 'active'"
-          color="primary"
-          density="compact"
-          hide-details
-          :loading="togglingStatus"
-          @update:model-value="toggleStatus"
-        />
-      </div>
+  <div v-else class="dashboard-shell product-edit">
+    <div class="d-flex align-center ga-2 mb-3">
+      <v-btn icon variant="text" size="small" @click="router.back()">
+        <PhArrowLeft :size="20" />
+      </v-btn>
+      <span class="text-muted" style="font-size: 13px">Mes produits</span>
     </div>
 
     <template v-if="product">
-      <VendorProductForm v-model="form" :categories="categories" />
+      <!-- Récapitulatif : ce qu'on modifie, son état en boutique, et les
+           raccourcis (voir la fiche, activer/désactiver) au même endroit. -->
+      <header class="edit-hero mb-5">
+        <div class="edit-hero__thumb">
+          <img v-if="coverUrl" :src="coverUrl" :alt="product.name" />
+          <PhImage v-else :size="28" weight="light" />
+        </div>
+        <div class="edit-hero__main">
+          <div class="edit-hero__eyebrow">
+            <span v-if="categoryName">{{ categoryName }}</span>
+            <span class="edit-hero__status" :class="{ 'edit-hero__status--off': product.status !== 'active' }">
+              {{ product.status === 'active' ? 'En ligne' : 'Hors ligne' }}
+            </span>
+          </div>
+          <h1 class="edit-hero__title">{{ product.name }}</h1>
+          <div class="edit-hero__stats">
+            <span><strong class="edit-hero__price">{{ formatGnf(product.price) }}</strong></span>
+            <span>
+              <strong>{{ product.stock }}</strong> en stock
+            </span>
+            <span v-if="product.variants.length">
+              <strong>{{ product.variants.length }}</strong>
+              variante{{ product.variants.length > 1 ? 's' : '' }}
+            </span>
+          </div>
+        </div>
+        <div class="edit-hero__actions">
+          <label class="edit-hero__switch">
+            <v-switch
+              :model-value="product.status === 'active'"
+              color="success"
+              density="compact"
+              hide-details
+              inset
+              :loading="togglingStatus"
+              @update:model-value="toggleStatus(!!$event)"
+            />
+            <span>Visible en boutique</span>
+          </label>
+          <v-btn variant="outlined" size="small" :to="`/produits/${product.id}`" target="_blank">
+            <PhArrowSquareOut :size="15" class="mr-1" />
+            Voir la fiche
+          </v-btn>
+        </div>
+      </header>
 
-      <v-divider class="mt-5 mb-4" />
+      <VendorProductForm v-model="form" :categories="categories" hide-context />
 
-      <div class="d-flex align-center justify-space-between ga-3 flex-wrap">
-        <v-btn color="primary" size="large" min-width="220" :loading="submitting" @click="submit">
-          Enregistrer les modifications
+      <div class="danger-zone">
+        <div>
+          <div class="danger-zone__title">Supprimer ce produit</div>
+          <div class="danger-zone__text">
+            Impossible s'il figure déjà dans une commande — désactive-le plutôt.
+          </div>
+        </div>
+        <v-btn variant="outlined" color="error" size="small" @click="confirmDelete = true">
+          <PhTrash :size="15" class="mr-1" />
+          Supprimer
         </v-btn>
-        <v-btn variant="text" color="error" @click="confirmDelete = true">
-          <PhTrash :size="16" class="mr-1" />
-          Supprimer le produit
-        </v-btn>
+      </div>
+
+      <!-- Toujours à portée de pouce, quel que soit l'onglet ou la variante
+           ouverte : plus besoin de redescendre en bas de page pour enregistrer. -->
+      <div class="save-bar">
+        <div class="save-bar__inner">
+          <span class="save-bar__hint">Les modifications ne sont appliquées qu'après enregistrement.</span>
+          <v-btn color="primary" size="large" min-width="220" :loading="submitting" @click="submit">
+            Enregistrer
+          </v-btn>
+        </div>
       </div>
     </template>
 
@@ -228,3 +281,177 @@ async function deleteProduct() {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.product-edit {
+  padding-bottom: 110px;
+}
+
+.edit-hero {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-neutral-900);
+  box-shadow: var(--shadow-sm);
+}
+
+.edit-hero__thumb {
+  width: 84px;
+  height: 84px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: #fff;
+  color: var(--color-neutral-500);
+  overflow: hidden;
+}
+
+.edit-hero__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.edit-hero__main {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.edit-hero__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.edit-hero__status {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+}
+
+.edit-hero__status--off {
+  color: var(--color-neutral-400);
+  background: var(--color-neutral-800);
+}
+
+.edit-hero__title {
+  margin: 4px 0 6px;
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--color-neutral-100);
+}
+
+.edit-hero__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+.edit-hero__stats strong {
+  color: var(--color-neutral-100);
+}
+
+.edit-hero__stats .edit-hero__price {
+  color: var(--color-accent);
+}
+
+.edit-hero__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.edit-hero__switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 600px) {
+  .edit-hero__actions {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 820px;
+  margin: 40px auto 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+  border-radius: var(--radius-lg);
+}
+
+.danger-zone__title {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.danger-zone__text {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.save-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--color-neutral-900);
+  border-top: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-dock);
+}
+
+.save-bar__inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.save-bar__hint {
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+}
+
+@media (max-width: 600px) {
+  .save-bar__hint {
+    display: none;
+  }
+
+  .save-bar__inner .v-btn {
+    flex: 1;
+  }
+}
+</style>

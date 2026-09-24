@@ -19,6 +19,16 @@ function scrollTo(index: number) {
   scrollerEl.value?.scrollTo({ left: index * scrollerEl.value.clientWidth, behavior: 'smooth' })
 }
 
+// Changement de variante (autre jeu de photos) : on repart de la 1re photo
+// plutôt que de rester sur un index qui n'a plus de sens.
+watch(
+  () => props.images,
+  () => {
+    activeIndex.value = 0
+    scrollerEl.value?.scrollTo({ left: 0 })
+  },
+)
+
 function prev() {
   if (activeIndex.value > 0) scrollTo(activeIndex.value - 1)
 }

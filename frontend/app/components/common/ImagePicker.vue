@@ -6,7 +6,9 @@ import { PhImage, PhLink, PhSpinner, PhStar, PhUploadSimple, PhX } from '@phosph
 // injecté via le slot #extra-actions, propre au produit) et pour les photos
 // de chaque variante (sans ce slot).
 const images = defineModel<string[]>({ required: true })
-withDefaults(defineProps<{ label?: string }>(), { label: 'Images' })
+// compact : bande de vignettes + tuile "Ajouter" (formulaire de variante),
+// sans le gros bouton pleine largeur ni l'ajout par URL.
+withDefaults(defineProps<{ label?: string; compact?: boolean }>(), { label: 'Images', compact: false })
 
 const toast = useToastStore()
 const { apiFetch } = useApi()
@@ -50,7 +52,7 @@ function removeImage(index: number) {
 function setCover(index: number) {
   if (index <= 0 || index >= images.value.length) return
   const [cover] = images.value.splice(index, 1)
-  images.value.unshift(cover)
+  images.value.unshift(cover!)
 }
 
 // Repli manuel (image déjà hébergée ailleurs) — l'upload direct ci-dessus reste le chemin normal.
@@ -66,7 +68,34 @@ function addManualUrl() {
   <div>
     <label v-if="label" class="field-label">{{ label }}</label>
 
-    <div v-if="images.length" class="image-grid mb-2">
+    <div v-if="compact" class="image-strip">
+      <div v-for="(url, i) in images" :key="url + i" class="image-strip__item">
+        <img :src="resolveImageUrl(url, apiBase)" :alt="`Image ${i + 1}`" />
+        <span v-if="i === 0 && images.length > 1" class="image-strip__cover" title="Photo principale">
+          <PhStar :size="9" weight="fill" />
+        </span>
+        <button
+          v-else-if="i > 0"
+          type="button"
+          class="image-strip__cover image-strip__cover--btn"
+          aria-label="Définir comme photo principale"
+          title="Définir comme photo principale"
+          @click="setCover(i)"
+        >
+          <PhStar :size="9" />
+        </button>
+        <button type="button" class="image-grid__remove" aria-label="Retirer cette image" @click="removeImage(i)">
+          <PhX :size="11" weight="bold" />
+        </button>
+      </div>
+      <button type="button" class="image-strip__add" :disabled="uploading" @click="pickFiles">
+        <PhSpinner v-if="uploading" :size="20" class="image-strip__spin" />
+        <PhUploadSimple v-else :size="20" />
+        <span>{{ uploading ? 'Envoi…' : images.length ? 'Ajouter' : 'Ajouter des photos' }}</span>
+      </button>
+    </div>
+
+    <div v-else-if="images.length" class="image-grid mb-2">
       <div v-for="(url, i) in images" :key="url + i" class="image-grid__item">
         <img :src="resolveImageUrl(url, apiBase)" :alt="`Image ${i + 1}`" />
         <span v-if="i === 0" class="image-grid__cover-badge">
@@ -92,12 +121,32 @@ function addManualUrl() {
       <PhImage :size="24" weight="light" color="var(--color-neutral-500)" />
       <span class="text-muted" style="font-size: 12px">Aucune image pour l'instant</span>
     </div>
-    <p v-if="images.length > 1" class="text-muted mb-2 text-fine">
-      La photo "Couverture" (première de la liste) est celle affichée dans le catalogue et les cartes produit —
-      cliquez sur <PhStar :size="10" weight="bold" style="vertical-align: -1px" /> sur une autre photo pour la
-      remplacer.
-    </p>
+    <template v-if="!compact">
+      <p v-if="images.length > 1" class="text-muted mb-2 text-fine">
+        La photo "Couverture" (première de la liste) est celle affichée dans le catalogue et les cartes produit —
+        cliquez sur <PhStar :size="10" weight="bold" style="vertical-align: -1px" /> sur une autre photo pour la
+        remplacer.
+      </p>
 
+      <v-btn variant="outlined" size="small" block class="mb-2" :loading="uploading" @click="pickFiles">
+        <PhSpinner v-if="uploading" :size="14" class="mr-1" />
+        <PhUploadSimple v-else :size="14" class="mr-1" />
+        Choisir des images
+      </v-btn>
+
+      <slot name="extra-actions" />
+
+      <details class="manual-url mb-2">
+        <summary class="text-muted" style="font-size: 11.5px; cursor: pointer">
+          <PhLink :size="11" class="mr-1" style="vertical-align: -1px" />
+          Ajouter par URL (image déjà hébergée ailleurs)
+        </summary>
+        <div class="d-flex ga-2 mt-2">
+          <v-text-field v-model="manualUrl" placeholder="https://…" hide-details density="compact" class="flex-grow-1" />
+          <v-btn variant="outlined" size="small" @click="addManualUrl">Ajouter</v-btn>
+        </div>
+      </details>
+    </template>
     <input
       ref="fileInput"
       type="file"
@@ -106,24 +155,6 @@ function addManualUrl() {
       class="d-none"
       @change="onFilesSelected"
     />
-    <v-btn variant="outlined" size="small" block class="mb-2" :loading="uploading" @click="pickFiles">
-      <PhSpinner v-if="uploading" :size="14" class="mr-1" />
-      <PhUploadSimple v-else :size="14" class="mr-1" />
-      Choisir des images
-    </v-btn>
-
-    <slot name="extra-actions" />
-
-    <details class="manual-url mb-2">
-      <summary class="text-muted" style="font-size: 11.5px; cursor: pointer">
-        <PhLink :size="11" class="mr-1" style="vertical-align: -1px" />
-        Ajouter par URL (image déjà hébergée ailleurs)
-      </summary>
-      <div class="d-flex ga-2 mt-2">
-        <v-text-field v-model="manualUrl" placeholder="https://…" hide-details density="compact" class="flex-grow-1" />
-        <v-btn variant="outlined" size="small" @click="addManualUrl">Ajouter</v-btn>
-      </div>
-    </details>
   </div>
 </template>
 
@@ -219,6 +250,92 @@ function addManualUrl() {
   padding: 20px;
   border: 1px dashed var(--color-divider-strong);
   border-radius: var(--radius-md);
+}
+
+.image-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.image-strip__item,
+.image-strip__add {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.image-strip__item {
+  background: #fff;
+  border: 1px solid var(--color-divider);
+}
+
+.image-strip__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.image-strip__cover {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+}
+
+.image-strip__cover--btn {
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.image-strip__add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1.5px dashed var(--color-primary-300);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  color: var(--color-primary);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.image-strip__add:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.image-strip__add:only-child {
+  width: 100%;
+  height: 96px;
+  flex-direction: row;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.image-strip__spin {
+  animation: image-strip-spin 0.9s linear infinite;
+}
+
+@keyframes image-strip-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .manual-url summary::-webkit-details-marker {

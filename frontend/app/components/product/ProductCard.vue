@@ -56,20 +56,45 @@ const frames = computed<CardFrame[]>(() => {
 
 const hasCarousel = computed(() => frames.value.length > 1)
 
-// Résumé compact des valeurs d'attribut disponibles (ex. "Noire · Rouge") —
-// affiché quand il y a des variantes mais rien à faire défiler (aucune n'a
-// sa propre photo), pour que l'info reste visible même sans carrousel.
-const attributeSummary = computed(() => {
-  if (!hasVariants.value) return null
-  const values: string[] = []
+// Caractéristiques qui justifient le prix, tirées des variantes : un
+// attribut à valeur unique s'affiche tel quel ("128 Go", "Cuir"), sinon sa
+// première valeur suivie du nombre d'autres ("128 Go +2") ou, pour la
+// couleur, le nombre de coloris. Les attributs
+// "techniques" passent avant la couleur, qui justifie rarement un prix.
+const specChips = computed(() => {
+  const groups = new Map<string, string[]>()
   for (const variant of props.product.variants) {
-    const value = primaryAttributeValue(variant)
-    if (value && !values.includes(value)) values.push(value)
+    for (const { name, value } of variant.attributes) {
+      const list = groups.get(name) ?? []
+      if (!list.includes(value)) list.push(value)
+      groups.set(name, list)
+    }
   }
-  if (values.length === 0) return null
-  const shown = values.slice(0, 3)
-  const extra = values.length - shown.length
-  return shown.join(' · ') + (extra > 0 ? ` +${extra}` : '')
+  const chips: { key: string; label: string; extra: number; color: boolean }[] = []
+  for (const [name, values] of groups) {
+    const color = PRIMARY_ATTRIBUTE_NAMES.includes(name.toLowerCase())
+    if (color && values.length > 1) chips.push({ key: name, label: `${values.length} coloris`, extra: 0, color })
+    else chips.push({ key: name, label: values[0]!, extra: values.length - 1, color })
+  }
+  return chips.sort((x, y) => Number(x.color) - Number(y.color))
+})
+
+// Pendant le défilement des photos, la couleur affichée prend la place du
+// résumé "3 coloris".
+const visibleChips = computed(() => {
+  const label = hasCarousel.value ? activeFrameLabel.value : null
+  const chips = label ? specChips.value.filter((c) => !c.color) : specChips.value
+  return { variantLabel: label, chips: chips.slice(0, label ? 1 : 2) }
+})
+
+// Prix d'appel : si les variantes n'ont pas toutes le même prix, la carte
+// affiche le moins cher précédé de "dès" — jamais un prix qu'aucune variante
+// ne propose.
+const priceRange = computed(() => {
+  const prices = props.product.variants.map((v) => v.price ?? props.product.price)
+  if (prices.length === 0) return { min: props.product.price, varies: false }
+  const min = Math.min(...prices)
+  return { min, varies: min !== Math.max(...prices) }
 })
 
 // Une seule ligne de caractéristique sous le prix, jamais deux : on garde une
@@ -90,7 +115,7 @@ const hasRating = computed(() => props.product.average_rating !== null && props.
 const ratingPct = computed(() => ((props.product.average_rating ?? 0) / 5) * 100)
 // Montant et devise séparés : « GNF » en plus petit libère la place de la
 // note sur la même ligne, même sur une carte de téléphone.
-const priceAmount = computed(() => formatGnf(props.product.price).replace(/\s*GNF$/, ''))
+const priceAmount = computed(() => formatGnf(priceRange.value.min).replace(/\s*GNF$/, ''))
 const ratingLabel = computed(() => (props.product.average_rating ?? 0).toFixed(1).replace('.', ','))
 
 // --- Carrousel synchronisé -----------------------------------------------
@@ -208,8 +233,8 @@ async function quickAdd(event: MouseEvent) {
         <!-- Prix à gauche, note à droite : les deux infos d'achat sur une
              seule ligne. Un prix très long passe la note à la ligne (wrap)
              plutôt que de se faire tronquer sur les cartes étroites. -->
-        <div class="product-card__meta">
-          <span class="product-card__price" :class="{ 'product-card__price--long': priceAmount.length > 7 }">{{ priceAmount }}<span class="product-card__currency">GNF</span></span>
+        <div class="product-card__meta" :class="{ 'product-card__meta--from': priceRange.varies }">
+          <span class="product-card__price" :class="{ 'product-card__price--long': priceAmount.length > 7 }"><span v-if="priceRange.varies" class="product-card__from">dès </span>{{ priceAmount }}<span class="product-card__currency">GNF</span></span>
           <span
             v-if="hasRating"
             class="product-card__rating"
@@ -241,10 +266,13 @@ async function quickAdd(event: MouseEvent) {
              "Rouge" pendant qu'on swipe dessus) ; à défaut le résumé des
              attributs disponibles. -->
         <div class="product-card__tags">
-          <span v-if="hasCarousel && activeFrameLabel" class="product-card__tag product-card__tag--variant">
-            {{ activeFrameLabel }}
+          <span v-if="visibleChips.variantLabel" class="product-card__chip product-card__chip--variant">
+            {{ visibleChips.variantLabel }}
           </span>
-          <span v-else-if="attributeSummary" class="product-card__tag">{{ attributeSummary }}</span>
+          <span v-for="chip in visibleChips.chips" :key="chip.key" class="product-card__chip" :title="chip.key">
+            <span class="product-card__chip-text">{{ chip.label }}</span>
+            <span v-if="chip.extra" class="product-card__chip-extra">+{{ chip.extra }}</span>
+          </span>
         </div>
 
         <!-- Ligne dédiée, toujours réservée : le délai de livraison ne doit
@@ -593,15 +621,80 @@ async function quickAdd(event: MouseEvent) {
     width: 10px;
     height: 10px;
   }
+
+  /* Prix "dès …" sur carte étroite : une seule étoile devant la note, pour
+     que prix et note tiennent encore sur la même ligne. */
+  .product-card__meta--from .stars {
+    display: none;
+  }
+
+  .product-card__meta--from .product-card__rating::before {
+    content: '★';
+    color: var(--color-accent);
+    font-size: 12px;
+  }
+
+  .product-card__meta--from .product-card__rating--none {
+    display: none;
+  }
 }
 
 /* Toujours présente (même vide) pour que la hauteur de la carte ne varie
-   pas selon qu'une caractéristique s'affiche ou non. */
+   pas selon qu'une caractéristique s'affiche ou non. Une seule ligne de
+   pastilles : la dernière se tronque plutôt que de passer à la ligne. */
 .product-card__tags {
-  min-height: 1.6em;
+  min-height: 22px;
   margin-top: 6px;
   display: flex;
   align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.product-card__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--color-neutral-800);
+  border: 1px solid var(--color-divider);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-neutral-200);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.product-card__chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.product-card__chip-extra {
+  flex: none;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.product-card__chip--variant {
+  flex-shrink: 0;
+  max-width: 60%;
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.product-card__from {
+  margin-right: 2px;
+  font-size: 0.68em;
+  font-weight: 600;
+  color: var(--color-neutral-400);
 }
 
 .product-card__delivery {
@@ -622,12 +715,6 @@ async function quickAdd(event: MouseEvent) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Libellé synchronisé avec la photo du carrousel affichée — distinct du gris
-   neutre pour bien montrer qu'il vient de changer avec le défilement. */
-.product-card__tag--variant {
-  color: var(--color-primary);
 }
 
 /* Un délai de livraison est une info rassurante : vert (--color-success,
