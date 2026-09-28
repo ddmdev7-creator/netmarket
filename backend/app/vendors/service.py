@@ -91,6 +91,10 @@ async def get_public_vendor(db: AsyncSession, vendor_id: uuid.UUID) -> Vendor:
     vendor = await repository.get_by_id(db, vendor_id)
     if vendor is None or vendor.status != VendorStatus.APPROVED:
         raise NotFoundError("Boutique introuvable.")
+    product_count, average, review_count = await repository.get_public_stats(db, vendor.id)
+    vendor.product_count = product_count
+    vendor.average_rating = average
+    vendor.review_count = review_count
     return vendor
 
 

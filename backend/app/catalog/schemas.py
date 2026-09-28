@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Literal
 
 from fastapi import Query
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.catalog.models import ProductStatus
@@ -145,6 +146,7 @@ class ProductFilters:
     sort: ProductSort = ProductSort.RECENT
     near_lat: float | None = None
     near_lng: float | None = None
+    ids: list[uuid.UUID] | None = None
     # Public (produits d'une boutique, suggestion "boutique" de la recherche) ;
     # forcé par catalog/service.py::list_my_products pour la liste du vendeur.
     vendor_id: uuid.UUID | None = None
@@ -164,7 +166,18 @@ def product_filters(
     near_lat: float | None = Query(default=None, ge=-90, le=90, description="Latitude pour sort=nearest"),
     near_lng: float | None = Query(default=None, ge=-180, le=180, description="Longitude pour sort=nearest"),
     vendor_id: uuid.UUID | None = Query(default=None, description="Produits d'une boutique"),
+    ids: str | None = Query(
+        default=None, max_length=2000, description="Liste d'ids séparés par des virgules (vus récemment)"
+    ),
 ) -> ProductFilters:
+    id_list: list[uuid.UUID] | None = None
+    if ids:
+        try:
+            id_list = [uuid.UUID(part) for part in ids.split(",") if part.strip()][:50]
+        except ValueError as exc:
+            raise RequestValidationError(
+                [{"loc": ("query", "ids"), "msg": "Identifiant invalide.", "type": "value_error"}]
+            ) from exc
     return ProductFilters(
         category_id=category_id,
         min_price=min_price,
@@ -175,6 +188,7 @@ def product_filters(
         near_lat=near_lat,
         near_lng=near_lng,
         vendor_id=vendor_id,
+        ids=id_list,
     )
 
 
@@ -218,3 +232,15 @@ class SearchSuggestions(BaseModel):
     # Requête corrigée d'après les mots du catalogue, seulement quand la
     # recherche ne trouve rien ("ordinatuer" → "ordinateur").
     did_you_mean: str | None = None
+
+
+class ProductDeliveryQuote(BaseModel):
+    """Frais et délai de livraison de CE produit vers une position (fiche produit).
+    Sans position, delivery_fee vaut None et seul le palier le moins cher
+    (min_fee, "dès …") est connu."""
+
+    delivery_fee: int | None
+    min_fee: int
+    distance_km: float | None
+    estimated_delivery_min: date
+    estimated_delivery_max: date

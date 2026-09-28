@@ -139,6 +139,8 @@ async def list_products(
         stmt = stmt.where(Product.status == filters.status)
     if filters.vendor_id is not None:
         stmt = stmt.where(Product.vendor_id == filters.vendor_id)
+    if filters.ids is not None:
+        stmt = stmt.where(Product.id.in_(filters.ids))
     if filters.category_id is not None:
         stmt = stmt.where(Product.category_id.in_(category_subtree_ids(filters.category_id)))
     if filters.min_price is not None:

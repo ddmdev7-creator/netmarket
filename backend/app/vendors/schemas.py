@@ -1,7 +1,7 @@
 """Pydantic schemas for vendor onboarding, profile and admin validation."""
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -85,6 +85,11 @@ class VendorPublicRead(BaseModel):
     latitude: float | None
     longitude: float | None
     preparation_days: int
+    # Renseignés uniquement par GET /vendors/{id} (encart boutique de la fiche produit).
+    created_at: datetime | None = None
+    product_count: int | None = None
+    average_rating: float | None = None
+    review_count: int | None = None
 
 
 class LowStockProduct(BaseModel):

@@ -595,3 +595,49 @@ async def test_products_filter_by_vendor(
 
     response = await client.get("/products", params={"vendor_id": str(other.id)})
     assert [i["name"] for i in response.json()["items"]] == ["B"]
+
+
+async def test_products_by_ids(client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category) -> None:
+    items = [Product(vendor_id=vendor.id, category_id=category.id, name=n, price=1, stock=1) for n in "ABC"]
+    db_session.add_all(items)
+    await db_session.flush()
+
+    response = await client.get("/products", params={"ids": f"{items[0].id},{items[2].id}"})
+    assert sorted(i["name"] for i in response.json()["items"]) == ["A", "C"]
+    assert (await client.get("/products", params={"ids": "pas-un-id"})).status_code == 422
+
+
+async def test_product_delivery_quote(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category
+) -> None:
+    from app.delivery.models import DeliveryFeeTier
+
+    vendor.latitude, vendor.longitude = 9.5, -13.7
+    db_session.add_all(
+        [
+            DeliveryFeeTier(max_km=5, fee=10000, transit_days=0),
+            DeliveryFeeTier(max_km=None, fee=30000, transit_days=2),
+        ]
+    )
+    item = Product(vendor_id=vendor.id, category_id=category.id, name="X", price=1, stock=1)
+    db_session.add(item)
+    await db_session.flush()
+
+    generic = (await client.get(f"/products/{item.id}/delivery-quote")).json()
+    assert generic["delivery_fee"] is None and generic["min_fee"] == 10000
+
+    near = (await client.get(f"/products/{item.id}/delivery-quote", params={"latitude": 9.51, "longitude": -13.7})).json()
+    assert near["delivery_fee"] == 10000 and near["distance_km"] == 1.1
+
+
+async def test_public_vendor_includes_stats(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category, buyer_user: User
+) -> None:
+    item = Product(vendor_id=vendor.id, category_id=category.id, name="X", price=1, stock=1)
+    db_session.add(item)
+    await db_session.flush()
+    db_session.add(Review(product_id=item.id, user_id=buyer_user.id, rating=4))
+    await db_session.flush()
+
+    body = (await client.get(f"/vendors/{vendor.id}")).json()
+    assert body["product_count"] == 1 and body["average_rating"] == 4.0 and body["review_count"] == 1

@@ -71,6 +71,11 @@ export interface VendorPublicRead {
   latitude: number | null
   longitude: number | null
   preparation_days: number
+  /** Renseignés seulement par GET /vendors/{id}. */
+  created_at?: string | null
+  product_count?: number | null
+  average_rating?: number | null
+  review_count?: number | null
 }
 
 export interface SubscriptionPlanRead {
@@ -1148,4 +1153,13 @@ export interface SearchSuggestions {
   categories: CategoryRead[]
   shops: { id: string; shop_name: string; product_count: number }[]
   did_you_mean: string | null
+}
+
+/** GET /products/{id}/delivery-quote */
+export interface ProductDeliveryQuote {
+  delivery_fee: number | null
+  min_fee: number
+  distance_km: number | null
+  estimated_delivery_min: string
+  estimated_delivery_max: string
 }

@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.users.models import User
@@ -56,3 +56,25 @@ async def list_by_status(db: AsyncSession, status: VendorStatus | None) -> list[
         stmt = stmt.where(Vendor.status == status)
     rows = (await db.execute(stmt.order_by(Vendor.created_at.desc()))).all()
     return [_attach_user_fields(vendor, user) for vendor, user in rows]
+
+
+async def get_public_stats(db: AsyncSession, vendor_id: uuid.UUID) -> tuple[int, float | None, int]:
+    """(produits actifs, note moyenne, nombre d'avis) sur l'ensemble de la boutique."""
+    from app.catalog.models import Product, ProductStatus
+    from app.reviews.models import Review
+
+    product_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(Product)
+            .where(Product.vendor_id == vendor_id, Product.status == ProductStatus.ACTIVE)
+        )
+    ).scalar_one()
+    average, review_count = (
+        await db.execute(
+            select(func.avg(Review.rating), func.count(Review.id))
+            .join(Product, Review.product_id == Product.id)
+            .where(Product.vendor_id == vendor_id)
+        )
+    ).one()
+    return product_count, (float(average) if average is not None else None), review_count

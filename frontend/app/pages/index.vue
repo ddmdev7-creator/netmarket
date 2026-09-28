@@ -10,14 +10,13 @@ import {
   PhStorefront,
   PhTag,
 } from '@phosphor-icons/vue'
-import type { AddressRead, CategoryRead, Page, ProductRead, ProductSort, SearchSuggestions } from '~/types/api'
+import type { CategoryRead, Page, ProductRead, ProductSort, SearchSuggestions } from '~/types/api'
 
 const { apiFetch } = useApi()
-const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const toast = useToastStore()
-const { locate, locating } = useGeolocation()
+const { near, locating, resolve: resolveNear, requestPosition: askPosition } = useNearPosition()
 
 const PAGE_SIZE = 20
 const RAIL_SIZE = 10
@@ -52,10 +51,6 @@ const maxPrice = ref<number | null>(null)
 const inStockOnly = ref(false)
 const filtersOpen = ref(false)
 
-// Position de référence pour "Près de moi" : adresse enregistrée ou
-// position du téléphone (demandée seulement sur action de l'utilisateur).
-const near = ref<{ lat: number; lng: number } | null>(null)
-const NEAR_STORAGE_KEY = 'nm-near'
 
 const hasPriceFilter = computed(() => minPrice.value !== null || maxPrice.value !== null)
 const hasActiveFilters = computed(() => hasPriceFilter.value || inStockOnly.value)
@@ -315,19 +310,9 @@ async function loadNearRail() {
   }
 }
 
-function saveNear(lat: number, lng: number) {
-  near.value = { lat, lng }
-  try {
-    localStorage.setItem(NEAR_STORAGE_KEY, JSON.stringify(near.value))
-  } catch {
-    // Stockage indisponible (navigation privée…) : la position reste en mémoire.
-  }
-}
-
 async function requestPosition(): Promise<boolean> {
   try {
-    const position = await locate()
-    saveNear(position.latitude, position.longitude)
+    await askPosition()
     await loadNearRail()
     return true
   } catch (e) {
@@ -337,22 +322,7 @@ async function requestPosition(): Promise<boolean> {
 }
 
 async function initNear() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(NEAR_STORAGE_KEY) ?? 'null')
-    if (stored && typeof stored.lat === 'number' && typeof stored.lng === 'number') near.value = stored
-  } catch {
-    // Valeur illisible : ignorée.
-  }
-  if (!near.value && auth.isAuthenticated) {
-    try {
-      const addresses = await apiFetch<AddressRead[]>('/addresses')
-      const located = addresses.filter((a) => a.latitude !== null && a.longitude !== null)
-      const chosen = located.find((a) => a.is_default) ?? located[0]
-      if (chosen) near.value = { lat: chosen.latitude!, lng: chosen.longitude! }
-    } catch {
-      // Pas d'adresse : la rubrique propose d'activer la position.
-    }
-  }
+  await resolveNear()
   await loadNearRail()
   // Tri "Près de moi" repris de l'URL : la liste serveur a été triée par date
   // faute de position, on la recharge maintenant qu'elle est connue.

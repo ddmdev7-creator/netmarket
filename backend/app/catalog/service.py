@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.catalog import repository
 from app.catalog.models import Category, Product, ProductVariant, ProductVariantAttribute
 from app.catalog.schemas import (
+    ProductDeliveryQuote,
     CategoryCreate,
     CategoryUpdate,
     ProductCreate,
@@ -23,7 +24,8 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.pagination import PageParams
 from app.delivery import repository as delivery_repository
 from app.delivery.models import DeliveryFeeTier
-from app.delivery.service import compute_transit_days
+from app.common.geo import haversine_km
+from app.delivery.service import compute_fee, compute_transit_days
 from app.reviews import repository as reviews_repository
 from app.users.models import User, UserRole
 from app.vendors import repository as vendor_repository
@@ -184,6 +186,32 @@ async def list_products(
         _attach_rating(product, rating_map.get(product.id))
         _attach_delivery_estimate(product, tiers)
     return products, total
+
+
+async def quote_product_delivery(
+    db: AsyncSession, product_id: uuid.UUID, latitude: float | None, longitude: float | None
+) -> ProductDeliveryQuote:
+    product = await repository.get_product_by_id(db, product_id)
+    if product is None:
+        raise NotFoundError("Produit introuvable.")
+    vendor = await vendor_repository.get_by_id(db, product.vendor_id)
+    tiers = await delivery_repository.list_all(db)
+    origin = (vendor.latitude, vendor.longitude) if vendor else (None, None)
+    destination = (latitude, longitude)
+    has_destination = latitude is not None and longitude is not None
+    distance = haversine_km(*origin, latitude, longitude) if has_destination and None not in origin else None
+    estimate = estimate_delivery_window(
+        transit_days=compute_transit_days(tiers, origin, destination if has_destination else (None, None)),
+        preparation_days=product.vendor_preparation_days,
+        from_date=date.today(),
+    )
+    return ProductDeliveryQuote(
+        delivery_fee=compute_fee(tiers, origin, destination) if has_destination else None,
+        min_fee=min((t.fee for t in tiers), default=0),
+        distance_km=round(distance, 1) if distance is not None else None,
+        estimated_delivery_min=estimate.min_date,
+        estimated_delivery_max=estimate.max_date,
+    )
 
 
 async def suggest(db: AsyncSession, q: str) -> dict:

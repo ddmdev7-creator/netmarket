@@ -8,13 +8,17 @@ import type { ProductRead } from '~/types/api'
  * produits sont fournis par la page : elle décide quand les charger (la
  * rubrique "Près de chez vous" dépend d'une position connue côté client).
  */
-defineProps<{
-  title: string
-  icon: Component
-  hue: number
-  products: ProductRead[]
-  loading?: boolean
-}>()
+withDefaults(
+  defineProps<{
+    title: string
+    icon: Component
+    hue: number
+    products: ProductRead[]
+    loading?: boolean
+    seeAll?: boolean
+  }>(),
+  { loading: false, seeAll: true },
+)
 const emit = defineEmits<{ seeAll: [] }>()
 </script>
 
@@ -23,7 +27,7 @@ const emit = defineEmits<{ seeAll: [] }>()
     <header class="rail__head">
       <span class="rail__icon" :style="{ '--hue': hue }"><component :is="icon" :size="18" weight="fill" /></span>
       <h2 class="rail__title">{{ title }}</h2>
-      <button type="button" class="rail__all" @click="emit('seeAll')">
+      <button v-if="seeAll" type="button" class="rail__all" @click="emit('seeAll')">
         Voir tout
         <PhCaretRight :size="14" weight="bold" />
       </button>

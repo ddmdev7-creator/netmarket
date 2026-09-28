@@ -11,6 +11,7 @@ from app.catalog.schemas import (
     CategoryRead,
     CategoryUpdate,
     ProductCreate,
+    ProductDeliveryQuote,
     ProductFilters,
     ProductRead,
     ProductUpdate,
@@ -115,6 +116,16 @@ async def list_my_products(
 ) -> Page[ProductRead]:
     items, total = await service.list_my_products(db, current_user, params, filters)
     return Page.create(items=items, total=total, params=params)
+
+
+@router.get("/products/{product_id}/delivery-quote", response_model=ProductDeliveryQuote)
+async def quote_product_delivery(
+    product_id: uuid.UUID,
+    latitude: float | None = Query(default=None, ge=-90, le=90),
+    longitude: float | None = Query(default=None, ge=-180, le=180),
+    db: AsyncSession = Depends(get_db),
+) -> ProductDeliveryQuote:
+    return await service.quote_product_delivery(db, product_id, latitude, longitude)
 
 
 @router.get("/products/{product_id}", response_model=ProductRead)

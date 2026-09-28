@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhFlag, PhMapPin, PhShoppingCart, PhStar, PhTruck } from '@phosphor-icons/vue'
-import type { ProductRead, ProductVariantRead, ReviewRead } from '~/types/api'
+import {
+  PhArrowLeft,
+  PhClockCounterClockwise,
+  PhFlag,
+  PhShareNetwork,
+  PhShoppingCart,
+  PhSquaresFour,
+  PhStar,
+} from '@phosphor-icons/vue'
+import type { Page, ProductRead, ProductVariantRead, ReviewRead } from '~/types/api'
 
 definePageMeta({ layout: 'blank' })
 
@@ -341,22 +349,89 @@ function decr() {
   justAdded.value = false
 }
 
-async function addToCart() {
+async function addToCart(): Promise<boolean> {
   if (!auth.isAuthenticated) {
     await router.push({ path: '/connexion', query: { redirect: route.fullPath } })
-    return
+    return false
   }
   adding.value = true
   try {
     await cartStore.addItem(productId, quantity.value, activeVariant.value?.id ?? null)
     toast.success('Ajouté au panier.')
     justAdded.value = true
+    return true
   } catch (e) {
     toast.error(apiErrorMessage(e, "Impossible d'ajouter ce produit au panier."))
+    return false
   } finally {
     adding.value = false
   }
 }
+
+// "Acheter maintenant" : ajoute au panier puis file directement à la commande.
+const buying = ref(false)
+async function buyNow() {
+  buying.value = true
+  try {
+    if (justAdded.value || (await addToCart())) await router.push('/checkout')
+  } finally {
+    buying.value = false
+  }
+}
+
+// --- Partage (WhatsApp & co via le menu natif du téléphone) -----------------
+
+async function share() {
+  if (!product.value) return
+  const url = window.location.href
+  const text = `${product.value.name} — ${formatGnf(effectivePrice.value)} sur Netmarket`
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: product.value.name, text, url })
+    } catch {
+      // Partage annulé par l'utilisateur.
+    }
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(url)
+    toast.success('Lien copié.')
+  } catch {
+    toast.error('Impossible de copier le lien.')
+  }
+}
+
+// --- Produits similaires & vus récemment ----------------------------------------
+
+const { data: similarPage, pending: similarPending } = await useAsyncData(
+  `product-similar-${productId}`,
+  () =>
+    product.value
+      ? apiFetch<Page<ProductRead>>('/products', {
+          query: { category_id: product.value.category_id, page_size: 13, in_stock: true },
+        })
+      : Promise.resolve(null),
+  { lazy: true, server: false },
+)
+const similar = computed(() => (similarPage.value?.items ?? []).filter((p) => p.id !== productId).slice(0, 12))
+
+const recentlyViewed = useRecentlyViewed()
+const recentProducts = ref<ProductRead[]>([])
+
+async function loadRecent() {
+  const ids = recentlyViewed.read().filter((id) => id !== productId).slice(0, 12)
+  recentlyViewed.add(productId)
+  if (!ids.length) return
+  try {
+    const page = await apiFetch<Page<ProductRead>>('/products', { query: { ids: ids.join(','), page_size: ids.length } })
+    const byId = new Map(page.items.map((p) => [p.id, p]))
+    recentProducts.value = ids.map((id) => byId.get(id)).filter((p): p is ProductRead => !!p)
+  } catch {
+    recentProducts.value = []
+  }
+}
+
+onMounted(loadRecent)
 </script>
 
 <template>
@@ -369,6 +444,9 @@ async function addToCart() {
         <PhArrowLeft :size="20" />
       </v-btn>
       <LayoutHomeLink />
+      <v-btn icon variant="text" class="ml-auto" aria-label="Partager ce produit" @click="share">
+        <PhShareNetwork :size="20" />
+      </v-btn>
     </div>
 
     <Transition name="mini-bar">
@@ -396,7 +474,7 @@ async function addToCart() {
             <PhFlag :size="16" />
           </button>
         </div>
-        <div class="text-muted mb-1 text-meta">Vendu par {{ product.vendor_shop_name }}</div>
+        <a href="#boutique" class="sold-by mb-1 text-meta">Vendu par <strong>{{ product.vendor_shop_name }}</strong></a>
         <div v-if="product.average_rating !== null" class="d-flex align-center ga-1 mb-3 text-meta">
           <PhStar :size="14" weight="fill" color="var(--color-accent)" />
           <span>{{ product.average_rating.toFixed(1) }}</span>
@@ -467,7 +545,7 @@ async function addToCart() {
           </div>
         </div>
 
-        <v-divider class="mb-2" />
+        <ProductTrustPanel :product-id="productId" class="mb-4" />
 
         <v-expansion-panels variant="accordion">
           <v-expansion-panel>
@@ -487,20 +565,8 @@ async function addToCart() {
           </v-expansion-panel>
         </v-expansion-panels>
 
-        <div
-          v-if="product.estimated_delivery_min && product.estimated_delivery_max"
-          class="d-flex ga-2 mt-4 align-center text-meta"
-        >
-          <PhTruck :size="16" color="var(--color-primary)" />
-          <span>
-            Livraison estimée :
-            <strong>{{ formatDeliveryEstimate(product.estimated_delivery_min, product.estimated_delivery_max) }}</strong>
-          </span>
-        </div>
-
-        <div class="d-flex ga-2 mt-2 text-muted text-meta">
-          <PhMapPin :size="16" />
-          <span>Livraison par zone/quartier avec point de repère — pas d'adresse postale requise</span>
+        <div id="boutique" class="mt-4">
+          <ProductShopCard :vendor-id="product.vendor_id" :shop-name="product.vendor_shop_name" />
         </div>
 
         <v-divider class="my-4" />
@@ -520,6 +586,28 @@ async function addToCart() {
         </p>
         <ProductReviewList ref="reviewListRef" :product-id="productId" />
       </div>
+    </div>
+
+    <div class="px-4 mt-6 related">
+      <HomeProductRail
+        v-if="similar.length || similarPending"
+        title="Produits similaires"
+        :icon="PhSquaresFour"
+        :hue="215"
+        :products="similar"
+        :loading="similarPending"
+        class="mb-5"
+        @see-all="router.push({ path: '/', query: { cat: product.category_id } })"
+      />
+      <HomeProductRail
+        v-if="recentProducts.length"
+        title="Vus récemment"
+        :icon="PhClockCounterClockwise"
+        :hue="270"
+        :products="recentProducts"
+        :see-all="false"
+        class="mb-5"
+      />
     </div>
 
     <ProductReviewForm
@@ -543,18 +631,25 @@ async function addToCart() {
       <v-btn v-else-if="hasVariants && missingGroups.length" color="primary" variant="tonal" block size="large" @click="goToMissingGroup">
         Choisir : {{ missingGroups.join(', ') }}
       </v-btn>
-      <v-btn
-        v-else
-        color="primary"
-        block
-        size="large"
-        :loading="adding"
-        :disabled="addDisabled"
-        @click="addToCart"
-      >
-        <template v-if="addDisabled">Épuisé</template>
-        <template v-else>Ajouter au panier — {{ formatGnf(effectivePrice * quantity) }}</template>
-      </v-btn>
+      <v-btn v-else-if="addDisabled" block size="large" disabled>Épuisé</v-btn>
+      <div v-else class="buy-row">
+        <v-btn
+          variant="outlined"
+          color="primary"
+          size="large"
+          class="buy-row__cart"
+          :loading="adding && !buying"
+          :disabled="buying"
+          aria-label="Ajouter au panier"
+          @click="addToCart"
+        >
+          <PhShoppingCart :size="20" />
+          <span class="buy-row__cart-label">Ajouter</span>
+        </v-btn>
+        <v-btn color="primary" size="large" class="buy-row__now" :loading="buying" @click="buyNow">
+          Acheter · {{ formatGnf(effectivePrice * quantity) }}
+        </v-btn>
+      </div>
     </div>
   </div>
 </template>
@@ -758,6 +853,41 @@ async function addToCart() {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.sold-by {
+  display: inline-block;
+  color: var(--color-neutral-400);
+  text-decoration: none;
+}
+
+.sold-by strong {
+  color: var(--color-primary-300);
+}
+
+.buy-row {
+  display: flex;
+  gap: 8px;
+}
+
+.buy-row__cart {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.buy-row__now {
+  flex: 1;
+  min-width: 0;
+}
+
+.related {
+  overflow-x: clip;
+}
+
+@media (max-width: 380px) {
+  .buy-row__cart-label {
+    display: none;
+  }
 }
 
 /* Barre compacte du haut (téléphone uniquement) — voir mediaOutOfView. */
