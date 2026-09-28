@@ -1,5 +1,6 @@
 """Database access for categories and products."""
 
+import math
 import uuid
 
 from sqlalchemy import func, select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.catalog.models import Category, Product, ProductStatus, ProductVariant, ProductVariantAttribute
 from app.catalog.schemas import ProductFilters, ProductSort
 from app.core.pagination import PageParams
+from app.reviews.models import Review
 from app.vendors.models import Vendor
 
 # Seuil de stock faible partagé par le dashboard vendeur (app/vendors/service.py)
@@ -18,8 +20,10 @@ LOW_STOCK_THRESHOLD = 5
 # --- Categories ---
 
 
-async def create_category(db: AsyncSession, *, name: str, parent_id: uuid.UUID | None) -> Category:
-    category = Category(name=name, parent_id=parent_id)
+async def create_category(
+    db: AsyncSession, *, name: str, parent_id: uuid.UUID | None, icon: str | None = None
+) -> Category:
+    category = Category(name=name, parent_id=parent_id, icon=icon)
     db.add(category)
     await db.flush()
     return category
@@ -33,6 +37,15 @@ async def get_category_by_id(db: AsyncSession, category_id: uuid.UUID) -> Catego
 async def list_categories(db: AsyncSession) -> list[Category]:
     result = await db.execute(select(Category).order_by(Category.name))
     return list(result.scalars().all())
+
+
+def category_subtree_ids(category_id: uuid.UUID):
+    """Sous-requête des ids de la catégorie et de toutes ses descendantes — filtrer
+    sur une catégorie parente ("Ordinateur") montre aussi ses sous-catégories
+    ("Hp", "Lenovo"), sinon une catégorie racine sans produit direct paraît vide."""
+    tree = select(Category.id).where(Category.id == category_id).cte("category_tree", recursive=True)
+    tree = tree.union_all(select(Category.id).where(Category.parent_id == tree.c.id))
+    return select(tree.c.id)
 
 
 async def delete_category(db: AsyncSession, category: Category) -> None:
@@ -80,7 +93,7 @@ async def list_products(
     if filters.vendor_id is not None:
         stmt = stmt.where(Product.vendor_id == filters.vendor_id)
     if filters.category_id is not None:
-        stmt = stmt.where(Product.category_id == filters.category_id)
+        stmt = stmt.where(Product.category_id.in_(category_subtree_ids(filters.category_id)))
     if filters.min_price is not None:
         stmt = stmt.where(Product.price >= filters.min_price)
     if filters.max_price is not None:
@@ -96,17 +109,36 @@ async def list_products(
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
 
-    order_by = {
-        ProductSort.PRICE_ASC: Product.price.asc(),
-        ProductSort.PRICE_DESC: Product.price.desc(),
-        ProductSort.RECENT: Product.created_at.desc(),
-    }[filters.sort]
+    paged_stmt = stmt.join(Vendor, Product.vendor_id == Vendor.id)
+    order_by: list = []
+    if filters.sort == ProductSort.TOP_RATED:
+        ratings = (
+            select(Review.product_id, func.avg(Review.rating).label("avg"), func.count(Review.id).label("n"))
+            .group_by(Review.product_id)
+            .subquery()
+        )
+        paged_stmt = paged_stmt.outerjoin(ratings, ratings.c.product_id == Product.id)
+        order_by = [ratings.c.avg.desc().nulls_last(), ratings.c.n.desc().nulls_last()]
+    elif filters.sort == ProductSort.NEAREST and filters.near_lat is not None and filters.near_lng is not None:
+        # Distance "à plat" (longitude corrigée par cos(lat)) : suffisante pour
+        # classer des boutiques à l'échelle d'une ville.
+        lng_scale = math.cos(math.radians(filters.near_lat))
+        distance = func.pow(Vendor.latitude - filters.near_lat, 2) + func.pow(
+            (Vendor.longitude - filters.near_lng) * lng_scale, 2
+        )
+        order_by = [distance.asc().nulls_last()]
+    elif filters.sort == ProductSort.PRICE_ASC:
+        order_by = [Product.price.asc()]
+    elif filters.sort == ProductSort.PRICE_DESC:
+        order_by = [Product.price.desc()]
+    # Départage stable (sinon offset/limit peut répéter ou sauter des produits
+    # d'une page à l'autre en défilement infini).
+    order_by += [Product.created_at.desc(), Product.id]
 
     paged_stmt = (
-        stmt.join(Vendor, Product.vendor_id == Vendor.id)
-        .add_columns(Vendor.shop_name, Vendor.zone, Vendor.preparation_days)
+        paged_stmt.add_columns(Vendor.shop_name, Vendor.zone, Vendor.preparation_days)
         .options(selectinload(Product.variants).selectinload(ProductVariant.attributes))
-        .order_by(order_by)
+        .order_by(*order_by)
         .offset(params.offset)
         .limit(params.page_size)
     )

@@ -365,17 +365,20 @@ export interface CategoryRead {
   id: string
   name: string
   parent_id: string | null
+  icon: string | null
 }
 
 export interface CategoryCreate {
   name: string
   parent_id?: string | null
+  icon?: string | null
 }
 
 /** PATCH /categories/{id} — parent_id null moves the category back to the root; omit a key to leave it unchanged. */
 export interface CategoryUpdate {
   name?: string
   parent_id?: string | null
+  icon?: string | null
 }
 
 export interface ProductVariantAttributeRead {
@@ -492,7 +495,7 @@ export interface ReportRead {
   review_rating: number | null
 }
 
-export type ProductSort = 'recent' | 'price_asc' | 'price_desc'
+export type ProductSort = 'recent' | 'price_asc' | 'price_desc' | 'top_rated' | 'nearest'
 
 export interface ProductFilters {
   category_id?: string

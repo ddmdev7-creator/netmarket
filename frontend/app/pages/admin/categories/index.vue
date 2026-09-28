@@ -108,7 +108,14 @@ const isMatch = (row: CategoryRow) => {
 const dialogOpen = ref(false)
 const editingId = ref<string | null>(null)
 const saving = ref(false)
-const form = ref<{ name: string; parent_id: string | null }>({ name: '', parent_id: null })
+const form = ref<{ name: string; parent_id: string | null; icon: string | null }>({
+  name: '',
+  parent_id: null,
+  icon: null,
+})
+
+// Icône affichée tant que l'admin n'en a pas choisi une : devinée d'après le nom saisi.
+const guessedIcon = computed(() => categoryIcon({ name: form.value.name }))
 
 function descendantIds(id: string): Set<string> {
   const result = new Set<string>()
@@ -133,13 +140,13 @@ const parentOptions = computed(() => {
 
 function openCreate(parentId: string | null = null) {
   editingId.value = null
-  form.value = { name: '', parent_id: parentId }
+  form.value = { name: '', parent_id: parentId, icon: null }
   dialogOpen.value = true
 }
 
 function openEdit(category: CategoryRead) {
   editingId.value = category.id
-  form.value = { name: category.name, parent_id: category.parent_id }
+  form.value = { name: category.name, parent_id: category.parent_id, icon: category.icon }
   dialogOpen.value = true
 }
 
@@ -152,10 +159,10 @@ async function save() {
   saving.value = true
   try {
     if (editingId.value) {
-      const payload: CategoryUpdate = { name, parent_id: form.value.parent_id }
+      const payload: CategoryUpdate = { name, parent_id: form.value.parent_id, icon: form.value.icon }
       await apiFetch(`/categories/${editingId.value}`, { method: 'PATCH', body: payload })
     } else {
-      const payload: CategoryCreate = { name, parent_id: form.value.parent_id ?? undefined }
+      const payload: CategoryCreate = { name, parent_id: form.value.parent_id ?? undefined, icon: form.value.icon }
       await apiFetch('/categories', { method: 'POST', body: payload })
     }
     await refresh()
@@ -239,10 +246,17 @@ async function deleteCategory() {
         :style="{ paddingLeft: `${14 + row.depth * 26}px` }"
       >
         <span v-if="row.depth > 0" class="cat-row__branch" :style="{ left: `${14 + (row.depth - 1) * 26 + 8}px` }" />
+        <span
+          v-if="row.depth === 0"
+          class="cat-row__avatar"
+          :style="{ '--hue': categoryIcon(row.category).hue }"
+        >
+          <component :is="categoryIcon(row.category).icon" :size="17" weight="duotone" />
+        </span>
         <component
-          :is="row.childCount > 0 || row.depth === 0 ? PhFolderSimple : PhFolderSimpleDashed"
+          :is="row.childCount > 0 ? PhFolderSimple : PhFolderSimpleDashed"
+          v-else
           :size="20"
-          :weight="row.depth === 0 ? 'fill' : 'regular'"
           class="cat-row__icon"
         />
         <div class="cat-row__main">
@@ -311,6 +325,34 @@ async function deleteCategory() {
         />
         <p class="text-muted mb-4" style="font-size: 11.5px">
           Choisir un parent range cette catégorie dans une autre ; vide, c'est une catégorie principale.
+        </p>
+
+        <label class="field-label">Icône sur l'accueil</label>
+        <div class="icon-grid mb-1">
+          <button
+            v-for="def in CATEGORY_ICONS"
+            :key="def.key"
+            type="button"
+            class="icon-grid__item"
+            :class="{
+              'icon-grid__item--active': form.icon === def.key,
+              'icon-grid__item--guess': !form.icon && guessedIcon.key === def.key,
+            }"
+            :style="{ '--hue': def.hue }"
+            :title="def.label"
+            :aria-label="def.label"
+            :aria-pressed="form.icon === def.key"
+            @click="form.icon = form.icon === def.key ? null : def.key"
+          >
+            <component :is="def.icon" :size="20" weight="duotone" />
+          </button>
+        </div>
+        <p class="text-muted mb-4" style="font-size: 11.5px">
+          {{
+            form.icon
+              ? `Icône choisie : ${CATEGORY_ICONS.find((d) => d.key === form.icon)?.label}. Clique à nouveau pour revenir à l'automatique.`
+              : `Automatique (d'après le nom) : ${guessedIcon.label}.`
+          }}
         </p>
 
         <div class="d-flex ga-2">
@@ -503,5 +545,50 @@ async function deleteCategory() {
   background: color-mix(in srgb, var(--color-error) 9%, transparent);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
+}
+
+.cat-row__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: hsl(var(--hue) 70% var(--tint-bg));
+  color: hsl(var(--hue) 60% var(--tint-fg));
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
+}
+
+.icon-grid__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-divider);
+  background: hsl(var(--hue) 70% var(--tint-bg-soft));
+  color: hsl(var(--hue) 60% var(--tint-fg));
+  cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.icon-grid__item:hover {
+  transform: translateY(-1px);
+}
+
+.icon-grid__item--guess {
+  border-style: dashed;
+  border-color: hsl(var(--hue) 60% 55%);
+}
+
+.icon-grid__item--active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-100);
 }
 </style>

@@ -77,7 +77,7 @@ def _sanitize_description(html: str | None) -> str | None:
 async def create_category(db: AsyncSession, data: CategoryCreate) -> Category:
     if data.parent_id is not None and await repository.get_category_by_id(db, data.parent_id) is None:
         raise NotFoundError("Catégorie parente introuvable.")
-    category = await repository.create_category(db, name=data.name, parent_id=data.parent_id)
+    category = await repository.create_category(db, name=data.name, parent_id=data.parent_id, icon=data.icon)
     await db.commit()
     await db.refresh(category)
     return category
@@ -93,6 +93,9 @@ async def update_category(db: AsyncSession, category_id: uuid.UUID, data: Catego
         if fields["name"] is None or not fields["name"].strip():
             raise ConflictError("Le nom de la catégorie est obligatoire.")
         category.name = fields["name"].strip()
+
+    if "icon" in fields:
+        category.icon = fields["icon"] or None
 
     if "parent_id" in fields:
         new_parent_id = fields["parent_id"]

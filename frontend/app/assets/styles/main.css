@@ -71,9 +71,18 @@
      vers le contenu plutôt que de descendre, pour bien les détacher de ce
      qui défile derrière elles. */
   --shadow-dock: 0 -2px 14px rgba(20, 21, 26, 0.08);
+
+  /* Pastilles teintées (icônes de catégorie…) : chaque élément fixe sa
+     teinte via --hue, ces luminosités s'inversent en thème sombre. */
+  --tint-bg: 94%;
+  --tint-bg-soft: 97%;
+  --tint-fg: 38%;
 }
 
 :root[data-theme='dark'] {
+  --tint-bg: 22%;
+  --tint-bg-soft: 17%;
+  --tint-fg: 76%;
   --color-bg: #121214;
   /* Aligné sur colors.surface / surface-bright du thème Vuetify (nocturne.ts)
      — nettement plus clair que --color-bg pour que les cartes se détachent

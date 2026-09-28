@@ -6,6 +6,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog.models import Category, Product
+from app.reviews.models import Review
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor, VendorStatus
 from tests.conftest import auth_headers, make_user
@@ -463,3 +464,63 @@ async def test_update_variant_keeping_the_same_attribute_name_does_not_fail(
     assert response.status_code == 200
     assert response.json()["sku"] == "ABC"
     assert response.json()["attributes"] == [{"name": "Couleur", "value": "Rouge"}]
+
+
+async def test_category_filter_includes_subcategories(
+    client: AsyncClient, db_session: AsyncSession, vendor_user: User, category: Category
+) -> None:
+    child = Category(name="Téléphones", parent_id=category.id)
+    other = Category(name="Alimentation")
+    db_session.add_all([child, other])
+    await db_session.flush()
+    headers = auth_headers(vendor_user)
+    for name, cat in (("Direct", category), ("Enfant", child), ("Ailleurs", other)):
+        await client.post(
+            "/products",
+            json={"category_id": str(cat.id), "name": name, "price": 1000, "stock": 1},
+            headers=headers,
+        )
+
+    response = await client.get("/products", params={"category_id": str(category.id)})
+
+    assert sorted(item["name"] for item in response.json()["items"]) == ["Direct", "Enfant"]
+
+
+async def test_category_icon_roundtrip(client: AsyncClient, admin_user: User) -> None:
+    headers = auth_headers(admin_user)
+    created = await client.post("/categories", json={"name": "Mode", "icon": "tshirt"}, headers=headers)
+    assert created.json()["icon"] == "tshirt"
+
+    updated = await client.patch(f"/categories/{created.json()['id']}", json={"icon": None}, headers=headers)
+    assert updated.json()["icon"] is None
+
+
+async def test_product_sort_top_rated_and_nearest(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category, buyer_user: User
+) -> None:
+    far_user = await make_user(db_session, phone="+224620008888", role=UserRole.VENDOR)
+    far_vendor = Vendor(
+        user_id=far_user.id, shop_name="Loin", status=VendorStatus.APPROVED, latitude=10.5, longitude=-12.5
+    )
+    vendor.latitude, vendor.longitude = 9.54, -13.68
+    db_session.add(far_vendor)
+    await db_session.flush()
+    near = Product(vendor_id=vendor.id, category_id=category.id, name="Proche", price=1000, stock=1)
+    far = Product(vendor_id=far_vendor.id, category_id=category.id, name="Lointain", price=1000, stock=1)
+    unrated = Product(vendor_id=vendor.id, category_id=category.id, name="Sans avis", price=1000, stock=1)
+    db_session.add_all([near, far, unrated])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Review(product_id=far.id, user_id=buyer_user.id, rating=5),
+            Review(product_id=near.id, user_id=buyer_user.id, rating=3),
+        ]
+    )
+    await db_session.flush()
+
+    rated = await client.get("/products", params={"sort": "top_rated"})
+    assert [i["name"] for i in rated.json()["items"]][:2] == ["Lointain", "Proche"]
+    assert rated.json()["items"][2]["name"] == "Sans avis"
+
+    nearest = await client.get("/products", params={"sort": "nearest", "near_lat": 9.55, "near_lng": -13.67})
+    assert nearest.json()["items"][-1]["name"] == "Lointain"

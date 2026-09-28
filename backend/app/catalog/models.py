@@ -18,6 +18,9 @@ class Category(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True
     )
+    # Clé d'icône choisie par l'admin (voir frontend utils/categoryIcons.ts) —
+    # None = icône devinée côté frontend à partir du nom.
+    icon: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class ProductStatus(StrEnum):

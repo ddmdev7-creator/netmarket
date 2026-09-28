@@ -16,6 +16,9 @@ class ProductSort(StrEnum):
     RECENT = "recent"
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
+    TOP_RATED = "top_rated"
+    # Boutiques les plus proches de near_lat/near_lng (repli sur "recent" sans position).
+    NEAREST = "nearest"
 
 
 StockLevel = Literal["out", "low"]
@@ -24,6 +27,7 @@ StockLevel = Literal["out", "low"]
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     parent_id: uuid.UUID | None = None
+    icon: str | None = Field(default=None, max_length=40)
 
 
 class CategoryUpdate(BaseModel):
@@ -31,6 +35,7 @@ class CategoryUpdate(BaseModel):
     # None remet la catégorie à la racine — d'où exclude_unset côté service
     # pour distinguer "non fourni" de "explicitement null".
     parent_id: uuid.UUID | None = None
+    icon: str | None = Field(default=None, max_length=40)
 
 
 class CategoryRead(BaseModel):
@@ -39,6 +44,7 @@ class CategoryRead(BaseModel):
     id: uuid.UUID
     name: str
     parent_id: uuid.UUID | None
+    icon: str | None = None
 
 
 class ProductCreate(BaseModel):
@@ -137,6 +143,8 @@ class ProductFilters:
     in_stock: bool | None
     q: str | None
     sort: ProductSort = ProductSort.RECENT
+    near_lat: float | None = None
+    near_lng: float | None = None
     # Not settable from the public query params below — only constructed
     # internally by catalog/service.py::list_my_products, for the vendor's
     # own product list (which also needs non-active products, unlike the
@@ -155,9 +163,18 @@ def product_filters(
     in_stock: bool | None = Query(default=None, description="Uniquement les produits disponibles en stock"),
     q: str | None = Query(default=None, min_length=1, max_length=100, description="Recherche par nom de produit"),
     sort: ProductSort = Query(default=ProductSort.RECENT, description="Tri des résultats"),
+    near_lat: float | None = Query(default=None, ge=-90, le=90, description="Latitude pour sort=nearest"),
+    near_lng: float | None = Query(default=None, ge=-180, le=180, description="Longitude pour sort=nearest"),
 ) -> ProductFilters:
     return ProductFilters(
-        category_id=category_id, min_price=min_price, max_price=max_price, in_stock=in_stock, q=q, sort=sort
+        category_id=category_id,
+        min_price=min_price,
+        max_price=max_price,
+        in_stock=in_stock,
+        q=q,
+        sort=sort,
+        near_lat=near_lat,
+        near_lng=near_lng,
     )
 
 
