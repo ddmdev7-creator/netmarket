@@ -17,6 +17,7 @@ class NotificationRead(BaseModel):
     body: str
     order_id: uuid.UUID | None
     sub_order_id: uuid.UUID | None
+    product_id: uuid.UUID | None = None
     read_at: datetime | None
     created_at: datetime
 

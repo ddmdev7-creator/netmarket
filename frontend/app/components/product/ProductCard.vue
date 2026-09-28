@@ -182,6 +182,7 @@ async function quickAdd(event: MouseEvent) {
   <NuxtLink :to="`/produits/${product.id}`" class="product-card">
     <v-card class="product-card__card" :class="{ 'product-card__card--out': isOutOfStock }">
       <div class="product-card__image">
+        <ProductFavoriteButton :product-id="product.id" class="product-card__fav" />
         <div v-if="hasCarousel" ref="carouselRef" class="product-card__carousel">
           <div
             v-for="(frame, i) in frames"
@@ -325,6 +326,14 @@ async function quickAdd(event: MouseEvent) {
 
 .product-card__card--out {
   opacity: 0.7;
+}
+
+/* En haut à droite : le coin gauche porte déjà l'étiquette de stock. */
+.product-card__fav {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
 }
 
 .product-card__image {

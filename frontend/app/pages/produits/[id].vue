@@ -444,7 +444,8 @@ onMounted(loadRecent)
         <PhArrowLeft :size="20" />
       </v-btn>
       <LayoutHomeLink />
-      <v-btn icon variant="text" class="ml-auto" aria-label="Partager ce produit" @click="share">
+      <ProductFavoriteButton :product-id="productId" variant="plain" class="ml-auto" />
+      <v-btn icon variant="text" aria-label="Partager ce produit" @click="share">
         <PhShareNetwork :size="20" />
       </v-btn>
     </div>

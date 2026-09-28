@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { PhHouse, PhShoppingCart, PhPackage, PhUser } from '@phosphor-icons/vue'
+import { PhHeart, PhHouse, PhShoppingCart, PhPackage, PhUser } from '@phosphor-icons/vue'
 
 const cartStore = useCartStore()
 
 const navItems = [
   { to: '/', label: 'Accueil', icon: PhHouse },
+  { to: '/favoris', label: 'Favoris', icon: PhHeart },
   { to: '/panier', label: 'Panier', icon: PhShoppingCart },
   { to: '/commandes', label: 'Commandes', icon: PhPackage },
   { to: '/profil', label: 'Profil', icon: PhUser },

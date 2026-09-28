@@ -262,13 +262,29 @@ async def update_product(db: AsyncSession, user: User, product_id: uuid.UUID, da
     if data.stock is not None and product.variants:
         raise ConflictError("Le stock de ce produit est calculé automatiquement à partir de ses variantes.")
 
+    before = _favorites_snapshot(product)
     for field, value in data.model_dump(exclude_unset=True).items():
         if field == "description":
             value = _sanitize_description(value)
         setattr(product, field, value)
 
     await db.commit()
+    await _alert_favorites(db, product.id, before)
     return await get_product(db, product.id)
+
+
+def _favorites_snapshot(product: Product) -> tuple[int, int]:
+    """(prix d'appel, stock) avant modification — voir app/favorites/service.py."""
+    from app.favorites.service import display_price
+
+    return display_price(product), product.stock
+
+
+async def _alert_favorites(db: AsyncSession, product_id: uuid.UUID, before: tuple[int, int]) -> None:
+    """Alerte « prix en baisse » / « de retour en stock » aux acheteurs qui ont ce produit en favori."""
+    from app.favorites.service import on_product_changed
+
+    await on_product_changed(db, product_id, before)
 
 
 async def delete_product(db: AsyncSession, user: User, product_id: uuid.UUID) -> None:
@@ -310,6 +326,7 @@ async def create_variant(
 ) -> ProductVariant:
     product = await get_product(db, product_id)
     await _check_product_owner(db, product, user)
+    before = _favorites_snapshot(product)
 
     variant = await repository.create_variant(
         db,
@@ -322,6 +339,7 @@ async def create_variant(
     )
     await _sync_product_stock_from_variants(db, product.id)
     await db.commit()
+    await _alert_favorites(db, product.id, before)
     return await repository.get_variant_by_id(db, variant.id)
 
 
@@ -329,6 +347,7 @@ async def update_variant(
     db: AsyncSession, user: User, product_id: uuid.UUID, variant_id: uuid.UUID, data: ProductVariantUpdate
 ) -> ProductVariant:
     product, variant = await _get_owned_variant(db, user, product_id, variant_id)
+    before = _favorites_snapshot(product)
 
     updates = data.model_dump(exclude_unset=True, exclude={"attributes"})
     for field, value in updates.items():
@@ -350,6 +369,7 @@ async def update_variant(
         await _sync_product_stock_from_variants(db, product.id)
 
     await db.commit()
+    await _alert_favorites(db, product.id, before)
     return await repository.get_variant_by_id(db, variant.id)
 
 

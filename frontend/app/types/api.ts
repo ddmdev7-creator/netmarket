@@ -865,6 +865,14 @@ export type NotificationType =
   | 'delivery_request'
   | 'delivery_request_accepted'
   | 'delivery_no_courier_found'
+  | 'pickup_application_invited'
+  | 'pickup_application_submitted'
+  | 'pickup_application_approved'
+  | 'pickup_application_changes_requested'
+  | 'pickup_application_rejected'
+  | 'favorite_price_drop'
+  | 'favorite_back_in_stock'
+  | 'cart_reminder'
 
 export interface NotificationRead {
   id: string
@@ -873,6 +881,8 @@ export interface NotificationRead {
   body: string
   order_id: string | null
   sub_order_id: string | null
+  /** Alertes favoris : la notification ouvre la fiche de ce produit. */
+  product_id?: string | null
   read_at: string | null
   created_at: string
 }
@@ -1164,4 +1174,12 @@ export interface ProductDeliveryQuote {
   distance_km: number | null
   estimated_delivery_min: string
   estimated_delivery_max: string
+}
+
+/** GET /favorites */
+export interface FavoriteRead {
+  product: ProductRead
+  /** Prix d'appel au moment de l'ajout — badge « en baisse » si le prix actuel est inférieur. */
+  price_at_add: number
+  created_at: string
 }

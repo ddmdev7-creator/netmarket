@@ -48,6 +48,9 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # app/auth/service.py::register_user) — this starts False and flips once
     # the signup code is confirmed, same flow as vendor onboarding.
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Dernier rappel « panier en attente » (app/cart/reminders.py) : un seul
+    # rappel par état du panier, pas un par passage de la tâche périodique.
+    cart_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class EmailCode(Base, UUIDPrimaryKeyMixin, TimestampMixin):

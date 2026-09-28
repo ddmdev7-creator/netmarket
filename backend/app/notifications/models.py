@@ -31,6 +31,9 @@ class NotificationType(StrEnum):
     PICKUP_APPLICATION_APPROVED = "pickup_application_approved"
     PICKUP_APPLICATION_CHANGES_REQUESTED = "pickup_application_changes_requested"
     PICKUP_APPLICATION_REJECTED = "pickup_application_rejected"
+    FAVORITE_PRICE_DROP = "favorite_price_drop"
+    FAVORITE_BACK_IN_STOCK = "favorite_back_in_stock"
+    CART_REMINDER = "cart_reminder"
 
 
 class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -58,5 +61,9 @@ class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # sous-commandes, une par vendeur) — voir app/orders/service.py::start_dispatch.
     sub_order_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("sub_orders.id", ondelete="CASCADE"), nullable=True
+    )
+    # Produit concerné (alertes favoris) — la notification ouvre sa fiche.
+    product_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=True
     )
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

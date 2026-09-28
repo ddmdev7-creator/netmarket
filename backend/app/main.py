@@ -1,5 +1,8 @@
 """FastAPI application factory: mounts routers and registers error handlers."""
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -33,11 +36,24 @@ from app.uploads.router import router as uploads_router
 from app.users.router import admin_router as users_admin_router
 from app.pickup_point_applications.router import admin_router as pickup_applications_admin_router
 from app.pickup_point_applications.router import router as pickup_applications_router
+from app.cart import reminders as cart_reminders
+from app.favorites.router import router as favorites_router
 from app.users.router import router as users_router
 from app.vendors.router import admin_router as vendors_admin_router
 from app.vendors.router import router as vendors_router
 
-app = FastAPI(title="Marketplace Guinée API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Tâches de fond : l'API tourne en un seul processus (voir le ws_manager
+    # des notifications), donc une seule boucle de rappels à la fois.
+    reminders = asyncio.create_task(cart_reminders.run_forever())
+    try:
+        yield
+    finally:
+        reminders.cancel()
+
+
+app = FastAPI(title="Marketplace Guinée API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,6 +97,7 @@ app.include_router(admin_router)
 app.include_router(notifications_router)
 app.include_router(pickup_applications_router)
 app.include_router(pickup_applications_admin_router)
+app.include_router(favorites_router)
 
 
 @app.get("/health", tags=["health"])

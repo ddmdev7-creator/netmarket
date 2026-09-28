@@ -169,8 +169,12 @@ def pickup_application_email(
     *, heading: str, paragraphs: list[str], cta_label: str, cta_url: str
 ) -> tuple[str, str, str]:
     """Candidature gestionnaire de point de retrait : invitation et décisions
-    de l'admin (validation, correction demandée, refus). `paragraphs` est du
-    texte brut (échappé ici)."""
+    de l'admin (validation, correction demandée, refus)."""
+    return cta_email(heading=heading, paragraphs=paragraphs, cta_label=cta_label, cta_url=cta_url)
+
+
+def cta_email(*, heading: str, paragraphs: list[str], cta_label: str, cta_url: str) -> tuple[str, str, str]:
+    """Email simple : titre, paragraphes (texte brut, échappé ici) et un bouton."""
     subject = f"{heading} — {BRAND_NAME}"
     text = "\n\n".join([*paragraphs, f"{cta_label} : {cta_url}"])
     body = "".join(

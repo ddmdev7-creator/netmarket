@@ -4,6 +4,10 @@ import {
   PhArrowsClockwise,
   PhBellSlash,
   PhCheckCircle,
+  PhHeart,
+  PhShoppingCart,
+  PhStorefront,
+  PhTrendDown,
   PhMotorcycle,
   PhPackage,
   PhWarningCircle,
@@ -25,7 +29,15 @@ onMounted(() => {
 // Icône + teinte par type de notification — un aperçu du "quoi" avant même
 // de lire le titre, plutôt que des lignes de texte toutes identiques
 // visuellement quel que soit l'événement.
-const ICON_BY_TYPE: Record<NotificationType, Component> = {
+const ICON_BY_TYPE: Partial<Record<NotificationType, Component>> = {
+  favorite_price_drop: PhTrendDown,
+  favorite_back_in_stock: PhHeart,
+  cart_reminder: PhShoppingCart,
+  pickup_application_invited: PhStorefront,
+  pickup_application_submitted: PhStorefront,
+  pickup_application_approved: PhCheckCircle,
+  pickup_application_changes_requested: PhWarningCircle,
+  pickup_application_rejected: PhXCircle,
   order_received: PhPackage,
   order_status_changed: PhArrowsClockwise,
   courier_verification_approved: PhCheckCircle,
@@ -35,7 +47,12 @@ const ICON_BY_TYPE: Record<NotificationType, Component> = {
   delivery_no_courier_found: PhWarningCircle,
 }
 
-const TONE_BY_TYPE: Record<NotificationType, 'primary' | 'success' | 'error'> = {
+const TONE_BY_TYPE: Partial<Record<NotificationType, 'primary' | 'success' | 'error'>> = {
+  favorite_price_drop: 'success',
+  favorite_back_in_stock: 'success',
+  cart_reminder: 'primary',
+  pickup_application_approved: 'success',
+  pickup_application_rejected: 'error',
   order_received: 'primary',
   order_status_changed: 'primary',
   courier_verification_approved: 'success',
@@ -46,6 +63,11 @@ const TONE_BY_TYPE: Record<NotificationType, 'primary' | 'success' | 'error'> = 
 }
 
 function targetPath(notification: NotificationRead): string | null {
+  if (notification.product_id) return `/produits/${notification.product_id}`
+  if (notification.type === 'cart_reminder') return '/panier'
+  if (notification.type.startsWith('pickup_application')) {
+    return auth.user?.role === 'admin' ? '/admin/candidatures' : '/point-retrait/candidature'
+  }
   if (!notification.order_id) return null
   return auth.user?.role === 'vendor'
     ? `/vendeur/commandes?highlight=${notification.order_id}`
@@ -98,8 +120,8 @@ function formatDate(iso: string) {
         :class="{ 'notification-row--unread': !n.read_at }"
         @click="open(n)"
       >
-        <div class="notification-row__icon" :class="`notification-row__icon--${TONE_BY_TYPE[n.type]}`">
-          <component :is="ICON_BY_TYPE[n.type]" :size="19" weight="bold" />
+        <div class="notification-row__icon" :class="`notification-row__icon--${TONE_BY_TYPE[n.type] ?? 'primary'}`">
+          <component :is="ICON_BY_TYPE[n.type] ?? PhPackage" :size="19" weight="bold" />
         </div>
         <div class="notification-row__content">
           <div class="d-flex justify-space-between align-center mb-1 ga-2">

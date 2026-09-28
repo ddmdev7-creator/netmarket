@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhBell, PhHouse, PhPackage, PhShoppingCart, PhUser, PhUserCircle } from '@phosphor-icons/vue'
+import { PhHeart, PhBell, PhHouse, PhPackage, PhShoppingCart, PhUser, PhUserCircle } from '@phosphor-icons/vue'
 
 /**
  * showNav: true uniquement depuis layouts/default.vue (espace acheteur).
@@ -45,6 +45,7 @@ const displayIdentity = computed(() => {
 // comme aujourd'hui.
 const navItems = [
   { to: '/', label: 'Accueil', icon: PhHouse },
+  { to: '/favoris', label: 'Favoris', icon: PhHeart },
   { to: '/panier', label: 'Panier', icon: PhShoppingCart },
   { to: '/commandes', label: 'Commandes', icon: PhPackage },
   { to: '/profil', label: 'Profil', icon: PhUser },

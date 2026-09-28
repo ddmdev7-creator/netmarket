@@ -28,12 +28,15 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.email import send_email
-from app.core.email_templates import order_status_email
+from app.core.config import get_settings
+from app.core.email_templates import cta_email, order_status_email
 from app.notifications import repository
 from app.notifications.models import Notification, NotificationType
 from app.notifications.ws_manager import manager as ws_manager
 from app.orders.models import DeliveryType, OrderStatus, SubOrder
 from app.users.models import User
+
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +59,17 @@ async def _persist_and_push(
     body: str,
     order_id: uuid.UUID | None,
     sub_order_id: uuid.UUID | None = None,
+    product_id: uuid.UUID | None = None,
 ) -> Notification:
     notification = await repository.create(
-        db, user_id=user_id, type=type_, title=title, body=body, order_id=order_id, sub_order_id=sub_order_id
+        db,
+        user_id=user_id,
+        type=type_,
+        title=title,
+        body=body,
+        order_id=order_id,
+        sub_order_id=sub_order_id,
+        product_id=product_id,
     )
     await db.commit()
     await db.refresh(notification)
@@ -72,6 +83,7 @@ async def _persist_and_push(
                 "body": notification.body,
                 "order_id": str(notification.order_id) if notification.order_id else None,
                 "sub_order_id": str(notification.sub_order_id) if notification.sub_order_id else None,
+                "product_id": str(notification.product_id) if notification.product_id else None,
                 "read_at": None,
                 "created_at": notification.created_at.isoformat(),
             },
@@ -219,3 +231,80 @@ async def push_refresh(user_ids: set[uuid.UUID], scope: str) -> None:
             await ws_manager.send_to_user(user_id, {"type": "refresh", "scope": scope})
         except Exception:  # noqa: BLE001 — un signal perdu est rattrapé par la relecture périodique
             logger.info("Signal de rafraîchissement non envoyé", exc_info=True)
+
+
+def _gnf(amount: int) -> str:
+    return f"{amount:,}".replace(",", " ") + " GNF"
+
+
+async def _email_if_verified(user: User, *, heading: str, paragraphs: list[str], cta_label: str, path: str) -> None:
+    """Relances (favoris, panier) : par email seulement vers une adresse vérifiée."""
+    if not user.email or not user.email_verified:
+        return
+    try:
+        subject, text, html = cta_email(
+            heading=heading, paragraphs=paragraphs, cta_label=cta_label, cta_url=f"{settings.frontend_url}{path}"
+        )
+        await send_email(user.email, subject, text, html)
+    except httpx.HTTPError:
+        logger.warning("Échec d'envoi de l'email de relance à l'utilisateur %s", user.id)
+
+
+async def notify_favorite_price_drop(db: AsyncSession, *, user: User, product, old_price: int, new_price: int) -> None:
+    body = f"« {product.name} » passe de {_gnf(old_price)} à {_gnf(new_price)}."
+    await _persist_and_push(
+        db,
+        user_id=user.id,
+        type_=NotificationType.FAVORITE_PRICE_DROP,
+        title="Prix en baisse sur un favori",
+        body=body,
+        order_id=None,
+        product_id=product.id,
+    )
+    await _email_if_verified(
+        user,
+        heading="Un de vos favoris baisse de prix",
+        paragraphs=["Bonjour,", body, "Le stock est limité : ne tardez pas trop."],
+        cta_label="Voir le produit",
+        path=f"/produits/{product.id}",
+    )
+
+
+async def notify_favorite_back_in_stock(db: AsyncSession, *, user: User, product) -> None:
+    body = f"« {product.name} » est de nouveau disponible."
+    await _persist_and_push(
+        db,
+        user_id=user.id,
+        type_=NotificationType.FAVORITE_BACK_IN_STOCK,
+        title="De retour en stock",
+        body=body,
+        order_id=None,
+        product_id=product.id,
+    )
+    await _email_if_verified(
+        user,
+        heading="Votre favori est de retour",
+        paragraphs=["Bonjour,", body],
+        cta_label="Voir le produit",
+        path=f"/produits/{product.id}",
+    )
+
+
+async def notify_cart_reminder(db: AsyncSession, *, user: User, item_count: int) -> None:
+    articles = f"{item_count} article{'s' if item_count > 1 else ''}"
+    body = f"Vous avez laissé {articles} dans votre panier. Finalisez votre commande quand vous voulez."
+    await _persist_and_push(
+        db,
+        user_id=user.id,
+        type_=NotificationType.CART_REMINDER,
+        title="Vos articles vous attendent",
+        body=body,
+        order_id=None,
+    )
+    await _email_if_verified(
+        user,
+        heading="Vos articles vous attendent",
+        paragraphs=["Bonjour,", body],
+        cta_label="Voir mon panier",
+        path="/panier",
+    )
