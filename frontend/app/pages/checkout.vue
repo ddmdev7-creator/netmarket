@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhCheckCircle, PhPlus, PhStar, PhWallet } from '@phosphor-icons/vue'
+import {
+  PhArrowLeft,
+  PhCheck,
+  PhDeviceMobile,
+  PhHouse,
+  PhImage,
+  PhMoney,
+  PhPencilSimple,
+  PhPlus,
+  PhShieldCheck,
+  PhStar,
+  PhStorefront,
+  PhWallet,
+} from '@phosphor-icons/vue'
 import type { AddressFormValues } from '~/components/address/AddressForm.vue'
 import type { AddressRead, BuyerWalletRead, DeliveryQuoteRead, OrderRead, PaymentMethod } from '~/types/api'
 
@@ -10,18 +23,16 @@ const auth = useAuthStore()
 const router = useRouter()
 const { apiFetch } = useApi()
 const toast = useToastStore()
+const apiBase = useApiBase()
 
 await useAsyncData('checkout-cart', () => cartStore.fetchCart())
 
 // Un aller-retour navigateur ("précédent") après confirmation d'une commande
-// remonte sur cette page avec un panier déjà vidé côté serveur (voir
-// confirmOrder ci-dessous, qui appelle cartStore.reset() sur succès) — sans
-// ce garde-fou, l'acheteur se retrouverait sur un écran de paiement figé,
-// vide de tout article, qu'il pourrait même tenter de soumettre à nouveau.
-// Vérifié une seule fois ici (pas un watcher) : la modale de confirmation
-// affichée juste après confirmOrder tourne sur cette même page avec le
-// panier déjà réinitialisé, un watcher redirigerait alors immédiatement
-// loin de cette modale.
+// remonte sur cette page avec un panier déjà vidé côté serveur — sans ce
+// garde-fou, l'acheteur se retrouverait sur un écran de paiement vide qu'il
+// pourrait même tenter de soumettre à nouveau. Vérifié une seule fois ici
+// (pas un watcher) : l'écran de succès affiché juste après confirmOrder
+// tourne sur cette même page avec le panier déjà réinitialisé.
 if ((cartStore.cart?.vendors.length ?? 0) === 0) {
   await navigateTo('/panier')
 }
@@ -31,10 +42,12 @@ const { data: addresses } = await useAsyncData('checkout-addresses', () => apiFe
 })
 
 // "new" est une valeur de sélection à part entière (comme les adresses
-// enregistrées) plutôt qu'un simple booléen — évite un état incohérent où
-// aucune option ne serait sélectionnée pendant le chargement.
+// enregistrées) plutôt qu'un simple booléen.
 const NEW_ADDRESS = 'new' as const
-const selectedId = ref<string>(addresses.value[0]?.id ?? NEW_ADDRESS)
+// Adresse par défaut présélectionnée (sinon la première enregistrée).
+const selectedId = ref<string>(
+  (addresses.value.find((a) => a.is_default) ?? addresses.value[0])?.id ?? NEW_ADDRESS,
+)
 
 const newAddressForm = ref<AddressFormValues>({
   label: '',
@@ -53,16 +66,22 @@ const saveNewAddress = ref(true)
 const submitting = ref(false)
 const confirmedOrder = ref<OrderRead | null>(null)
 
-// "cash_on_delivery" par défaut — le paiement en ligne reste un choix actif,
-// pas la valeur de repli si l'acheteur ne remplit rien.
+// Paiement à la livraison par défaut, sauf si l'acheteur a choisi autre
+// chose à sa dernière commande (mémorisé sur l'appareil).
+const LAST_PAYMENT_KEY = 'nm-last-payment'
 const paymentMethod = ref<PaymentMethod>('cash_on_delivery')
 const payerPhone = ref(auth.user?.phone ?? '')
 
 // Solde NdjouriBank : option proposée si le service est ouvert ou s'il reste
-// un solde à dépenser. Chargé sans bloquer la page (l'option n'apparaît
-// simplement pas si l'appel échoue).
+// un solde à dépenser. Chargé sans bloquer la page.
 const buyerWallet = ref<BuyerWalletRead | null>(null)
 onMounted(async () => {
+  try {
+    const last = localStorage.getItem(LAST_PAYMENT_KEY)
+    if (last === 'online' || last === 'cash_on_delivery') paymentMethod.value = last
+  } catch {
+    // Stockage indisponible : on garde le défaut.
+  }
   try {
     buyerWallet.value = await apiFetch<BuyerWalletRead>('/ndjouribank')
   } catch {
@@ -182,33 +201,135 @@ function buildAddressText(
   return parts.filter(Boolean).join(' — ')
 }
 
+// --- Étapes -------------------------------------------------------------------
+
+type Step = 1 | 2 | 3
+const STEPS: { n: Step; label: string }[] = [
+  { n: 1, label: 'Livraison' },
+  { n: 2, label: 'Paiement' },
+  { n: 3, label: 'Vérification' },
+]
+const step = ref<Step>(1)
+
+function addressStepError(): string | null {
+  if (selectedId.value === NEW_ADDRESS) return validateAddressForm(newAddressForm.value)
+  const selected = addresses.value.find((a) => a.id === selectedId.value)
+  if (!selected) return 'Choisis une adresse de livraison.'
+  if (selected.delivery_type === 'pickup_point' && !selected.pickup_point_id) {
+    return 'Cette adresse n’a pas de point de retrait valide — modifie-la ou choisis-en une autre.'
+  }
+  return null
+}
+
+function paymentStepError(): string | null {
+  if (paymentMethod.value === 'wallet' && (!quote.value || walletShortfall.value > 0)) {
+    return 'Solde NdjouriBank insuffisant pour cette commande.'
+  }
+  if (paymentMethod.value === 'online' && !payerPhone.value.trim()) {
+    return 'Indique le numéro qui va payer (mobile money ou carte).'
+  }
+  return null
+}
+
+/** Revenir en arrière est toujours possible ; avancer valide chaque étape franchie. */
+function goTo(target: Step) {
+  if (target > step.value) {
+    const checks: (() => string | null)[] = [addressStepError, paymentStepError]
+    for (let s = step.value; s < target; s++) {
+      const error = checks[s - 1]?.()
+      if (error) {
+        toast.error(error)
+        step.value = s as Step
+        return
+      }
+    }
+  }
+  step.value = target
+}
+
+function next() {
+  if (step.value === 3) confirmOrder()
+  else goTo((step.value + 1) as Step)
+}
+
+function back() {
+  if (step.value > 1) step.value = (step.value - 1) as Step
+  else router.back()
+}
+
+watch(step, () => {
+  if (import.meta.client) window.scrollTo({ top: 0, behavior: 'smooth' })
+})
+
+const primaryLabel = computed(() => {
+  if (step.value === 1) return 'Continuer vers le paiement'
+  if (step.value === 2) return 'Vérifier ma commande'
+  return paymentMethod.value === 'online'
+    ? `Payer ${formatGnf(orderTotal.value)}`
+    : `Confirmer · ${formatGnf(orderTotal.value)}`
+})
+
+// --- Récapitulatifs -----------------------------------------------------------
+
+const itemCount = computed(() =>
+  (cart.value?.vendors ?? []).reduce((n, g) => n + g.items.reduce((m, i) => m + i.quantity, 0), 0),
+)
+
+const addressSummary = computed(() => {
+  if (selectedId.value === NEW_ADDRESS) {
+    const f = newAddressForm.value
+    return {
+      label: f.label.trim() || 'Nouvelle adresse',
+      zone: zoneText(f),
+      pickup: f.delivery_type === 'pickup_point',
+      recipient: f.recipient_name.trim() || null,
+    }
+  }
+  const a = addresses.value.find((x) => x.id === selectedId.value)
+  if (!a) return null
+  return { label: a.label, zone: zoneText(a) || 'Zone non précisée', pickup: a.delivery_type === 'pickup_point', recipient: a.recipient_name }
+})
+
+const PAYMENT_OPTIONS: { value: PaymentMethod; title: string; text: string; icon: object; hue: number }[] = [
+  {
+    value: 'cash_on_delivery',
+    title: 'Paiement à la livraison',
+    text: 'En espèces, à la remise du colis',
+    icon: PhMoney,
+    hue: 150,
+  },
+  {
+    value: 'online',
+    title: 'Mobile money ou carte',
+    text: 'Orange Money, MTN MoMo, carte bancaire…',
+    icon: PhDeviceMobile,
+    hue: 30,
+  },
+]
+
+const paymentSummary = computed(() => {
+  if (paymentMethod.value === 'wallet') return { title: 'Solde NdjouriBank', text: 'Débité à la confirmation' }
+  const option = PAYMENT_OPTIONS.find((o) => o.value === paymentMethod.value)!
+  return {
+    title: option.title,
+    text: paymentMethod.value === 'online' ? `Numéro qui paie : ${payerPhone.value.trim()}` : option.text,
+  }
+})
+
+function rememberPayment() {
+  try {
+    if (paymentMethod.value !== 'wallet') localStorage.setItem(LAST_PAYMENT_KEY, paymentMethod.value)
+  } catch {
+    // Sans stockage, le choix n'est simplement pas mémorisé.
+  }
+}
+
 async function confirmOrder() {
   const usingNew = selectedId.value === NEW_ADDRESS
-  if (usingNew) {
-    const error = validateAddressForm(newAddressForm.value)
-    if (error) {
-      toast.error(error)
-      return
-    }
-  } else {
-    // Défense en profondeur : une adresse enregistrée avant ce correctif a
-    // pu être sauvée en mode "point de retrait" sans point réellement
-    // choisi (voir validateAddressForm) — mieux vaut le dire clairement ici
-    // que laisser l'API renvoyer un 409 générique.
-    const selected = addresses.value.find((a) => a.id === selectedId.value)
-    if (selected?.delivery_type === 'pickup_point' && !selected.pickup_point_id) {
-      toast.error('Cette adresse n’a pas de point de retrait valide — modifie-la ou choisis-en une autre.')
-      return
-    }
-  }
-
-  if (paymentMethod.value === 'wallet' && (!quote.value || walletShortfall.value > 0)) {
-    toast.error('Solde NdjouriBank insuffisant pour cette commande.')
-    return
-  }
-
-  if (paymentMethod.value === 'online' && !payerPhone.value.trim()) {
-    toast.error('Indique le numéro qui va payer (mobile money ou carte).')
+  const error = addressStepError() ?? paymentStepError()
+  if (error) {
+    toast.error(error)
+    goTo(addressStepError() ? 1 : 2)
     return
   }
 
@@ -281,6 +402,7 @@ async function confirmOrder() {
       },
     })
     cartStore.reset()
+    rememberPayment()
 
     // Paiement en ligne : le panier est vidé et la commande existe déjà
     // (statut de paiement "pending"), mais l'argent n'a pas encore bougé —
@@ -308,216 +430,502 @@ function continueShopping() {
 </script>
 
 <template>
-  <div class="app-shell checkout-inner" style="padding-bottom: 88px">
+  <!-- Écran de succès : remplace toute la page une fois la commande passée. -->
+  <div v-if="confirmedOrder" class="app-shell success">
+    <div class="success__burst">
+      <span class="success__ring" />
+      <span class="success__check"><PhCheck :size="40" weight="bold" /></span>
+    </div>
+    <h1 class="success__title">Merci, c'est commandé !</h1>
+    <p class="success__sub">
+      Commande <strong>#{{ confirmedOrder.id.slice(0, 8).toUpperCase() }}</strong> ·
+      {{ PAYMENT_METHOD_LABELS[confirmedOrder.payment_method].paid }}
+    </p>
+
+    <div v-if="confirmedOrder.sub_orders.length" class="success__card">
+      <div class="success__card-title">Livraison prévue</div>
+      <div v-for="sub in confirmedOrder.sub_orders" :key="sub.id" class="success__row">
+        <span class="success__shop"><PhStorefront :size="15" /> {{ sub.shop_name }}</span>
+        <strong v-if="sub.estimated_delivery_min && sub.estimated_delivery_max">
+          {{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}
+        </strong>
+      </div>
+    </div>
+
+    <ol class="success__next">
+      <li>Le vendeur prépare votre colis.</li>
+      <li>Un livreur l'apporte {{ addressSummary?.pickup ? 'au point de retrait' : 'à votre adresse' }}.</li>
+      <li>Vous êtes notifié à chaque étape, et contacté avant la remise.</li>
+    </ol>
+
+    <div class="success__actions">
+      <v-btn color="primary" block size="large" @click="goToOrder">Suivre ma commande</v-btn>
+      <v-btn variant="text" block @click="continueShopping">Continuer mes achats</v-btn>
+    </div>
+  </div>
+
+  <div v-else class="app-shell checkout-inner" style="padding-bottom: 110px">
     <div class="d-flex align-center pa-2 ga-2">
-      <v-btn icon variant="text" @click="router.back()">
+      <v-btn icon variant="text" :aria-label="step > 1 ? 'Étape précédente' : 'Retour'" @click="back">
         <PhArrowLeft :size="20" />
       </v-btn>
-      <h1 class="text-h6">Commande et paiement</h1>
+      <h1 class="text-h6 flex-grow-1">Commande</h1>
       <LayoutHomeLink />
     </div>
 
+    <nav class="stepper px-4" aria-label="Étapes de la commande">
+      <template v-for="(s, i) in STEPS" :key="s.n">
+        <button
+          type="button"
+          class="stepper__step"
+          :class="{ 'stepper__step--done': step > s.n, 'stepper__step--current': step === s.n }"
+          :aria-current="step === s.n ? 'step' : undefined"
+          @click="goTo(s.n)"
+        >
+          <span class="stepper__dot">
+            <PhCheck v-if="step > s.n" :size="14" weight="bold" />
+            <template v-else>{{ s.n }}</template>
+          </span>
+          <span class="stepper__label">{{ s.label }}</span>
+        </button>
+        <span v-if="i < STEPS.length - 1" class="stepper__bar" :class="{ 'stepper__bar--done': step > s.n }" />
+      </template>
+    </nav>
+
     <div class="px-4 checkout-page">
       <div class="checkout-form grid-card">
-      <label class="field-label">Adresse de livraison</label>
-      <v-radio-group v-model="selectedId" hide-details>
-        <v-radio
-          v-for="a in addresses"
-          :key="a.id"
-          :value="a.id"
-          density="compact"
-          color="primary"
-          class="address-option"
-          :class="{ 'address-option--selected': selectedId === a.id }"
-        >
-          <template #label>
-            <div class="flex-grow-1">
-              <div class="d-flex align-center ga-2">
-                <span class="text-body" style="font-weight: 600">{{ a.label }}</span>
-                <v-chip v-if="a.is_default" color="primary" size="x-small" variant="tonal">
-                  <PhStar :size="10" weight="fill" class="mr-1" />
-                  Par défaut
-                </v-chip>
-                <v-chip size="x-small" variant="tonal">
-                  {{ a.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Domicile' }}
-                </v-chip>
-              </div>
-              <div class="text-muted text-meta">{{ a.zone }}</div>
-            </div>
-          </template>
-        </v-radio>
-
-        <v-radio
-          :value="NEW_ADDRESS"
-          density="compact"
-          color="primary"
-          class="address-option"
-          :class="{ 'address-option--selected': selectedId === NEW_ADDRESS }"
-        >
-          <template #label>
-            <div class="d-flex align-center ga-1 text-body" style="font-weight: 600">
-              <PhPlus :size="15" />
-              <span>Nouvelle adresse</span>
-            </div>
-          </template>
-        </v-radio>
-      </v-radio-group>
-
-      <div v-if="selectedId === NEW_ADDRESS" class="mt-3 mb-2">
-        <AddressForm v-model="newAddressForm" />
-        <v-checkbox
-          v-model="saveNewAddress"
-          label="Enregistrer cette adresse pour mes prochains achats"
-          density="compact"
-          hide-details
-          class="mb-2"
-        />
-      </div>
-
-      <v-divider class="mb-4 mt-2" />
-
-      <h3 class="section-title">Paiement</h3>
-      <v-radio-group v-model="paymentMethod" hide-details class="mb-2">
-        <v-radio label="Paiement à la livraison" value="cash_on_delivery" color="primary" />
-        <v-radio label="Payer en ligne" value="online" color="primary" />
-        <v-radio
-          v-if="showWalletOption && buyerWallet"
-          value="wallet"
-          color="primary"
-          :disabled="walletShortfall > 0 || !quote"
-        >
-          <template #label>
-            <span class="wallet-option">
-              <span class="wallet-option__title"><PhWallet :size="16" weight="fill" /> Payer avec mon solde NdjouriBank</span>
-              <span class="wallet-option__meta">
-                Solde : {{ formatGnf(buyerWallet.balance) }}
-                <template v-if="quote && walletShortfall > 0"> · il manque {{ formatGnf(walletShortfall) }}</template>
-              </span>
-            </span>
-          </template>
-        </v-radio>
-      </v-radio-group>
-      <p v-if="showWalletOption && buyerWallet?.enabled && walletShortfall > 0 && quote" class="text-meta mb-3">
-        <NuxtLink to="/ndjouribank" class="wallet-topup-link">Recharger mon solde NdjouriBank</NuxtLink>
-      </p>
-      <p v-if="paymentMethod === 'wallet' && buyerWallet" class="text-muted text-meta mb-4">
-        {{ formatGnf(orderTotal) }} seront débités tout de suite. Nouveau solde :
-        {{ formatGnf(buyerWallet.balance - orderTotal) }}.
-      </p>
-      <div v-if="paymentMethod === 'online'" class="mb-4">
-        <v-text-field
-          v-model="payerPhone"
-          label="Numéro qui paie (mobile money ou carte)"
-          placeholder="Ex. 622000000"
-          hide-details="auto"
-        />
-        <p class="text-muted text-meta mt-1 mb-0">
-          Tu seras redirigé vers le portail de paiement pour finaliser (Orange Money, MTN MoMo, carte…).
-        </p>
-      </div>
-
-      <v-divider class="mb-4" />
-
-      <h3 class="section-title">Récapitulatif</h3>
-      <template v-if="cart">
-        <div v-for="group in cart.vendors" :key="group.vendor_id" class="mb-3">
-          <div class="recap-shop-label mb-1">{{ group.shop_name }}</div>
-          <div v-for="item in group.items" :key="item.id" class="d-flex justify-space-between text-meta">
-            <span
-              >{{ item.product_name }}<span v-if="item.variant_label" class="text-muted"> ({{ item.variant_label }})</span> ×
-              {{ item.quantity }}</span
+        <!-- 1. Livraison -->
+        <section v-if="step === 1">
+          <h2 class="step-title">Où livrer ?</h2>
+          <div class="choice-list">
+            <button
+              v-for="a in addresses"
+              :key="a.id"
+              type="button"
+              class="choice"
+              :class="{ 'choice--selected': selectedId === a.id }"
+              :aria-pressed="selectedId === a.id"
+              @click="selectedId = a.id"
             >
-            <span>{{ formatGnf(item.subtotal) }}</span>
+              <span class="choice__icon" :style="{ '--hue': a.delivery_type === 'pickup_point' ? 215 : 150 }">
+                <component :is="a.delivery_type === 'pickup_point' ? PhStorefront : PhHouse" :size="19" weight="duotone" />
+              </span>
+              <span class="choice__body">
+                <span class="choice__title">
+                  {{ a.label }}
+                  <span v-if="a.is_default" class="choice__badge"><PhStar :size="10" weight="fill" /> Par défaut</span>
+                </span>
+                <span class="choice__text">
+                  {{ a.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Domicile' }} ·
+                  {{ a.zone.trim() || (a.latitude != null ? 'Position GPS enregistrée' : 'Zone non précisée') }}
+                </span>
+              </span>
+              <span class="choice__radio" />
+            </button>
+            <button
+              type="button"
+              class="choice choice--new"
+              :class="{ 'choice--selected': selectedId === NEW_ADDRESS }"
+              :aria-pressed="selectedId === NEW_ADDRESS"
+              @click="selectedId = NEW_ADDRESS"
+            >
+              <span class="choice__icon" style="--hue: 220"><PhPlus :size="19" weight="bold" /></span>
+              <span class="choice__body">
+                <span class="choice__title">Nouvelle adresse</span>
+                <span class="choice__text">À domicile ou dans un point de retrait</span>
+              </span>
+              <span class="choice__radio" />
+            </button>
           </div>
-          <div class="d-flex justify-space-between text-meta text-muted">
-            <span>Livraison</span>
-            <span v-if="deliveryFeeFor(group.vendor_id) !== null">
-              {{ deliveryFeeFor(group.vendor_id) ? formatGnf(deliveryFeeFor(group.vendor_id)!) : 'Gratuite' }}
-            </span>
-            <span v-else>—</span>
+
+          <div v-if="selectedId === NEW_ADDRESS" class="mt-4">
+            <AddressForm v-model="newAddressForm" />
+            <v-checkbox
+              v-model="saveNewAddress"
+              label="Enregistrer cette adresse pour mes prochains achats"
+              density="compact"
+              hide-details
+            />
           </div>
-          <div v-if="deliveryEstimateFor(group.vendor_id)" class="d-flex justify-space-between text-meta text-muted">
-            <span>Délai estimé</span>
-            <span>{{ deliveryEstimateFor(group.vendor_id) }}</span>
+
+          <p v-if="quote" class="step-hint">
+            Livraison : <strong>{{ quote.delivery_total ? formatGnf(quote.delivery_total) : 'offerte' }}</strong>
+            <template v-if="quote.vendors.length === 1">
+              · {{ formatDeliveryEstimate(quote.vendors[0]!.estimated_delivery_min, quote.vendors[0]!.estimated_delivery_max) }}
+            </template>
+          </p>
+        </section>
+
+        <!-- 2. Paiement -->
+        <section v-else-if="step === 2">
+          <h2 class="step-title">Comment payer ?</h2>
+          <div class="choice-list">
+            <button
+              v-for="option in PAYMENT_OPTIONS"
+              :key="option.value"
+              type="button"
+              class="choice"
+              :class="{ 'choice--selected': paymentMethod === option.value }"
+              :aria-pressed="paymentMethod === option.value"
+              @click="paymentMethod = option.value"
+            >
+              <span class="choice__icon" :style="{ '--hue': option.hue }">
+                <component :is="option.icon" :size="19" weight="duotone" />
+              </span>
+              <span class="choice__body">
+                <span class="choice__title">{{ option.title }}</span>
+                <span class="choice__text">{{ option.text }}</span>
+              </span>
+              <span class="choice__radio" />
+            </button>
+            <button
+              v-if="showWalletOption && buyerWallet"
+              type="button"
+              class="choice"
+              :class="{ 'choice--selected': paymentMethod === 'wallet' }"
+              :disabled="walletShortfall > 0 || !quote"
+              :aria-pressed="paymentMethod === 'wallet'"
+              @click="paymentMethod = 'wallet'"
+            >
+              <span class="choice__icon" style="--hue: 260"><PhWallet :size="19" weight="duotone" /></span>
+              <span class="choice__body">
+                <span class="choice__title">Solde NdjouriBank</span>
+                <span class="choice__text">
+                  Solde : {{ formatGnf(buyerWallet.balance) }}
+                  <template v-if="quote && walletShortfall > 0"> · il manque {{ formatGnf(walletShortfall) }}</template>
+                </span>
+              </span>
+              <span class="choice__radio" />
+            </button>
           </div>
-        </div>
-        <v-divider class="mb-2" />
-        <div class="d-flex justify-space-between text-lg checkout-total-inline">
-          <span>Total</span>
-          <span>{{ formatGnf(quote?.total ?? cart.total) }}</span>
-        </div>
-        <p v-if="!quote" class="text-muted text-meta mt-1 mb-0">Les frais de livraison s’affichent une fois l’adresse choisie.</p>
-      </template>
+
+          <p v-if="showWalletOption && buyerWallet?.enabled && walletShortfall > 0 && quote" class="text-meta mt-2 mb-0">
+            <NuxtLink to="/ndjouribank" class="wallet-topup-link">Recharger mon solde NdjouriBank</NuxtLink>
+          </p>
+          <p v-if="paymentMethod === 'wallet' && buyerWallet" class="step-hint">
+            {{ formatGnf(orderTotal) }} seront débités à la confirmation. Nouveau solde :
+            {{ formatGnf(buyerWallet.balance - orderTotal) }}.
+          </p>
+          <div v-if="paymentMethod === 'online'" class="mt-4">
+            <v-text-field
+              v-model="payerPhone"
+              label="Numéro qui paie (mobile money ou carte)"
+              placeholder="Ex. 622000000"
+              inputmode="tel"
+              hide-details="auto"
+            />
+            <p class="text-muted text-meta mt-1 mb-0">
+              Après confirmation, vous serez redirigé vers le portail de paiement sécurisé pour valider.
+            </p>
+          </div>
+          <p class="secure-note"><PhShieldCheck :size="15" weight="fill" /> Annulation remboursée tant que la commande n'est pas préparée.</p>
+        </section>
+
+        <!-- 3. Vérification -->
+        <section v-else>
+          <h2 class="step-title">Vérifiez votre commande</h2>
+
+          <div class="review-block">
+            <div class="review-block__head">
+              <span>{{ addressSummary?.pickup ? 'Retrait au point' : 'Livraison à domicile' }}</span>
+              <button type="button" class="review-block__edit" @click="goTo(1)">
+                <PhPencilSimple :size="14" /> Modifier
+              </button>
+            </div>
+            <div v-if="addressSummary" class="review-block__body">
+              <strong>{{ addressSummary.label }}</strong>
+              <span>{{ addressSummary.zone }}</span>
+              <span v-if="addressSummary.recipient && !addressSummary.pickup">Pour : {{ addressSummary.recipient }}</span>
+            </div>
+          </div>
+
+          <div class="review-block">
+            <div class="review-block__head">
+              <span>Paiement</span>
+              <button type="button" class="review-block__edit" @click="goTo(2)">
+                <PhPencilSimple :size="14" /> Modifier
+              </button>
+            </div>
+            <div class="review-block__body">
+              <strong>{{ paymentSummary.title }}</strong>
+              <span>{{ paymentSummary.text }}</span>
+            </div>
+          </div>
+
+          <div v-for="group in cart?.vendors ?? []" :key="group.vendor_id" class="review-block">
+            <div class="review-block__head">
+              <span><PhStorefront :size="14" /> {{ group.shop_name }}</span>
+              <span v-if="deliveryEstimateFor(group.vendor_id)" class="review-block__eta">
+                {{ deliveryEstimateFor(group.vendor_id) }}
+              </span>
+            </div>
+            <div v-for="item in group.items" :key="item.id" class="line-item">
+              <span class="line-item__thumb">
+                <img v-if="item.product_image" :src="resolveImageUrl(item.product_image, apiBase)" alt="" loading="lazy" />
+                <PhImage v-else :size="18" />
+              </span>
+              <span class="line-item__body">
+                <span class="line-item__name">{{ item.product_name }}</span>
+                <span class="line-item__meta">
+                  <template v-if="item.variant_label">{{ item.variant_label }} · </template>Qté {{ item.quantity }}
+                </span>
+              </span>
+              <span class="line-item__price">{{ formatGnf(item.subtotal) }}</span>
+            </div>
+            <div class="line-fee">
+              <span>Livraison</span>
+              <span v-if="deliveryFeeFor(group.vendor_id) !== null">
+                {{ deliveryFeeFor(group.vendor_id) ? formatGnf(deliveryFeeFor(group.vendor_id)!) : 'Offerte' }}
+              </span>
+              <span v-else>—</span>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <!-- Repris dans .checkout-total-inline ci-dessus sur mobile -- l'un des
-           deux est toujours masqué par media query, jamais les deux à la
-           fois (même pattern que .cart-summary dans panier.vue). -->
+      <!-- Récapitulatif toujours visible sur ordinateur. -->
       <aside v-if="cart" class="checkout-summary grid-card">
-        <div class="checkout-summary__title">Résumé</div>
-        <div class="d-flex justify-space-between text-lg mb-4">
-          <span>Total</span>
-          <span>{{ formatGnf(quote?.total ?? cart.total) }}</span>
+        <div class="checkout-summary__title">Récapitulatif</div>
+        <div class="sum-line">
+          <span>Articles ({{ itemCount }})</span>
+          <span>{{ formatGnf(cart.total) }}</span>
         </div>
-        <v-btn color="primary" block size="large" :loading="submitting" @click="confirmOrder">
-          Confirmer la commande
+        <div class="sum-line">
+          <span>Livraison</span>
+          <span>{{ quote ? (quote.delivery_total ? formatGnf(quote.delivery_total) : 'Offerte') : '—' }}</span>
+        </div>
+        <div class="sum-line sum-line--total">
+          <span>Total</span>
+          <span>{{ formatGnf(orderTotal) }}</span>
+        </div>
+        <v-btn color="primary" block size="large" :loading="submitting" class="mt-4" @click="next">
+          {{ primaryLabel }}
         </v-btn>
         <p v-if="!quote" class="text-muted text-meta mt-2 mb-0">Les frais de livraison s’affichent une fois l’adresse choisie.</p>
       </aside>
     </div>
 
+    <!-- Téléphone : total + action principale ancrés en bas. -->
     <div class="checkout-bar checkout-bar--mobile-only">
-      <v-btn color="primary" block size="large" :loading="submitting" @click="confirmOrder">
-        Confirmer la commande
-      </v-btn>
+      <div class="dock">
+        <div class="dock__total">
+          <span class="dock__amount">{{ formatGnf(orderTotal) }}</span>
+          <span class="dock__meta">
+            {{ itemCount }} article{{ itemCount > 1 ? 's' : '' }} ·
+            {{ quote ? (quote.delivery_total ? `livraison ${formatGnf(quote.delivery_total)}` : 'livraison offerte') : 'hors livraison' }}
+          </span>
+        </div>
+        <v-btn color="primary" size="large" class="dock__btn" :loading="submitting" @click="next">
+          {{ step === 3 ? (paymentMethod === 'online' ? 'Payer' : 'Confirmer') : 'Continuer' }}
+        </v-btn>
+      </div>
     </div>
-
-    <v-dialog :model-value="!!confirmedOrder" persistent max-width="340">
-      <v-card v-if="confirmedOrder" class="pa-6 text-center">
-        <PhCheckCircle :size="44" weight="fill" color="var(--color-success)" style="margin: 0 auto" />
-        <div class="text-h6 mt-3">Commande confirmée</div>
-        <div class="text-muted mt-2 text-meta">
-          Commande #{{ confirmedOrder.id.slice(0, 8).toUpperCase() }} ·
-          {{ PAYMENT_METHOD_LABELS[confirmedOrder.payment_method].paid }}<br />
-          Vous serez contacté avant la livraison.
-        </div>
-        <div v-if="confirmedOrder.sub_orders.length" class="text-left mt-4">
-          <div
-            v-for="sub in confirmedOrder.sub_orders"
-            :key="sub.id"
-            class="d-flex justify-space-between text-meta"
-          >
-            <span class="text-muted">{{ sub.shop_name }}</span>
-            <strong v-if="sub.estimated_delivery_min && sub.estimated_delivery_max">
-              {{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}
-            </strong>
-          </div>
-        </div>
-        <div class="d-flex flex-column ga-2 mt-5">
-          <v-btn color="primary" block @click="goToOrder">Voir ma commande</v-btn>
-          <v-btn variant="outlined" block @click="continueShopping">Continuer mes achats</v-btn>
-        </div>
-      </v-card>
-    </v-dialog>
   </div>
 </template>
 
 <style scoped>
-.wallet-option {
+/* --- Étapes --- */
+.stepper {
   display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-.wallet-option__title {
-  display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin: 2px 0 14px;
 }
 
-.wallet-option__meta {
-  font-size: 12px;
+.stepper__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.stepper__dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--color-divider-strong);
+  background: var(--color-neutral-900);
+  font-size: 12.5px;
+  font-weight: 800;
+  transition: all 0.2s ease;
+}
+
+.stepper__label {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.stepper__step--current {
+  color: var(--color-primary-300);
+}
+
+.stepper__step--current .stepper__dot {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 0 0 4px var(--color-primary-100);
+}
+
+.stepper__step--done {
+  color: var(--color-neutral-300);
+}
+
+.stepper__step--done .stepper__dot {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: #fff;
+}
+
+.stepper__bar {
+  flex: 1;
+  height: 2px;
+  min-width: 12px;
+  border-radius: 2px;
+  background: var(--color-divider-strong);
+  transition: background 0.2s ease;
+}
+
+.stepper__bar--done {
+  background: var(--color-success);
+}
+
+@media (max-width: 380px) {
+  .stepper__step:not(.stepper__step--current) .stepper__label {
+    display: none;
+  }
+}
+
+.step-title {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 14px;
+}
+
+.step-hint {
+  margin: 14px 0 0;
+  font-size: 13px;
   color: var(--color-neutral-400);
+}
+
+.step-hint strong {
+  color: var(--color-neutral-200);
+}
+
+/* --- Cartes de choix (adresse, paiement) --- */
+.choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1.5px solid var(--color-divider-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.choice:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.choice--selected {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-neutral-900));
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+
+.choice--new {
+  border-style: dashed;
+}
+
+.choice__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: hsl(var(--hue) 70% var(--tint-bg));
+  color: hsl(var(--hue) 60% var(--tint-fg));
+}
+
+.choice__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.choice__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--color-neutral-200);
+}
+
+.choice__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-primary-100);
+  color: var(--color-primary-300);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.choice__text {
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.choice__radio {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--color-divider-strong);
+  transition: border 0.15s ease;
+}
+
+.choice--selected .choice__radio {
+  border: 6px solid var(--color-primary);
+}
+
+.secure-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  color: var(--color-success);
 }
 
 .wallet-topup-link {
@@ -525,62 +933,202 @@ function continueShopping() {
   font-weight: 600;
 }
 
-.recap-shop-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--color-primary-300);
-  opacity: 0.85;
+/* --- Vérification --- */
+.review-block {
+  padding: 12px 0;
+  border-top: 1px solid var(--color-divider);
 }
 
-.address-option {
+.review-block:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.review-block__head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+
+.review-block__head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.review-block__edit {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  padding: 10px 8px;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  margin-bottom: 8px;
+  border: 0;
+  background: none;
+  color: var(--color-primary-300);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
   cursor: pointer;
 }
 
-.address-option--selected {
-  border-color: var(--color-primary);
+.review-block__eta {
+  color: var(--color-success);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
 }
 
-/* Sur mobile, une seule colonne : .checkout-summary n'existe pas encore, le
-   total reste inline dans le récapitulatif et le bouton vit dans la barre
-   collante du bas (même pattern que panier.vue). */
+.review-block__body {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: var(--color-neutral-400);
+}
+
+.review-block__body strong {
+  font-size: 14.5px;
+  color: var(--color-neutral-200);
+}
+
+.line-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.line-item__thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-divider);
+  background: #fff;
+  color: var(--color-neutral-500);
+}
+
+.line-item__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.line-item__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.line-item__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-item__meta {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.line-item__price {
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.line-fee {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 4px;
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+}
+
+/* --- Récapitulatif --- */
+.sum-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13.5px;
+  color: var(--color-neutral-400);
+}
+
+.sum-line--total {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--color-neutral-200);
+}
+
+.dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dock__total {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.dock__amount {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-neutral-200);
+}
+
+.dock__meta {
+  font-size: 11.5px;
+  color: var(--color-neutral-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock__btn {
+  flex-shrink: 0;
+  min-width: 132px;
+}
+
 .checkout-summary {
   display: none;
 }
 
-/* .app-shell plafonne à 720px par défaut (voir main.css) -- trop étroit
-   pour un formulaire + récapitulatif côte à côte sur ordinateur. Même
-   largeur que .cart-inner (panier.vue), ce checkout ayant une forme très
-   proche (liste + résumé fixe). */
 @media (min-width: 960px) {
   .checkout-inner {
     max-width: 1120px;
     margin: 0 auto;
   }
 
+  .stepper {
+    max-width: 560px;
+  }
+
   .checkout-page {
     display: grid;
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: 1fr 340px;
     align-items: start;
     gap: 32px;
   }
 
-  .checkout-total-inline {
-    /* Remplacé par .checkout-summary à cette largeur. */
-    display: none;
-  }
-
-  /* .grid-card (main.css) fournit le fond/bordure/ombre, partagés avec
-     .cart-list/.cart-summary (panier.vue) -- les deux colonnes forment une
-     vraie paire de cartes détachées plutôt qu'une seule. */
   .checkout-form {
     padding: 24px 28px;
   }
@@ -592,9 +1140,14 @@ function continueShopping() {
     padding: 20px;
   }
 
-  /* Redondant avec le bouton de .checkout-summary à cette largeur. */
   .checkout-bar--mobile-only {
     display: none;
+  }
+}
+
+@media (max-width: 959px) {
+  .checkout-form {
+    padding: 16px;
   }
 }
 
@@ -602,6 +1155,141 @@ function continueShopping() {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 15px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+}
+
+/* --- Succès --- */
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 20px 32px;
+  text-align: center;
+}
+
+.success__burst {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 20px;
+}
+
+.success__check {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-success);
+  color: #fff;
+  animation: pop 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.success__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--color-success);
+  animation: ring 0.9s ease-out 0.15s both;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes ring {
+  from {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .success__check,
+  .success__ring {
+    animation: none;
+  }
+}
+
+.success__title {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.success__sub {
+  font-size: 14px;
+  color: var(--color-neutral-400);
+  margin: 0 0 20px;
+}
+
+.success__card {
+  width: 100%;
+  max-width: 420px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-divider);
+  text-align: left;
+}
+
+.success__card-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+  margin-bottom: 6px;
+}
+
+.success__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13.5px;
+}
+
+.success__row strong {
+  color: var(--color-success);
+}
+
+.success__shop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-neutral-300);
+}
+
+.success__next {
+  width: 100%;
+  max-width: 420px;
+  margin: 18px 0 24px;
+  padding-left: 20px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-neutral-400);
+}
+
+.success__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 420px;
 }
 </style>
