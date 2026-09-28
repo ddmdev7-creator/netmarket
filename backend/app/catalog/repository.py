@@ -3,7 +3,7 @@
 import math
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -79,10 +79,53 @@ async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID) -> Product 
     return product
 
 
+# --- Recherche -----------------------------------------------------------------
+
+_ACCENTED = "àâäáãåçéèêëíìîïñóòôöõúùûüýÿœÀÂÄÁÃÅÇÉÈÊËÍÌÎÏÑÓÒÔÖÕÚÙÛÜÝ"
+_PLAIN = "aaaaaaceeeeiiiinooooouuuuyyoAAAAAACEEEEIIIINOOOOOUUUUY"
+
+
+def normalize_text(text: str) -> str:
+    """Pendant Python de normalized() : minuscules, sans accents."""
+    return text.translate(str.maketrans(_ACCENTED, _PLAIN)).lower()
+
+
+def normalized(column):
+    """Colonne en minuscules et sans accents : "electronique" trouve "Électronique"
+    (translate() plutôt que l'extension unaccent, qui demande des droits superutilisateur)."""
+    return func.lower(func.translate(column, _ACCENTED, _PLAIN))
+
+
+def search_tokens(q: str | None) -> list[str]:
+    """Mots de la recherche, normalisés et échappés pour LIKE (au plus 6)."""
+    if not q:
+        return []
+    words = [normalize_text(w) for w in q.split() if w.strip()]
+    return [w.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") for w in words][:6]
+
+
+def _search_clause(tokens: list[str]):
+    """Chaque mot doit apparaître dans le nom du produit ou de sa catégorie
+    ("hp portable" trouve "Ordinateur Portable HP"). Le nom de la boutique
+    n'en fait pas partie : "elec" remonterait sinon tout le catalogue de
+    "Electronic Center" — la boutique est proposée à part (suggest)."""
+    clauses = []
+    for token in tokens:
+        pattern = f"%{token}%"
+        matching_categories = select(Category.id).where(normalized(Category.name).like(pattern))
+        clauses.append(
+            or_(
+                normalized(Product.name).like(pattern),
+                Product.category_id.in_(matching_categories),
+            )
+        )
+    return and_(*clauses)
+
+
 async def list_products(
     db: AsyncSession, *, filters: ProductFilters, params: PageParams, include_inactive: bool = False
 ) -> tuple[list[Product], int]:
-    stmt = select(Product)
+    stmt = select(Product).join(Vendor, Product.vendor_id == Vendor.id)
 
     if not include_inactive:
         stmt = stmt.where(Product.status == ProductStatus.ACTIVE)
@@ -104,13 +147,23 @@ async def list_products(
         stmt = stmt.where(Product.stock == 0)
     elif filters.stock_level == "low":
         stmt = stmt.where(Product.stock > 0, Product.stock <= LOW_STOCK_THRESHOLD)
-    if filters.q:
-        stmt = stmt.where(Product.name.ilike(f"%{filters.q}%"))
+    tokens = search_tokens(filters.q)
+    if tokens:
+        stmt = stmt.where(_search_clause(tokens))
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
 
-    paged_stmt = stmt.join(Vendor, Product.vendor_id == Vendor.id)
+    paged_stmt = stmt
     order_by: list = []
+    if tokens and filters.sort == ProductSort.RECENT:
+        # Recherche sans tri explicite : les produits dont le NOM contient la
+        # recherche passent avant ceux trouvés via la catégorie ou la boutique,
+        # et ceux dont le nom COMMENCE par le premier mot avant tout.
+        name = normalized(Product.name)
+        order_by = [
+            case((name.like(f"{tokens[0]}%"), 0), else_=1),
+            case((and_(*[name.like(f"%{t}%") for t in tokens]), 0), else_=1),
+        ]
     if filters.sort == ProductSort.TOP_RATED:
         ratings = (
             select(Review.product_id, func.avg(Review.rating).label("avg"), func.count(Review.id).label("n"))
@@ -212,3 +265,58 @@ async def delete_variant(db: AsyncSession, variant: ProductVariant) -> None:
 async def sum_variant_stock(db: AsyncSession, product_id: uuid.UUID) -> int:
     stmt = select(func.coalesce(func.sum(ProductVariant.stock), 0)).where(ProductVariant.product_id == product_id)
     return (await db.execute(stmt)).scalar_one()
+
+
+async def suggest(db: AsyncSession, q: str, *, limit: int = 5) -> dict:
+    """Suggestions de la barre de recherche : produits, catégories, boutiques."""
+    tokens = search_tokens(q)
+    if not tokens:
+        return {"products": [], "categories": [], "shops": []}
+    name = normalized(Product.name)
+    product_rows = (
+        await db.execute(
+            select(Product.id, Product.name, Product.price, Product.images)
+            .join(Vendor, Product.vendor_id == Vendor.id)
+            .where(Product.status == ProductStatus.ACTIVE, _search_clause(tokens))
+            .order_by(
+                case((name.like(f"{tokens[0]}%"), 0), else_=1),
+                case((and_(*[name.like(f"%{t}%") for t in tokens]), 0), else_=1),
+                Product.created_at.desc(),
+            )
+            .limit(limit)
+        )
+    ).all()
+    category_clause = and_(*[normalized(Category.name).like(f"%{t}%") for t in tokens])
+    categories = (
+        await db.execute(select(Category).where(category_clause).order_by(Category.name).limit(limit))
+    ).scalars().all()
+    shop_clause = and_(*[normalized(Vendor.shop_name).like(f"%{t}%") for t in tokens])
+    shops = (
+        await db.execute(
+            select(Vendor.id, Vendor.shop_name, func.count(Product.id))
+            .join(Product, and_(Product.vendor_id == Vendor.id, Product.status == ProductStatus.ACTIVE))
+            .where(shop_clause)
+            .group_by(Vendor.id, Vendor.shop_name)
+            .order_by(Vendor.shop_name)
+            .limit(3)
+        )
+    ).all()
+    return {
+        "products": [
+            {"id": pid, "name": pname, "price": price, "image": (images or [None])[0]}
+            for pid, pname, price, images in product_rows
+        ],
+        "categories": categories,
+        "shops": [{"id": vid, "shop_name": shop, "product_count": count} for vid, shop, count in shops],
+    }
+
+
+async def search_vocabulary(db: AsyncSession) -> list[str]:
+    """Mots connus du catalogue (noms de produits actifs, catégories, boutiques)
+    — base du "Vouliez-vous dire…" quand une recherche ne donne rien."""
+    rows = (
+        await db.execute(select(Product.name).where(Product.status == ProductStatus.ACTIVE).limit(5000))
+    ).scalars().all()
+    rows += (await db.execute(select(Category.name))).scalars().all()
+    rows += (await db.execute(select(Vendor.shop_name))).scalars().all()
+    return rows

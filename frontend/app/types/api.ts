@@ -1141,3 +1141,11 @@ export interface AdminPickupApplicationRead extends PickupApplicationRead {
   applicant_phone: string
   applicant_email: string | null
 }
+
+/** GET /products/suggest — suggestions de la barre de recherche. */
+export interface SearchSuggestions {
+  products: { id: string; name: string; price: number; image: string | null }[]
+  categories: CategoryRead[]
+  shops: { id: string; shop_name: string; product_count: number }[]
+  did_you_mean: string | null
+}

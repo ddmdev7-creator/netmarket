@@ -524,3 +524,67 @@ async def test_product_sort_top_rated_and_nearest(
 
     nearest = await client.get("/products", params={"sort": "nearest", "near_lat": 9.55, "near_lng": -13.67})
     assert nearest.json()["items"][-1]["name"] == "Lointain"
+
+
+async def test_search_ignores_accents_and_matches_every_word_across_fields(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category
+) -> None:
+    db_session.add_all(
+        [
+            Product(vendor_id=vendor.id, category_id=category.id, name="Ordinateur Portable HP", price=1, stock=1),
+            Product(vendor_id=vendor.id, category_id=category.id, name="Écouteurs sans fil", price=1, stock=1),
+            Product(vendor_id=vendor.id, category_id=category.id, name="Portable Samsung", price=1, stock=1),
+        ]
+    )
+    await db_session.flush()
+
+    async def names(q: str) -> list[str]:
+        return [i["name"] for i in (await client.get("/products", params={"q": q})).json()["items"]]
+
+    assert await names("ecouteurs") == ["Écouteurs sans fil"]
+    assert await names("hp portable") == ["Ordinateur Portable HP"]
+    # Nom commençant par la recherche en tête.
+    assert (await names("portable"))[0] == "Portable Samsung"
+    # La catégorie ("Électronique") est aussi cherchée, pas le nom de la boutique.
+    assert len(await names("electronique")) == 3
+    assert await names("boutique test") == []
+    assert await names("100%") == []
+
+
+async def test_suggest_returns_products_categories_shops_and_correction(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category
+) -> None:
+    db_session.add(Product(vendor_id=vendor.id, category_id=category.id, name="Ordinateur HP", price=5, stock=1))
+    await db_session.flush()
+
+    body = (await client.get("/products/suggest", params={"q": "ordi"})).json()
+    assert [p["name"] for p in body["products"]] == ["Ordinateur HP"]
+    assert body["did_you_mean"] is None
+
+    body = (await client.get("/products/suggest", params={"q": "electro"})).json()
+    assert [c["name"] for c in body["categories"]] == ["Électronique"]
+
+    body = (await client.get("/products/suggest", params={"q": "boutique"})).json()
+    assert body["shops"] == [{"id": str(vendor.id), "shop_name": "Boutique Test", "product_count": 1}]
+
+    body = (await client.get("/products/suggest", params={"q": "ordinatuer"})).json()
+    assert body["products"] == [] and body["did_you_mean"] == "ordinateur"
+
+
+async def test_products_filter_by_vendor(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, category: Category
+) -> None:
+    other_user = await make_user(db_session, phone="+224620007777", role=UserRole.VENDOR)
+    other = Vendor(user_id=other_user.id, shop_name="Autre", status=VendorStatus.APPROVED)
+    db_session.add(other)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Product(vendor_id=vendor.id, category_id=category.id, name="A", price=1, stock=1),
+            Product(vendor_id=other.id, category_id=category.id, name="B", price=1, stock=1),
+        ]
+    )
+    await db_session.flush()
+
+    response = await client.get("/products", params={"vendor_id": str(other.id)})
+    assert [i["name"] for i in response.json()["items"]] == ["B"]

@@ -145,10 +145,8 @@ class ProductFilters:
     sort: ProductSort = ProductSort.RECENT
     near_lat: float | None = None
     near_lng: float | None = None
-    # Not settable from the public query params below — only constructed
-    # internally by catalog/service.py::list_my_products, for the vendor's
-    # own product list (which also needs non-active products, unlike the
-    # public catalog).
+    # Public (produits d'une boutique, suggestion "boutique" de la recherche) ;
+    # forcé par catalog/service.py::list_my_products pour la liste du vendeur.
     vendor_id: uuid.UUID | None = None
     # Vendor-only filters (see my_product_filters below) — a vendor narrowing
     # their own "Mes produits" list, never exposed on the public catalog.
@@ -165,6 +163,7 @@ def product_filters(
     sort: ProductSort = Query(default=ProductSort.RECENT, description="Tri des résultats"),
     near_lat: float | None = Query(default=None, ge=-90, le=90, description="Latitude pour sort=nearest"),
     near_lng: float | None = Query(default=None, ge=-180, le=180, description="Longitude pour sort=nearest"),
+    vendor_id: uuid.UUID | None = Query(default=None, description="Produits d'une boutique"),
 ) -> ProductFilters:
     return ProductFilters(
         category_id=category_id,
@@ -175,6 +174,7 @@ def product_filters(
         sort=sort,
         near_lat=near_lat,
         near_lng=near_lng,
+        vendor_id=vendor_id,
     )
 
 
@@ -196,3 +196,25 @@ def my_product_filters(
         status=status,
         stock_level=stock_level,
     )
+
+
+class SuggestedProduct(BaseModel):
+    id: uuid.UUID
+    name: str
+    price: int
+    image: str | None
+
+
+class SuggestedShop(BaseModel):
+    id: uuid.UUID
+    shop_name: str
+    product_count: int
+
+
+class SearchSuggestions(BaseModel):
+    products: list[SuggestedProduct]
+    categories: list[CategoryRead]
+    shops: list[SuggestedShop]
+    # Requête corrigée d'après les mots du catalogue, seulement quand la
+    # recherche ne trouve rien ("ordinatuer" → "ordinateur").
+    did_you_mean: str | None = None

@@ -1,5 +1,6 @@
 """Business logic for categories and products, including vendor ownership checks."""
 
+import difflib
 import uuid
 from datetime import date
 
@@ -183,6 +184,26 @@ async def list_products(
         _attach_rating(product, rating_map.get(product.id))
         _attach_delivery_estimate(product, tiers)
     return products, total
+
+
+async def suggest(db: AsyncSession, q: str) -> dict:
+    result = await repository.suggest(db, q)
+    if not (result["products"] or result["categories"] or result["shops"]):
+        result["did_you_mean"] = _did_you_mean(q, await repository.search_vocabulary(db))
+    return result
+
+
+def _did_you_mean(q: str, vocabulary: list[str]) -> str | None:
+    words = {w for text in vocabulary for w in repository.normalize_text(text).split() if len(w) >= 3}
+    corrected = []
+    for word in repository.normalize_text(q).split():
+        if word in words:
+            corrected.append(word)
+            continue
+        close = difflib.get_close_matches(word, words, n=1, cutoff=0.7)
+        corrected.append(close[0] if close else word)
+    suggestion = " ".join(corrected)
+    return suggestion if suggestion != repository.normalize_text(q).strip() else None
 
 
 async def list_my_products(

@@ -3,14 +3,14 @@ import {
   PhArrowUp,
   PhCrosshair,
   PhFunnel,
-  PhMagnifyingGlass,
+  PhMagnifyingGlassMinus,
   PhMapPin,
   PhSparkle,
   PhStar,
+  PhStorefront,
   PhTag,
-  PhX,
 } from '@phosphor-icons/vue'
-import type { AddressRead, CategoryRead, Page, ProductRead, ProductSort } from '~/types/api'
+import type { AddressRead, CategoryRead, Page, ProductRead, ProductSort, SearchSuggestions } from '~/types/api'
 
 const { apiFetch } = useApi()
 const auth = useAuthStore()
@@ -34,7 +34,15 @@ const SORT_VALUES = SORT_OPTIONS.map((o) => o.value)
 // --- État de recherche (q, catégorie et tri repris de l'URL : un retour
 // arrière depuis une fiche produit retrouve la même liste) -----------------
 
-const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
+// query = recherche appliquée à la liste ; search = texte en cours de
+// frappe dans la barre (qui ne relance la liste qu'à la validation).
+const query = ref(typeof route.query.q === 'string' ? route.query.q : '')
+const search = ref(query.value)
+const shop = ref<{ id: string; name: string } | null>(
+  typeof route.query.shop === 'string'
+    ? { id: route.query.shop, name: typeof route.query.shop_name === 'string' ? route.query.shop_name : 'Boutique' }
+    : null,
+)
 const activeCategoryId = ref<string | null>(typeof route.query.cat === 'string' ? route.query.cat : null)
 const sort = ref<ProductSort>(
   SORT_VALUES.includes(route.query.sort as ProductSort) ? (route.query.sort as ProductSort) : 'recent',
@@ -52,7 +60,9 @@ const NEAR_STORAGE_KEY = 'nm-near'
 const hasPriceFilter = computed(() => minPrice.value !== null || maxPrice.value !== null)
 const hasActiveFilters = computed(() => hasPriceFilter.value || inStockOnly.value)
 // Accueil "vitrine" (bandeau + rubriques) tant qu'on ne cherche rien de précis.
-const isBrowsing = computed(() => !search.value.trim() && !activeCategoryId.value && !hasActiveFilters.value)
+const isBrowsing = computed(
+  () => !query.value.trim() && !activeCategoryId.value && !shop.value && !hasActiveFilters.value,
+)
 
 const { data: categories } = await useAsyncData('home-categories', () => apiFetch<CategoryRead[]>('/categories'), {
   default: () => [],
@@ -87,7 +97,8 @@ function listQuery(page: number, pageSize: number, overrides: Record<string, unk
     page,
     page_size: pageSize,
     category_id: activeCategoryId.value ?? undefined,
-    q: search.value.trim() || undefined,
+    q: query.value.trim() || undefined,
+    vendor_id: shop.value?.id,
     min_price: minPrice.value ?? undefined,
     max_price: maxPrice.value ?? undefined,
     in_stock: inStockOnly.value || undefined,
@@ -138,11 +149,15 @@ async function loadMore() {
 }
 
 function syncUrl() {
-  const query: Record<string, string> = {}
-  if (search.value.trim()) query.q = search.value.trim()
-  if (activeCategoryId.value) query.cat = activeCategoryId.value
-  if (sort.value !== 'recent') query.sort = sort.value
-  router.replace({ query })
+  const q: Record<string, string> = {}
+  if (query.value.trim()) q.q = query.value.trim()
+  if (activeCategoryId.value) q.cat = activeCategoryId.value
+  if (shop.value) {
+    q.shop = shop.value.id
+    q.shop_name = shop.value.name
+  }
+  if (sort.value !== 'recent') q.sort = sort.value
+  router.replace({ query: q })
 }
 
 function reload() {
@@ -194,6 +209,8 @@ function clearStock() {
 
 function resetAll() {
   search.value = ''
+  query.value = ''
+  shop.value = null
   activeCategoryId.value = null
   minPrice.value = null
   maxPrice.value = null
@@ -202,16 +219,52 @@ function resetAll() {
   reload()
 }
 
-let searchTimeout: ReturnType<typeof setTimeout>
-function onSearchInput() {
-  clearTimeout(searchTimeout)
-  searchTimeout = setTimeout(reload, 350)
+function onSearchSubmit(q: string) {
+  query.value = q
+  reload()
+  if (q) scrollToResults()
 }
 
-function clearSearch() {
-  search.value = ''
+function onSearchCategory(id: string) {
+  query.value = ''
+  selectCategory(id)
+  scrollToResults()
+}
+
+function selectShop(value: { id: string; name: string }) {
+  query.value = ''
+  shop.value = value
+  reload()
+  scrollToResults()
+}
+
+function clearShop() {
+  shop.value = null
   reload()
 }
+
+function applySuggestion(q: string) {
+  search.value = q
+  onSearchSubmit(q)
+}
+
+// "Vouliez-vous dire…" quand une recherche ne donne rien.
+const didYouMean = ref<string | null>(null)
+watch(
+  () => [pending.value, total.value, query.value] as const,
+  async ([isPending, count, q]) => {
+    didYouMean.value = null
+    if (isPending || count > 0 || q.trim().length < 2) return
+    try {
+      const result = await apiFetch<SearchSuggestions>('/products/suggest', { query: { q: q.trim() } })
+      if (q === query.value) didYouMean.value = result.did_you_mean
+    } catch {
+      // Sans correction proposée, les conseils suffisent.
+    }
+  },
+)
+const noResults = computed(() => !pending.value && products.value.length === 0 && !isBrowsing.value)
+const fallbackProducts = computed(() => (topRated.value.length >= MIN_RAIL ? topRated.value : railRecent.value?.items ?? []))
 
 const priceChipLabel = computed(() => {
   if (minPrice.value !== null && maxPrice.value !== null) return `${formatGnf(minPrice.value)} – ${formatGnf(maxPrice.value)}`
@@ -222,8 +275,9 @@ const priceChipLabel = computed(() => {
 const resultsTitle = computed(() => {
   if (isBrowsing.value) return 'Tous les produits'
   const count = `${total.value} produit${total.value > 1 ? 's' : ''}`
-  if (search.value.trim()) return `${count} pour « ${search.value.trim()} »`
+  if (query.value.trim()) return `${count} pour « ${query.value.trim()} »`
   if (activeCategory.value) return `${activeCategory.value.name} · ${count}`
+  if (shop.value) return `${shop.value.name} · ${count}`
   return count
 })
 
@@ -331,34 +385,19 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
   sentinelObserver?.disconnect()
-  clearTimeout(searchTimeout)
 })
 </script>
 
 <template>
   <div class="home-page">
     <div class="d-flex align-center ga-2 mb-4">
-      <v-text-field
+      <HomeSearchBox
         v-model="search"
-        placeholder="Rechercher un produit…"
-        density="comfortable"
-        variant="solo"
-        hide-details
-        flat
-        rounded
-        class="search-field"
-        @update:model-value="onSearchInput"
-        @keydown.enter="reload"
-      >
-        <template #prepend-inner>
-          <PhMagnifyingGlass :size="19" weight="bold" color="var(--color-primary)" />
-        </template>
-        <template v-if="search" #append-inner>
-          <button type="button" class="search-clear" aria-label="Effacer la recherche" @click="clearSearch">
-            <PhX :size="15" weight="bold" />
-          </button>
-        </template>
-      </v-text-field>
+        :categories="categories"
+        @submit="onSearchSubmit"
+        @category="onSearchCategory"
+        @shop="selectShop"
+      />
       <button
         type="button"
         class="filter-btn"
@@ -475,7 +514,11 @@ onBeforeUnmount(() => {
       >
         {{ option.title }}
       </button>
-      <span v-if="hasActiveFilters" class="chip-scroll__sep" />
+      <span v-if="hasActiveFilters || shop" class="chip-scroll__sep" />
+      <v-chip v-if="shop" size="small" color="primary" variant="tonal" closable @click:close="clearShop">
+        <PhStorefront :size="14" class="mr-1" />
+        {{ shop.name }}
+      </v-chip>
       <v-chip v-if="hasPriceFilter" size="small" color="primary" variant="tonal" closable @click:close="clearPrice">
         {{ priceChipLabel }}
       </v-chip>
@@ -484,11 +527,32 @@ onBeforeUnmount(() => {
       </v-chip>
     </div>
 
-    <ProductGrid :products="products" :loading="pending" />
-
-    <div v-if="!pending && products.length === 0 && !isBrowsing" class="text-center mt-n4 mb-6">
+    <div v-if="noResults" class="no-results">
+      <span class="no-results__icon"><PhMagnifyingGlassMinus :size="30" weight="duotone" /></span>
+      <h3 class="no-results__title">
+        {{ query.trim() ? `Aucun résultat pour « ${query.trim()} »` : 'Aucun produit ne correspond à ces critères' }}
+      </h3>
+      <p v-if="didYouMean" class="no-results__dym">
+        Vouliez-vous dire
+        <button type="button" class="no-results__dym-btn" @click="applySuggestion(didYouMean)">{{ didYouMean }}</button>
+        ?
+      </p>
+      <ul class="no-results__tips">
+        <li v-if="query.trim()">Vérifiez l'orthographe ou essayez un mot plus simple (« téléphone » plutôt que le modèle exact).</li>
+        <li v-if="activeCategoryId || shop || hasActiveFilters">Retirez un filtre ou cherchez dans toutes les catégories.</li>
+      </ul>
       <v-btn variant="tonal" color="primary" @click="resetAll">Voir tous les produits</v-btn>
     </div>
+    <HomeProductRail
+      v-if="noResults && fallbackProducts.length"
+      title="Ça pourrait vous plaire"
+      :icon="PhStar"
+      :hue="35"
+      :products="fallbackProducts"
+      class="mt-6"
+      @see-all="resetAll"
+    />
+    <ProductGrid v-if="!noResults" :products="products" :loading="pending" />
 
     <div ref="sentinel" class="load-more">
       <v-progress-circular v-if="loadingMore" indeterminate size="26" width="3" color="primary" />
@@ -549,29 +613,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* Champ de recherche mis en avant : fond blanc plein (variant="solo") avec
-   une ombre légère — c'est la première action de la page. */
-.search-field :deep(.v-field) {
-  box-shadow: var(--shadow-sm);
-}
-
-.search-field :deep(.v-field__input) {
-  font-size: 14px;
-}
-
-.search-clear {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--color-neutral-700);
-  color: var(--color-neutral-300);
-  cursor: pointer;
-}
-
 /* Bouton filtre : toujours visible comme un vrai bouton (bordure) plutôt
    que de compter uniquement sur un changement de couleur pour signaler
    l'état actif — le point orange en complément reste lisible même pour qui
@@ -613,6 +654,58 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: var(--color-accent);
   border: 2px solid var(--color-neutral-900);
+}
+
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 16px 8px;
+}
+
+.no-results__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: hsl(220 70% var(--tint-bg));
+  color: hsl(220 60% var(--tint-fg));
+}
+
+.no-results__title {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.no-results__dym {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.no-results__dym-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-primary-300);
+  font-weight: 800;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.no-results__tips {
+  max-width: 420px;
+  margin: 4px 0 16px;
+  padding-left: 18px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--color-neutral-400);
 }
 
 .near-cta {

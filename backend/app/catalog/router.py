@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import service
@@ -17,6 +17,7 @@ from app.catalog.schemas import (
     ProductVariantCreate,
     ProductVariantRead,
     ProductVariantUpdate,
+    SearchSuggestions,
     my_product_filters,
     product_filters,
 )
@@ -91,6 +92,14 @@ async def list_products(
 ) -> Page[ProductRead]:
     items, total = await service.list_products(db, filters, params)
     return Page.create(items=items, total=total, params=params)
+
+
+@router.get("/products/suggest", response_model=SearchSuggestions)
+async def suggest_products(
+    q: str = Query(min_length=1, max_length=100, description="Début de recherche"),
+    db: AsyncSession = Depends(get_db),
+) -> SearchSuggestions:
+    return SearchSuggestions.model_validate(await service.suggest(db, q), from_attributes=True)
 
 
 @router.get(
