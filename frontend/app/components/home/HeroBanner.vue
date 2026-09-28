@@ -185,6 +185,11 @@ onBeforeUnmount(() => {
   height: 7px;
   padding: 0;
   border: 0;
+  /* Zone de toucher plus large que le point visible. */
+  box-sizing: content-box;
+  background-clip: content-box !important;
+  border: 8px solid transparent;
+  margin: -8px -4px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.5);
   cursor: pointer;

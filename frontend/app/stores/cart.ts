@@ -4,6 +4,7 @@ import type { CartRead } from '~/types/api'
 export const useCartStore = defineStore('cart', () => {
   const cart = ref<CartRead | null>(null)
   const loading = ref(false)
+  const bumpTick = ref(0)
 
   const itemCount = computed(
     () => cart.value?.vendors.reduce((sum, group) => sum + group.items.reduce((s, i) => s + i.quantity, 0), 0) ?? 0,
@@ -25,6 +26,10 @@ export const useCartStore = defineStore('cart', () => {
       method: 'POST',
       body: { product_id: productId, variant_id: variantId, quantity },
     })
+    // Retour visuel (l'icône panier de la navigation "saute", voir BottomNav/TopBar)
+    // et, sur téléphone, une brève vibration.
+    bumpTick.value++
+    if (import.meta.client) navigator.vibrate?.(12)
   }
 
   async function updateItem(itemId: string, quantity: number) {
@@ -46,5 +51,5 @@ export const useCartStore = defineStore('cart', () => {
     cart.value = null
   }
 
-  return { cart, loading, itemCount, fetchCart, addItem, updateItem, removeItem, clearCart, reset }
+  return { cart, loading, itemCount, fetchCart, addItem, updateItem, removeItem, clearCart, reset, bumpTick }
 })

@@ -112,7 +112,7 @@ const zoomed = ref<OrderItemRead | null>(null)
                 :aria-label="`Agrandir la photo de ${item.product_name}`"
                 @click="zoomed = item"
               >
-                <img :src="resolveImageUrl(item.product_image, apiBase)" :alt="item.product_name" loading="lazy" />
+                <img :src="resolveImageUrl(item.product_image, apiBase, 160)" :alt="item.product_name" loading="lazy" />
                 <span class="item__zoom"><PhMagnifyingGlassPlus :size="16" weight="bold" /></span>
               </button>
               <div v-else class="item__photo" title="Aucune photo (produit ou variante supprimé)">

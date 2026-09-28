@@ -14,8 +14,17 @@ export function formatGnf(amount: number): string {
  * useApiBase() at the call site, since resolving it here would make this a
  * composable instead of a plain util.
  */
-export function resolveImageUrl(value: string, apiBase: string): string {
-  return value.startsWith('http') ? value : `${apiBase}/uploads/images/${value}`
+export function resolveImageUrl(value: string, apiBase: string, width?: number): string {
+  if (value.startsWith('http')) return value
+  // width : version réduite (WebP si le navigateur l'accepte) générée et mise
+  // en cache par l'API — voir GET /uploads/images/{key}?w=… (160/320/480/800).
+  return `${apiBase}/uploads/images/${value}${width ? `?w=${width}` : ''}`
+}
+
+/** srcset pour une photo affichée à des tailles variables (cartes produit). */
+export function imageSrcset(value: string, apiBase: string, widths: number[] = [320, 480, 800]): string | undefined {
+  if (value.startsWith('http')) return undefined
+  return widths.map((w) => `${resolveImageUrl(value, apiBase, w)} ${w}w`).join(', ')
 }
 
 const RELATIVE_DAY_LABELS: Record<number, string> = { 0: "Aujourd'hui", 1: 'Demain', 2: 'Après-demain' }

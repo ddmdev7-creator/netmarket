@@ -12,12 +12,13 @@ object storage (see app/core/storage.py's module docstring).
 
 import re
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from PIL import UnidentifiedImageError
 
 from app.core.deps import require_role
 from app.core.exceptions import ConflictError, NotFoundError
-from app.core.storage import fetch_image, upload_image
+from app.core.storage import VARIANT_WIDTHS, fetch_image, fetch_image_variant, upload_image
 from app.subscriptions.deps import require_premium_vendor
 from app.uploads.enhance import enhance_image
 from app.uploads.schemas import UploadedImages
@@ -84,9 +85,26 @@ async def enhance_images(files: list[UploadFile] = File(...)) -> UploadedImages:
 
 
 @router.get("/images/{key}")
-async def get_image(key: str) -> Response:
+async def get_image(
+    key: str,
+    request: Request,
+    w: int | None = Query(default=None, description="Largeur réduite (160, 320, 480 ou 800)"),
+) -> Response:
     if not _KEY_PATTERN.match(key):
         raise NotFoundError("Image introuvable.")
+    if w is not None:
+        # Largeur hors liste : ramenée à la plus proche au-dessus (ou la plus grande).
+        width = next((v for v in VARIANT_WIDTHS if v >= w), VARIANT_WIDTHS[-1])
+        webp = "image/webp" in request.headers.get("accept", "")
+        variant = await run_in_threadpool(fetch_image_variant, key, width, webp=webp)
+        if variant is None:
+            raise NotFoundError("Image introuvable.")
+        content, media_type = variant
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept"},
+        )
     content = fetch_image(key)
     if content is None:
         raise NotFoundError("Image introuvable.")

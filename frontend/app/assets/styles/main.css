@@ -19,7 +19,9 @@
   --color-neutral-800: #f7f8f9;
   --color-neutral-700: #ececef;
   --color-neutral-600: #d7d9de;
-  --color-neutral-500: #9a9ca5;
+  /* Assombri (ancien #9a9ca5, contraste 2,6:1) : ce ton sert surtout à du
+     texte secondaire, qui doit rester lisible (≈ 4,5:1 sur blanc, WCAG AA). */
+  --color-neutral-500: #737580;
   --color-neutral-400: #6e7079;
   --color-neutral-300: #35363b;
   --color-neutral-200: #14151a;
@@ -91,8 +93,8 @@
   --color-neutral-800: #2c2c33;
   --color-neutral-700: #3a3a42;
   --color-neutral-600: #46464e;
-  --color-neutral-500: #6b6b75;
-  --color-neutral-400: #8f8f99;
+  --color-neutral-500: #878791;
+  --color-neutral-400: #a3a3ad;
   --color-neutral-300: #b4b4bd;
   --color-neutral-200: #d8d8de;
 
@@ -547,4 +549,55 @@ h1, h2, h3, h4, h5, h6,
 
 .map-link--off:hover {
   text-decoration: none;
+}
+
+
+/* --- Accessibilité -------------------------------------------------------- */
+
+/* Contour de focus visible au clavier uniquement (pas au toucher/clic). */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* iOS zoome sur tout champ en dessous de 16 px au focus : sur téléphone, les
+   champs restent à 16 px (le zoom manuel n'est plus bloqué, voir nuxt.config). */
+@media (max-width: 959px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Mouvements réduits demandés par le système : animations quasi instantanées. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Transitions de page (nuxt.config : app.pageTransition) --------------- */
+
+.page-enter-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.page-leave-active {
+  transition: opacity 0.1s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.page-leave-to {
+  opacity: 0;
 }

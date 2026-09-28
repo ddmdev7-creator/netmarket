@@ -278,7 +278,7 @@ function formatDate(iso: string) {
         <NuxtLink :to="`/produits/${item.product_id}`" class="order-item-row__thumb">
           <img
             v-if="item.product_image"
-            :src="resolveImageUrl(item.product_image, apiBase)"
+            :src="resolveImageUrl(item.product_image, apiBase, 160)"
             :alt="item.product_name"
             loading="lazy"
           />

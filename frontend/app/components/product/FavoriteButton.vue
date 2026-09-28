@@ -66,7 +66,14 @@ async function onClick(event: MouseEvent) {
   transition: color 0.15s ease, transform 0.15s ease;
 }
 
+.fav--overlay::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+
 .fav--overlay {
+  position: relative;
   width: 32px;
   height: 32px;
   border-radius: 50%;

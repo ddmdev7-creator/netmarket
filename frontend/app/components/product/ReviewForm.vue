@@ -76,7 +76,7 @@ async function submit() {
 
       <div v-if="productName" class="review-form__product">
         <div class="review-form__thumb">
-          <img v-if="productImage" :src="resolveImageUrl(productImage, apiBase)" :alt="productName" />
+          <img v-if="productImage" :src="resolveImageUrl(productImage, apiBase, 160)" :alt="productName" />
           <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
         </div>
         <span class="review-form__name">{{ productName }}</span>

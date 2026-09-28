@@ -87,3 +87,35 @@ def fetch_image(key: str) -> bytes | None:
     except ClientError:
         return None
     return response["Body"].read()
+
+
+# Largeurs servies pour l'affichage (vignettes, cartes, galerie) : une liste
+# fermée, sinon n'importe qui pourrait remplir le bucket de variantes.
+VARIANT_WIDTHS = (160, 320, 480, 800)
+
+
+def fetch_image_variant(key: str, width: int, *, webp: bool) -> tuple[bytes, str] | None:
+    """Version réduite d'une image (largeur max `width`, WebP si le navigateur
+    l'accepte), générée au premier appel puis conservée dans le bucket sous
+    variants/… — les appels suivants la relisent telle quelle."""
+    fmt, media_type, ext = ("WEBP", "image/webp", "webp") if webp else ("JPEG", "image/jpeg", "jpg")
+    variant_key = f"variants/{width}/{key.rsplit('.', 1)[0]}.{ext}"
+    _ensure_bucket()
+    try:
+        cached = _client.get_object(Bucket=settings.storage_bucket, Key=variant_key)
+        return cached["Body"].read(), media_type
+    except ClientError:
+        pass
+    original = fetch_image(key)
+    if original is None:
+        return None
+    image = Image.open(io.BytesIO(original)).convert("RGB")
+    image.thumbnail((width, width * 2))
+    buffer = io.BytesIO()
+    if webp:
+        image.save(buffer, format=fmt, quality=78, method=4)
+    else:
+        image.save(buffer, format=fmt, quality=78, optimize=True)
+    content = buffer.getvalue()
+    _client.put_object(Bucket=settings.storage_bucket, Key=variant_key, Body=content, ContentType=media_type)
+    return content, media_type

@@ -11,12 +11,16 @@ export default defineNuxtConfig({
   css: ['~/assets/styles/main.css'],
 
   app: {
+    // Fondu court entre les pages (styles .page-* dans main.css).
+    pageTransition: { name: 'page', mode: 'out-in' },
     head: {
       htmlAttrs: { lang: 'fr' },
       // viewport-fit=cover lets the app draw under the notch/home-indicator so
       // env(safe-area-inset-*) below can push content back in — required for a
       // real edge-to-edge look once installed (standalone display mode).
-      viewport: 'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no',
+      // Zoom manuel autorisé (accessibilité) : le zoom automatique d'iOS au focus
+      // d'un champ est évité autrement, en gardant les champs à 16 px (main.css).
+      viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
       meta: [
         { name: 'description', content: 'Marketplace e-commerce multi-vendeurs pour le marché guinéen' },
         // Valeur par défaut (thème clair "daylight") — mise à jour à l'exécution

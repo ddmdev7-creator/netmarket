@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhTruck, PhX } from '@phosphor-icons/vue'
+import { PhImage, PhShoppingCart, PhTruck, PhX } from '@phosphor-icons/vue'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -46,7 +46,16 @@ function goCheckout() {
           <div v-if="pending">
             <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-two-line" class="mb-2" />
           </div>
-          <CommonEmptyState v-else-if="!hasItems" message="Votre panier est vide." />
+          <CommonEmptyState
+            v-else-if="!hasItems"
+            :icon="PhShoppingCart"
+            title="Votre panier est vide"
+            message="Parcourez le catalogue et ajoutez les produits qui vous plaisent."
+            action-label="Découvrir les produits"
+            action-to="/"
+          >
+            <NuxtLink to="/favoris" class="empty-link">Voir mes favoris</NuxtLink>
+          </CommonEmptyState>
 
           <template v-else>
             <div v-for="group in cartStore.cart!.vendors" :key="group.vendor_id" class="vendor-group">
@@ -56,7 +65,7 @@ function goCheckout() {
                 <NuxtLink :to="`/produits/${item.product_id}`" class="cart-row__thumb">
                   <img
                     v-if="item.product_image"
-                    :src="resolveImageUrl(item.product_image, apiBase)"
+                    :src="resolveImageUrl(item.product_image, apiBase, 160)"
                     :alt="item.product_name"
                     loading="lazy"
                   />
@@ -257,5 +266,12 @@ function goCheckout() {
   padding: 10px;
   margin: -10px -10px 0 0;
   cursor: pointer;
+}
+
+.empty-link {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary-300);
 }
 </style>

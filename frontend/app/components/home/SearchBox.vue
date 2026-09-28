@@ -363,7 +363,7 @@ defineExpose({ remember })
 
               <template v-else-if="row.kind === 'product'">
                 <span class="sbox__thumb">
-                  <img v-if="row.image" :src="resolveImageUrl(row.image, apiBase)" alt="" loading="lazy" />
+                  <img v-if="row.image" :src="resolveImageUrl(row.image, apiBase, 160)" alt="" loading="lazy" />
                   <PhImage v-else :size="16" />
                 </span>
                 <span class="sbox__row-main">
@@ -432,7 +432,7 @@ defineExpose({ remember })
   min-width: 0;
   height: 100%;
   border: 0;
-  outline: none;
+  outline: none !important;
   background: none;
   color: var(--color-neutral-200);
   font-size: 14.5px;

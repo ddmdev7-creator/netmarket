@@ -64,16 +64,22 @@ const navItems = [
         class="top-bar__nav-item"
         active-class="top-bar__nav-item--active"
       >
-        <v-badge
-          v-if="item.to === '/panier' && cartStore.itemCount > 0"
-          :content="cartStore.itemCount"
-          color="primary"
-          offset-x="-4"
-          offset-y="-2"
+        <span
+          :key="item.to === '/panier' ? cartStore.bumpTick : 0"
+          class="top-bar__icon"
+          :class="{ 'is-bump': item.to === '/panier' && cartStore.bumpTick > 0 }"
         >
-          <component :is="item.icon" :size="17" />
-        </v-badge>
-        <component :is="item.icon" v-else :size="17" />
+          <v-badge
+            v-if="item.to === '/panier' && cartStore.itemCount > 0"
+            :content="cartStore.itemCount"
+            color="primary"
+            offset-x="-4"
+            offset-y="-2"
+          >
+            <component :is="item.icon" :size="17" />
+          </v-badge>
+          <component :is="item.icon" v-else :size="17" />
+        </span>
         <span>{{ item.label }}</span>
       </NuxtLink>
     </nav>
@@ -265,5 +271,28 @@ const navItems = [
   padding: 6px 14px;
   border: 1px solid var(--color-divider-strong);
   border-radius: var(--radius-sm);
+}
+
+.top-bar__icon {
+  display: inline-flex;
+}
+
+.top-bar__icon.is-bump {
+  animation: top-cart-bump 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes top-cart-bump {
+  30% {
+    transform: scale(1.35) translateY(-2px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-bar__icon.is-bump {
+    animation: none;
+  }
 }
 </style>

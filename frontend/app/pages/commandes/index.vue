@@ -244,7 +244,7 @@ const statusAccent: Record<OrderStatus, string> = {
       <div class="to-review__list">
         <div v-for="p in reviewable.toReview.value" :key="p.product_id" class="to-review__item">
           <NuxtLink :to="`/produits/${p.product_id}`" class="to-review__thumb">
-            <img v-if="p.product_image" :src="resolveImageUrl(p.product_image, apiBase)" :alt="p.product_name" loading="lazy" />
+            <img v-if="p.product_image" :src="resolveImageUrl(p.product_image, apiBase, 320)" :alt="p.product_name" loading="lazy" />
             <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
           </NuxtLink>
           <div class="to-review__info">
@@ -350,7 +350,14 @@ const statusAccent: Record<OrderStatus, string> = {
       :icon="PhWarningCircle"
       message="Impossible de charger vos commandes. Réessayez plus tard."
     />
-    <CommonEmptyState v-else-if="orders.length === 0" :icon="PhPackage" message="Vous n'avez encore passé aucune commande." />
+    <CommonEmptyState
+      v-else-if="orders.length === 0"
+      :icon="PhPackage"
+      title="Aucune commande pour l'instant"
+      message="Vos commandes et leur suivi de livraison apparaîtront ici."
+      action-label="Commencer mes achats"
+      action-to="/"
+    />
     <div v-else-if="visible.length === 0" class="no-result">
       <CommonEmptyState message="Aucune commande ne correspond à votre recherche." />
       <v-btn variant="tonal" color="primary" @click="resetFilters">Réinitialiser les filtres</v-btn>
@@ -376,7 +383,7 @@ const statusAccent: Record<OrderStatus, string> = {
           <div v-for="item in orderItems(order).slice(0, MAX_THUMBS)" :key="item.id" class="thumb">
             <img
               v-if="item.product_image"
-              :src="resolveImageUrl(item.product_image, apiBase)"
+              :src="resolveImageUrl(item.product_image, apiBase, 160)"
               :alt="item.product_name"
               loading="lazy"
             />

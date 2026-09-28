@@ -162,7 +162,7 @@ async function deleteProduct() {
 
     <NuxtLink v-for="p in products" :key="p.id" :to="`/vendeur/produits/${p.id}`" class="product-row">
       <div class="product-row__thumb">
-        <img v-if="p.images[0]" :src="resolveImageUrl(p.images[0], apiBase)" :alt="p.name" />
+        <img v-if="p.images[0]" :src="resolveImageUrl(p.images[0], apiBase, 320)" :alt="p.name" />
         <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
       </div>
       <div class="flex-grow-1">

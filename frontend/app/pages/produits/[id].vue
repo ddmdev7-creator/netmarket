@@ -338,7 +338,7 @@ const addDisabled = computed(() => {
 })
 
 const apiBase = useApiBase()
-const miniThumb = computed(() => (effectiveImages.value[0] ? resolveImageUrl(effectiveImages.value[0], apiBase) : null))
+const miniThumb = computed(() => (effectiveImages.value[0] ? resolveImageUrl(effectiveImages.value[0], apiBase, 160) : null))
 
 function incr() {
   if (quantity.value < effectiveStock.value) quantity.value++
@@ -521,7 +521,7 @@ onMounted(loadRecent)
               >
                 <img
                   v-if="group.visual && opt.image"
-                  :src="resolveImageUrl(opt.image, apiBase)"
+                  :src="resolveImageUrl(opt.image, apiBase, 160)"
                   :alt="opt.value"
                   class="option-value__img"
                   loading="lazy"

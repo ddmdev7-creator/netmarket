@@ -70,7 +70,7 @@ function addManualUrl() {
 
     <div v-if="compact" class="image-strip">
       <div v-for="(url, i) in images" :key="url + i" class="image-strip__item">
-        <img :src="resolveImageUrl(url, apiBase)" :alt="`Image ${i + 1}`" />
+        <img :src="resolveImageUrl(url, apiBase, 320)" :alt="`Image ${i + 1}`" />
         <span v-if="i === 0 && images.length > 1" class="image-strip__cover" title="Photo principale">
           <PhStar :size="9" weight="fill" />
         </span>
@@ -97,7 +97,7 @@ function addManualUrl() {
 
     <div v-else-if="images.length" class="image-grid mb-2">
       <div v-for="(url, i) in images" :key="url + i" class="image-grid__item">
-        <img :src="resolveImageUrl(url, apiBase)" :alt="`Image ${i + 1}`" />
+        <img :src="resolveImageUrl(url, apiBase, 320)" :alt="`Image ${i + 1}`" />
         <span v-if="i === 0" class="image-grid__cover-badge">
           <PhStar :size="10" weight="fill" />
           Couverture

@@ -661,7 +661,7 @@ function continueShopping() {
             </div>
             <div v-for="item in group.items" :key="item.id" class="line-item">
               <span class="line-item__thumb">
-                <img v-if="item.product_image" :src="resolveImageUrl(item.product_image, apiBase)" alt="" loading="lazy" />
+                <img v-if="item.product_image" :src="resolveImageUrl(item.product_image, apiBase, 160)" alt="" loading="lazy" />
                 <PhImage v-else :size="18" />
               </span>
               <span class="line-item__body">

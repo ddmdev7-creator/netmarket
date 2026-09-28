@@ -85,7 +85,7 @@ function formatDate(iso: string) {
           <div v-for="item in orderItems(order).slice(0, 4)" :key="item.id" class="order-thumbs__item">
             <img
               v-if="item.product_image"
-              :src="resolveImageUrl(item.product_image, apiBase)"
+              :src="resolveImageUrl(item.product_image, apiBase, 160)"
               :alt="item.product_name"
               loading="lazy"
             />

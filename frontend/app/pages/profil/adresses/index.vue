@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhCaretRight, PhPlus, PhStar, PhTrash, PhWarningCircle } from '@phosphor-icons/vue'
+import { PhArrowLeft, PhCaretRight, PhMapPin, PhPlus, PhStar, PhTrash, PhWarningCircle } from '@phosphor-icons/vue'
 import type { AddressRead } from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
@@ -71,7 +71,15 @@ async function deleteAddress() {
         :icon="PhWarningCircle"
         message="Impossible de charger vos adresses. Réessayez plus tard."
       />
-      <CommonEmptyState v-else-if="addresses.length === 0" message="Aucune adresse enregistrée pour l'instant." />
+      <CommonEmptyState
+        v-else-if="addresses.length === 0"
+        :icon="PhMapPin"
+        :hue="150"
+        title="Aucune adresse enregistrée"
+        message="Enregistrez votre domicile ou un point de retrait pour commander plus vite."
+        action-label="Ajouter une adresse"
+        action-to="/profil/adresses/nouvelle"
+      />
 
       <v-card v-for="a in addresses" :key="a.id" class="mb-3 pa-0">
         <NuxtLink :to="`/profil/adresses/${a.id}`" class="address-card-link">

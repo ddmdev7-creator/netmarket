@@ -108,7 +108,8 @@ function formatDate(iso: string) {
     <div class="detail-card">
       <CommonEmptyState
         v-if="notifications.items.length === 0"
-        message="Aucune notification pour l'instant."
+        title="Rien de neuf"
+        message="Vous serez prévenu ici de l'avancement de vos commandes et des baisses de prix de vos favoris."
         :icon="PhBellSlash"
       />
 

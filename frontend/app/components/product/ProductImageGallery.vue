@@ -4,7 +4,10 @@ import { PhCaretLeft, PhCaretRight, PhImage, PhX } from '@phosphor-icons/vue'
 const props = defineProps<{ images: string[]; alt: string }>()
 
 const apiBase = useApiBase()
-const resolvedImages = computed(() => props.images.map((v) => resolveImageUrl(v, apiBase)))
+// Galerie : version 800 px (largement suffisante à l'écran) ; la visionneuse
+// plein écran charge l'original, pour zoomer.
+const resolvedImages = computed(() => props.images.map((v) => resolveImageUrl(v, apiBase, 800)))
+const fullImages = computed(() => props.images.map((v) => resolveImageUrl(v, apiBase)))
 
 const scrollerEl = ref<HTMLElement | null>(null)
 const activeIndex = ref(0)
@@ -154,7 +157,7 @@ function lightboxNext() {
       </template>
 
       <div ref="lightboxScrollerEl" class="lightbox__scroller" @scroll="onLightboxScroll">
-        <div v-for="(src, i) in resolvedImages" :key="src + i" class="lightbox__slide">
+        <div v-for="(src, i) in fullImages" :key="src + i" class="lightbox__slide">
           <img :src="src" :alt="`${alt} — photo ${i + 1}`" class="lightbox__image" />
         </div>
       </div>

@@ -150,3 +150,23 @@ async def test_premium_vendor_can_enhance_images(
     keys = response.json()["keys"]
     assert len(keys) == 1
     assert _KEY_PATTERN.match(keys[0])
+
+
+async def test_image_variant_is_resized_and_webp_when_accepted(client: AsyncClient, vendor_user: User) -> None:
+    upload_response = await client.post(
+        "/uploads/images",
+        files=[("files", ("produit.jpg", _fake_jpeg(), "image/jpeg"))],
+        headers=auth_headers(vendor_user),
+    )
+    key = upload_response.json()["keys"][0]
+
+    webp = await client.get(f"/uploads/images/{key}", params={"w": 300}, headers={"Accept": "image/webp,*/*"})
+    assert webp.status_code == 200
+    assert webp.headers["content-type"] == "image/webp"
+    assert Image.open(io.BytesIO(webp.content)).width <= 320
+
+    jpeg = await client.get(f"/uploads/images/{key}", params={"w": 160})
+    assert jpeg.headers["content-type"] == "image/jpeg"
+    # Deuxième appel : relu depuis le cache du bucket, même contenu.
+    again = await client.get(f"/uploads/images/{key}", params={"w": 160})
+    assert again.content == jpeg.content

@@ -4,6 +4,10 @@ import type { ProductRead, ProductVariantRead } from '~/types/api'
 
 const props = defineProps<{ product: ProductRead }>()
 
+// Largeur affichée d'une carte : ~moitié d'écran sur téléphone, ~240 px sur
+// ordinateur — le navigateur choisit la bonne version dans le srcset.
+const CARD_SIZES = '(min-width: 960px) 260px, 50vw'
+
 const apiBase = useApiBase()
 const router = useRouter()
 const auth = useAuthStore()
@@ -190,12 +194,22 @@ async function quickAdd(event: MouseEvent) {
             :ref="(el) => (frameRefs[i] = el as HTMLElement | null)"
             class="product-card__frame"
           >
-            <img :src="resolveImageUrl(frame.image, apiBase)" :alt="product.name" loading="lazy" />
+            <img
+              :src="resolveImageUrl(frame.image, apiBase, 480)"
+              :srcset="imageSrcset(frame.image, apiBase)"
+              :sizes="CARD_SIZES"
+              :alt="product.name"
+              loading="lazy"
+              decoding="async"
+            />
           </div>
         </div>
         <img
           v-else-if="frames[0]"
-          :src="resolveImageUrl(frames[0].image, apiBase)"
+          :src="resolveImageUrl(frames[0].image, apiBase, 480)"
+          :srcset="imageSrcset(frames[0].image, apiBase)"
+          :sizes="CARD_SIZES"
+          decoding="async"
           :alt="product.name"
           loading="lazy"
         />
@@ -458,6 +472,13 @@ async function quickAdd(event: MouseEvent) {
 
 .product-card__stock-tag--out {
   background: var(--color-neutral-400);
+}
+
+.product-card__quick-add::after {
+  /* Zone de toucher agrandie à ~44 px sans grossir le bouton. */
+  content: '';
+  position: absolute;
+  inset: -7px;
 }
 
 .product-card__quick-add {
