@@ -124,7 +124,10 @@ const STATUS_FILTERS: { value: OrderStatus | 'all'; label: string }[] = [
 // surprise si un jour le lien pointe vers une commande à un autre stade) et
 // on scroll jusqu'à sa carte une fois la liste chargée.
 const highlightOrderId = route.query.highlight as string | undefined
-const statusFilter = ref<OrderStatus | 'all'>('all')
+// ?status=… : arrivée depuis une carte « À faire » du tableau de bord.
+const statusFilter = ref<OrderStatus | 'all'>(
+  typeof route.query.status === 'string' && !highlightOrderId ? (route.query.status as OrderStatus) : 'all',
+)
 const search = ref('')
 
 watch(

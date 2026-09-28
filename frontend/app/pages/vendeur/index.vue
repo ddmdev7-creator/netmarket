@@ -1,6 +1,18 @@
 <script setup lang="ts">
-import { PhCaretRight, PhWarningCircle } from '@phosphor-icons/vue'
-import type { DailyOrderCount, VendorDashboard, VendorRead, VendorStatus } from '~/types/api'
+import {
+  PhCaretRight,
+  PhCheckCircle,
+  PhConfetti,
+  PhPackage,
+  PhPlus,
+  PhReceipt,
+  PhTruck,
+  PhWallet,
+  PhWarning,
+  PhWarningCircle,
+} from '@phosphor-icons/vue'
+import type { Component } from 'vue'
+import type { DailyOrderCount, VendorDashboard, VendorRead, VendorStatus, WalletRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
@@ -25,6 +37,86 @@ const { data: timeseries } = await useAsyncData(
   () => apiFetch<DailyOrderCount[]>('/vendors/me/orders-timeseries'),
   { default: () => [], ...alwaysRefetch },
 )
+
+// Gains retirables : chargés sans bloquer la page (pas de carte si l'appel échoue).
+const walletAvailable = ref(0)
+onMounted(async () => {
+  try {
+    const wallets = await apiFetch<WalletRead[]>('/wallets/mine')
+    walletAvailable.value = wallets.find((w) => w.kind === 'vendor')?.balance.available ?? 0
+  } catch {
+    walletAvailable.value = 0
+  }
+})
+
+interface TodoCard {
+  key: string
+  count: number
+  title: string
+  text: string
+  icon: Component
+  hue: number
+  to: string
+  urgent?: boolean
+}
+
+// Section « À faire » : ce qui attend une action du vendeur, du plus urgent
+// au moins urgent, chaque carte menant directement à la liste filtrée.
+const todos = computed<TodoCard[]>(() => {
+  const d = dashboard.value
+  if (!d) return []
+  const plural = (n: number, one: string, many: string) => (n > 1 ? many : one)
+  const cards: TodoCard[] = [
+    {
+      key: 'pending',
+      count: d.pending_orders,
+      title: plural(d.pending_orders, 'commande à accepter', 'commandes à accepter'),
+      text: 'Les acheteurs attendent votre confirmation.',
+      icon: PhReceipt,
+      hue: 0,
+      to: '/vendeur/commandes?status=pending',
+      urgent: true,
+    },
+    {
+      key: 'confirmed',
+      count: d.confirmed_orders,
+      title: plural(d.confirmed_orders, 'commande à préparer', 'commandes à préparer'),
+      text: 'Emballez-les puis passez-les « en préparation ».',
+      icon: PhPackage,
+      hue: 35,
+      to: '/vendeur/commandes?status=confirmed',
+    },
+    {
+      key: 'preparing',
+      count: d.preparing_orders,
+      title: plural(d.preparing_orders, 'colis à expédier', 'colis à expédier'),
+      text: 'Trouvez un livreur et remettez-lui le colis.',
+      icon: PhTruck,
+      hue: 200,
+      to: '/vendeur/commandes?status=preparing',
+    },
+    {
+      key: 'out',
+      count: d.out_of_stock_products.length,
+      title: plural(d.out_of_stock_products.length, 'produit en rupture', 'produits en rupture'),
+      text: 'Invisibles à l’achat tant qu’ils ne sont pas réapprovisionnés.',
+      icon: PhWarning,
+      hue: 355,
+      to: '/vendeur/produits?stock=out',
+      urgent: true,
+    },
+    {
+      key: 'low',
+      count: d.low_stock_products.length,
+      title: plural(d.low_stock_products.length, 'produit en stock faible', 'produits en stock faible'),
+      text: 'Pensez à réapprovisionner avant la rupture.',
+      icon: PhWarningCircle,
+      hue: 40,
+      to: '/vendeur/produits?stock=low',
+    },
+  ]
+  return cards.filter((c) => c.count > 0)
+})
 
 const statusMeta: Record<VendorStatus, { label: string; color: string }> = {
   pending: { label: 'En attente de validation', color: 'warning' },
@@ -69,6 +161,50 @@ const tiles = computed(() => {
         Ta boutique est suspendue et ne peut plus vendre pour le moment.
       </v-alert>
     </template>
+
+    <section v-if="dashboard && vendor?.status === 'approved'" class="todo mb-6" aria-labelledby="todo-title">
+      <div class="todo__head">
+        <h2 id="todo-title" class="todo__title">À faire</h2>
+        <NuxtLink to="/vendeur/produits/nouveau" class="todo__add">
+          <PhPlus :size="14" weight="bold" /> Nouveau produit
+        </NuxtLink>
+      </div>
+
+      <div v-if="todos.length" class="todo__grid">
+        <NuxtLink
+          v-for="card in todos"
+          :key="card.key"
+          :to="card.to"
+          class="todo-card"
+          :class="{ 'todo-card--urgent': card.urgent }"
+          :style="{ '--hue': card.hue }"
+        >
+          <span class="todo-card__icon"><component :is="card.icon" :size="20" weight="duotone" /></span>
+          <span class="todo-card__body">
+            <span class="todo-card__title"><strong>{{ card.count }}</strong> {{ card.title }}</span>
+            <span class="todo-card__text">{{ card.text }}</span>
+          </span>
+          <PhCaretRight :size="16" class="todo-card__go" />
+        </NuxtLink>
+      </div>
+      <div v-else class="todo__clear">
+        <PhConfetti :size="22" weight="duotone" />
+        <span><strong>Tout est à jour.</strong> Aucune commande ni aucun produit n'attend d'action.</span>
+      </div>
+
+      <NuxtLink v-if="walletAvailable > 0" to="/vendeur/gains" class="todo-card todo-card--money mt-2" style="--hue: 150">
+        <span class="todo-card__icon"><PhWallet :size="20" weight="duotone" /></span>
+        <span class="todo-card__body">
+          <span class="todo-card__title"><strong>{{ formatGnf(walletAvailable) }}</strong> disponibles</span>
+          <span class="todo-card__text">Vos gains peuvent être retirés vers votre mobile money.</span>
+        </span>
+        <PhCaretRight :size="16" class="todo-card__go" />
+      </NuxtLink>
+      <p v-if="dashboard.shipped_orders" class="todo__note">
+        <PhCheckCircle :size="14" weight="fill" />
+        {{ dashboard.shipped_orders }} colis en route vers {{ dashboard.shipped_orders > 1 ? 'leurs acheteurs' : 'son acheteur' }}.
+      </p>
+    </section>
 
     <div class="stat-grid mb-5">
       <v-skeleton-loader v-if="pending" type="card" class="stat-tile" v-for="n in 2" :key="n" />
@@ -202,5 +338,129 @@ const tiles = computed(() => {
 
 .low-stock-row:hover {
   background: var(--color-neutral-800);
+}
+
+.todo__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.todo__title {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.todo__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.todo__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.todo-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-900);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.todo-card:hover {
+  border-color: hsl(var(--hue) 60% 50%);
+  transform: translateY(-1px);
+}
+
+.todo-card--urgent {
+  border-left: 4px solid hsl(var(--hue) 70% 52%);
+}
+
+.todo-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: hsl(var(--hue) 70% var(--tint-bg));
+  color: hsl(var(--hue) 60% var(--tint-fg));
+}
+
+.todo-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-card__title {
+  font-size: 14px;
+  color: var(--color-neutral-200);
+}
+
+.todo-card__title strong {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.todo-card__text {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.todo-card__go {
+  flex-shrink: 0;
+  color: var(--color-neutral-500);
+}
+
+.todo-card--money .todo-card__title strong {
+  color: hsl(150 55% var(--tint-fg));
+}
+
+.todo__clear {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: hsl(150 70% var(--tint-bg-soft));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 13px;
+}
+
+.todo__clear strong {
+  color: var(--color-neutral-200);
+}
+
+.todo__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--color-success);
 }
 </style>

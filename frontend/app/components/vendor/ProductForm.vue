@@ -52,7 +52,8 @@ export interface ProductFormValues {
 
 const model = defineModel<ProductFormValues>({ required: true })
 // hideContext : la page d'édition a déjà son propre en-tête récapitulatif.
-defineProps<{ categories: CategoryRead[]; hideContext?: boolean }>()
+// wizard : l'assistant de création affiche ses propres étapes, sans les onglets.
+defineProps<{ categories: CategoryRead[]; hideContext?: boolean; wizard?: boolean }>()
 
 const { apiFetch } = useApi()
 
@@ -213,7 +214,9 @@ function removeAttribute(row: VariantFormRow, index: number) {
 // Formulaire volumineux (infos + photos + variantes) : des onglets plutôt
 // qu'une longue page qui scrolle, surtout utile sur le conteneur élargi en
 // desktop (.dashboard-shell, voir pages/vendeur/produits/*.vue).
-const tab = ref<'info' | 'images' | 'variants'>('info')
+// Onglet actif : pilotable par la page (v-model:tab — assistant de création
+// pas à pas), sinon simple état local comme avant.
+const tab = defineModel<'info' | 'images' | 'variants'>('tab', { default: 'info' })
 
 // Suggestions pour aller plus vite — le nom d'attribut reste du texte libre
 // (v-combobox accepte aussi bien une saisie hors liste), voir la conception
@@ -225,12 +228,12 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   <div>
     <!-- Hors du v-window : reste visible quel que soit l'onglet actif, pour
          ne jamais perdre de vue quel produit on est en train de modifier. -->
-    <div v-if="!hideContext" class="product-context">
+    <div v-if="!hideContext && !wizard" class="product-context">
       <span class="product-context__label">Produit</span>
       <span class="product-context__name">{{ model.name.trim() || 'Nouveau produit (sans nom)' }}</span>
     </div>
 
-    <v-tabs v-model="tab" color="primary" class="mb-5">
+    <v-tabs v-if="!wizard" v-model="tab" color="primary" class="mb-5">
       <v-tab value="info">Informations</v-tab>
       <v-tab value="images">Photos</v-tab>
       <v-tab value="variants">

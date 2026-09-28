@@ -135,6 +135,10 @@ async def get_my_dashboard(db: AsyncSession, user: User) -> VendorDashboard:
     return VendorDashboard(
         total_orders=sum(status_counts.values()),
         active_orders=active_orders,
+        pending_orders=status_counts["pending"],
+        confirmed_orders=status_counts["confirmed"],
+        preparing_orders=status_counts["preparing"],
+        shipped_orders=status_counts["shipped"],
         delivered_orders=status_counts["delivered"],
         cancelled_orders=status_counts["cancelled"],
         revenue_delivered=counts["revenue_delivered"],

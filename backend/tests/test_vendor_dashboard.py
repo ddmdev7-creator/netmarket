@@ -99,6 +99,7 @@ async def test_dashboard_counts_active_order_before_delivery(
 
     assert body["active_orders"] == 1
     assert body["delivered_orders"] == 0
+    assert body["confirmed_orders"] == 1 and body["pending_orders"] == 0
     assert body["revenue_delivered"] == 0
 
 

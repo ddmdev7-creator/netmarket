@@ -103,6 +103,11 @@ class LowStockProduct(BaseModel):
 class VendorDashboard(BaseModel):
     total_orders: int
     active_orders: int
+    # Détail des commandes en cours, pour la section « À faire » du tableau de bord.
+    pending_orders: int = 0
+    confirmed_orders: int = 0
+    preparing_orders: int = 0
+    shipped_orders: int = 0
     delivered_orders: int
     cancelled_orders: int
     revenue_delivered: int

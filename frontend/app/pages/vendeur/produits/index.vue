@@ -5,6 +5,7 @@ import type { CategoryRead, Page, ProductRead, ProductStatus, StockLevel, Vendor
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
 const { apiFetch } = useApi()
+const route = useRoute()
 const apiBase = useApiBase()
 const toast = useToastStore()
 const pageSize = 20
@@ -32,7 +33,10 @@ const STOCK_FILTERS: { value: StockLevel | 'all'; label: string }[] = [
 ]
 
 const statusFilter = ref<ProductStatus | 'all'>('all')
-const stockFilter = ref<StockLevel | 'all'>('all')
+// ?stock=out|low : arrivée depuis une carte « À faire » du tableau de bord.
+const stockFilter = ref<StockLevel | 'all'>(
+  route.query.stock === 'out' || route.query.stock === 'low' ? route.query.stock : 'all',
+)
 const categoryFilter = ref<string | null>(null)
 
 const page = ref(1)

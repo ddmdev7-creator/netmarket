@@ -354,6 +354,10 @@ export interface DailyOrderCount {
 }
 
 export interface VendorDashboard {
+  pending_orders: number
+  confirmed_orders: number
+  preparing_orders: number
+  shipped_orders: number
   total_orders: number
   active_orders: number
   delivered_orders: number
