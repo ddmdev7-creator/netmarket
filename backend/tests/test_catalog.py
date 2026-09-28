@@ -547,6 +547,13 @@ async def test_search_ignores_accents_and_matches_every_word_across_fields(
     assert (await names("portable"))[0] == "Portable Samsung"
     # La catégorie ("Électronique") est aussi cherchée, pas le nom de la boutique.
     assert len(await names("electronique")) == 3
+    child = Category(name="Téléphones", parent_id=category.id)
+    db_session.add(child)
+    await db_session.flush()
+    db_session.add(Product(vendor_id=vendor.id, category_id=child.id, name="Infinix", price=1, stock=1))
+    await db_session.flush()
+    # ...y compris ses sous-catégories.
+    assert len(await names("electronique")) == 4
     assert await names("boutique test") == []
     assert await names("100%") == []
 

@@ -112,7 +112,11 @@ def _search_clause(tokens: list[str]):
     clauses = []
     for token in tokens:
         pattern = f"%{token}%"
-        matching_categories = select(Category.id).where(normalized(Category.name).like(pattern))
+        # Catégories dont le nom correspond, et toutes leurs descendantes :
+        # "electronique" trouve aussi les produits de "Micro-controlleur".
+        tree = select(Category.id).where(normalized(Category.name).like(pattern)).cte(recursive=True)
+        tree = tree.union_all(select(Category.id).where(Category.parent_id == tree.c.id))
+        matching_categories = select(tree.c.id)
         clauses.append(
             or_(
                 normalized(Product.name).like(pattern),
