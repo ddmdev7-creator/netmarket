@@ -8,7 +8,15 @@ from sqlalchemy.dialects.postgresql import DATE as PG_DATE
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.orders.models import DeliveryType, Order, OrderItem, OrderStatus, PaymentMethod, SubOrder
+from app.orders.models import (
+    DeliveryType,
+    Order,
+    OrderItem,
+    OrderStatus,
+    PaymentMethod,
+    SubOrder,
+    SubOrderStatusEvent,
+)
 
 
 async def has_delivered_product_for_user(db: AsyncSession, user_id: uuid.UUID, product_id: uuid.UUID) -> bool:
@@ -266,3 +274,21 @@ async def get_daily_order_counts(db: AsyncSession, vendor_id: uuid.UUID, days: i
     )
     rows = (await db.execute(stmt)).all()
     return {row.day: row.count for row in rows}
+
+
+async def list_status_events(
+    db: AsyncSession, sub_order_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[SubOrderStatusEvent]]:
+    if not sub_order_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(SubOrderStatusEvent)
+            .where(SubOrderStatusEvent.sub_order_id.in_(sub_order_ids))
+            .order_by(SubOrderStatusEvent.created_at, SubOrderStatusEvent.id)
+        )
+    ).scalars().all()
+    result: dict[uuid.UUID, list[SubOrderStatusEvent]] = {}
+    for row in rows:
+        result.setdefault(row.sub_order_id, []).append(row)
+    return result

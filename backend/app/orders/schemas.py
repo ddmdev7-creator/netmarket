@@ -172,6 +172,13 @@ class SubOrderBase(BaseModel):
     estimated_delivery_max: date | None = None
 
 
+class SubOrderStatusEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    status: OrderStatus
+    created_at: datetime
+
+
 class SubOrderRead(SubOrderBase):
     """Buyer-facing sub-order, nested under OrderRead.
 
@@ -194,6 +201,8 @@ class SubOrderRead(SubOrderBase):
     courier_status: str | None = None
     courier_average_rating: float | None = None
     courier_review_count: int = 0
+    # Horodatage de chaque passage de statut (frise de suivi), du plus ancien au plus récent.
+    status_events: list[SubOrderStatusEventRead] = Field(default_factory=list)
 
 
 class VendorSubOrderRead(SubOrderBase):

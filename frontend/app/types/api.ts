@@ -597,6 +597,8 @@ export interface SubOrderRead extends SubOrderBase {
   courier_status: CourierStatus | null
   courier_average_rating: number | null
   courier_review_count: number
+  /** Chaque passage de statut horodaté, du plus ancien au plus récent (frise de suivi). */
+  status_events: { status: OrderStatus; created_at: string }[]
 }
 
 /** Sub-order shape returned by the vendor-facing endpoints (GET/PATCH /orders/sub-orders/...) — adds the order-level fields a vendor needs to fulfill the order. */

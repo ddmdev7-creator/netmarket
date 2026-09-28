@@ -11,7 +11,8 @@ from enum import StrEnum
 
 from sqlalchemy import ARRAY, CheckConstraint, Date, Enum as SAEnum, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import event, inspect
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from app.common.models import TimestampMixin, UUIDPrimaryKeyMixin
 from app.core.database import Base
@@ -205,3 +206,34 @@ class OrderItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     variant_label: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     sub_order: Mapped["SubOrder"] = relationship(back_populates="items")
+
+
+class SubOrderStatusEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Historique des statuts d'une sous-commande (created_at = heure du
+    passage) — affiché en frise sur le suivi acheteur. Rempli
+    automatiquement par l'écouteur before_flush ci-dessous, quel que soit le
+    code qui change le statut : aucun appelant n'a à y penser."""
+
+    __tablename__ = "sub_order_status_events"
+
+    sub_order_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("sub_orders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[OrderStatus] = mapped_column(
+        SAEnum(OrderStatus, name="order_status", values_callable=lambda enum: [e.value for e in enum]),
+        nullable=False,
+    )
+
+    # Sans back_populates : sert seulement à ce que l'unité de travail insère
+    # la sous-commande avant son premier événement (clé étrangère).
+    sub_order: Mapped["SubOrder"] = relationship()
+
+
+@event.listens_for(Session, "before_flush")
+def _record_sub_order_status_events(session: Session, flush_context, instances) -> None:
+    for obj in list(session.new):
+        if isinstance(obj, SubOrder):
+            session.add(SubOrderStatusEvent(sub_order=obj, status=obj.status or OrderStatus.PENDING))
+    for obj in list(session.dirty):
+        if isinstance(obj, SubOrder) and inspect(obj).attrs.status.history.has_changes():
+            session.add(SubOrderStatusEvent(sub_order=obj, status=obj.status))

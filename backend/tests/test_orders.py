@@ -435,3 +435,22 @@ async def test_order_item_freezes_variant_label_after_variant_deleted(
     item = order_response.json()["sub_orders"][0]["items"][0]
     assert item["variant_label"] == "Taille : M"
     assert item["variant_id"] is None
+
+
+async def test_buyer_order_lists_status_events(
+    client: AsyncClient, buyer_user: User, vendor_user: User, product: Product
+) -> None:
+    await _add_to_cart(client, buyer_user, product)
+    order = (await client.post("/orders/checkout", json=CHECKOUT_PAYLOAD, headers=auth_headers(buyer_user))).json()
+    sub_order_id = order["sub_orders"][0]["id"]
+    assert [e["status"] for e in order["sub_orders"][0]["status_events"]] == ["pending"]
+
+    for status in ("confirmed", "preparing"):
+        await client.patch(
+            f"/orders/sub-orders/{sub_order_id}/status", json={"status": status}, headers=auth_headers(vendor_user)
+        )
+
+    body = (await client.get(f"/orders/{order['id']}", headers=auth_headers(buyer_user))).json()
+    events = body["sub_orders"][0]["status_events"]
+    assert sorted(e["status"] for e in events) == ["confirmed", "pending", "preparing"]
+    assert all(e["created_at"] for e in events)

@@ -326,9 +326,11 @@ async def get_order(db: AsyncSession, user: User, order_id: uuid.UUID) -> Order:
         order.refund_delay_hours = refund_settings.refund_delay_hours
     order.wallet_refunded_amount = (await buyer_service.refunded_amounts(db, [order.id])).get(order.id, 0)
     await _attach_pickup_point_contacts(db, order, order.pickup_point_id)
+    events = await repository.list_status_events(db, [s.id for s in order.sub_orders])
     for sub_order in order.sub_orders:
         await _attach_product_images(db, sub_order)
         await _attach_courier_info(db, sub_order)
+        sub_order.status_events = events.get(sub_order.id, [])
     return _attach_handoff_flags(order)
 
 

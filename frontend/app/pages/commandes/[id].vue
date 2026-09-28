@@ -152,14 +152,22 @@ function ratePickupPoint(pointId: string) {
           <span class="text-meta" style="font-weight: 600">{{ sub.shop_name }}</span>
           <StatusBadge :status="sub.status" />
         </div>
-        <OrderTimeline :status="sub.status" :delivery-type="order.delivery_type" />
-        <p
-          v-if="sub.estimated_delivery_min && sub.estimated_delivery_max && !['delivered', 'cancelled'].includes(sub.status)"
-          class="text-muted mt-2 mb-3 text-meta"
-        >
-          Livraison estimée :
-          <strong>{{ formatDeliveryEstimate(sub.estimated_delivery_min, sub.estimated_delivery_max) }}</strong>
-        </p>
+        <OrderTracker
+          :status="sub.status"
+          :delivery-type="order.delivery_type"
+          :events="sub.status_events ?? []"
+          :estimated-min="sub.estimated_delivery_min"
+          :estimated-max="sub.estimated_delivery_max"
+          class="mb-3"
+        />
+        <div v-if="sub.handoff_ready" class="qr-block mb-4">
+          <OrderDeliveryQrCode :sub-order-id="sub.id" />
+          <p class="text-muted mt-2 mb-0 text-meta" style="max-width: 220px">
+            Présente ce code {{ order.delivery_type === 'pickup_point' ? 'au gestionnaire du point de retrait' : 'au livreur' }}
+            à la remise du colis : son scan confirme la livraison. Le code change toutes les minutes, ne l'envoie pas
+            en photo.
+          </p>
+        </div>
 
         <div v-if="sub.courier_id" class="courier-block mt-2 mb-2">
           <div class="d-flex align-center ga-2 flex-wrap">
@@ -243,14 +251,6 @@ function ratePickupPoint(pointId: string) {
           <span class="amount">{{ formatGnf(sub.delivery_fee) }}</span>
         </div>
 
-        <div v-if="sub.handoff_ready" class="qr-block mt-4">
-          <OrderDeliveryQrCode :sub-order-id="sub.id" />
-          <p class="text-muted mt-2 mb-0 text-meta" style="max-width: 220px">
-            Présente ce code {{ order.delivery_type === 'pickup_point' ? 'au gestionnaire du point de retrait' : 'au livreur' }}
-            à la remise du colis : son scan confirme la livraison. Le code change toutes les minutes, ne l'envoie pas
-            en photo.
-          </p>
-        </div>
 
         <v-divider class="mt-4" />
       </div>
