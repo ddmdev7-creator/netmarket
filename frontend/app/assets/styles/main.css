@@ -582,22 +582,3 @@ h1, h2, h3, h4, h5, h6,
     scroll-behavior: auto !important;
   }
 }
-
-/* --- Transitions de page (nuxt.config : app.pageTransition) --------------- */
-
-.page-enter-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
-}
-
-.page-leave-active {
-  transition: opacity 0.1s ease;
-}
-
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
-}
-
-.page-leave-to {
-  opacity: 0;
-}

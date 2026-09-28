@@ -11,8 +11,6 @@ export default defineNuxtConfig({
   css: ['~/assets/styles/main.css'],
 
   app: {
-    // Fondu court entre les pages (styles .page-* dans main.css).
-    pageTransition: { name: 'page', mode: 'out-in' },
     head: {
       htmlAttrs: { lang: 'fr' },
       // viewport-fit=cover lets the app draw under the notch/home-indicator so

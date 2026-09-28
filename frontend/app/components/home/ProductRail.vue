@@ -103,6 +103,8 @@ const emit = defineEmits<{ seeAll: [] }>()
 
 .rail__cell {
   flex: 0 0 166px;
+  /* Une photo qui ne charge pas (texte alternatif long) ne doit pas élargir la carte. */
+  min-width: 0;
   scroll-snap-align: start;
 }
 
