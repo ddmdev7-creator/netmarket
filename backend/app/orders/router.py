@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db, get_pickup_point_manager, require_role
-from app.orders import handoff, service
+from app.orders import handoff, service, tracking
 from app.orders.schemas import (
+    SubOrderTrackingRead,
     DeliveryOfferRead,
     HandoffCodeRead,
     OrderCancelRequest,
@@ -116,6 +117,16 @@ async def get_delivery_offer(
 ) -> DeliveryOfferRead:
     """Détail de la demande de livraison proposée au livreur connecté."""
     return await service.get_delivery_offer(db, current_user, sub_order_id)
+
+
+@router.get("/sub-orders/{sub_order_id}/tracking", response_model=SubOrderTrackingRead)
+async def get_tracking(
+    sub_order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SubOrderTrackingRead:
+    """Suivi en direct du colis (acheteur) : boutique, destination, livreur en route."""
+    return SubOrderTrackingRead(**await tracking.get_tracking(db, current_user, sub_order_id))
 
 
 @router.get("/sub-orders/{sub_order_id}/handoff-code", response_model=HandoffCodeRead)

@@ -12,12 +12,14 @@ leaves real-time GPS tracking to a later phase).
 """
 
 import uuid
+from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
     ARRAY,
     Boolean,
     CheckConstraint,
+    DateTime,
     Enum as SAEnum,
     Float,
     ForeignKey,
@@ -102,6 +104,9 @@ class Courier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     is_online: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Dernière position envoyée en direct pendant une course (app/orders/tracking.py) ;
+    # None tant que le livreur n'a partagé que sa position de mise en ligne.
+    position_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class CourierReview(Base, UUIDPrimaryKeyMixin, TimestampMixin):

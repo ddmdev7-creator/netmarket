@@ -160,6 +160,7 @@ function ratePickupPoint(pointId: string) {
           :estimated-max="sub.estimated_delivery_max"
           class="mb-3"
         />
+        <OrderLiveTrackingMap v-if="sub.status === 'shipped' && sub.courier_id" :sub-order-id="sub.id" class="mb-4" />
         <div v-if="sub.handoff_ready" class="qr-block mb-4">
           <OrderDeliveryQrCode :sub-order-id="sub.id" />
           <p class="text-muted mt-2 mb-0 text-meta" style="max-width: 220px">

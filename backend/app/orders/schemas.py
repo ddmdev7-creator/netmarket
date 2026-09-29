@@ -434,3 +434,22 @@ class AdminOrderRead(BaseModel):
     # compte a disparu.
     buyer: AdminBuyerInfo | None = None
     pickup_point: AdminPickupPointInfo | None = None
+
+
+class SubOrderTrackingRead(BaseModel):
+    """Suivi en direct d'un colis en route (voir app/orders/tracking.py). La
+    position du livreur n'est renseignée que pendant l'expédition et si elle
+    est récente."""
+
+    sub_order_id: uuid.UUID
+    status: OrderStatus
+    delivery_type: DeliveryType
+    origin_latitude: float | None
+    origin_longitude: float | None
+    destination_latitude: float | None
+    destination_longitude: float | None
+    courier_latitude: float | None
+    courier_longitude: float | None
+    courier_position_at: datetime | None
+    distance_km: float | None
+    eta_minutes: int | None

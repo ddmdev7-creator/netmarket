@@ -1198,3 +1198,20 @@ export interface MyProductsSummary {
   /** Quantités vendues (commandes non annulées), par id produit. */
   sold: Record<string, number>
 }
+
+/** GET /orders/sub-orders/{id}/tracking — suivi en direct d'un colis en route. */
+export interface SubOrderTrackingRead {
+  sub_order_id: string
+  status: OrderStatus
+  delivery_type: DeliveryType
+  origin_latitude: number | null
+  origin_longitude: number | null
+  destination_latitude: number | null
+  destination_longitude: number | null
+  /** Renseignée seulement pendant l'expédition, si la position est récente. */
+  courier_latitude: number | null
+  courier_longitude: number | null
+  courier_position_at: string | null
+  distance_km: number | null
+  eta_minutes: number | null
+}

@@ -17,6 +17,8 @@ from app.core.storage import fetch_image, upload_image
 from app.couriers import repository, service
 from app.couriers.models import Courier, CourierStatus
 from app.couriers.schemas import (
+    CourierPositionAck,
+    CourierPositionUpdate,
     CourierAdminCreate,
     CourierAdminUpdate,
     CourierAvailabilityUpdate,
@@ -28,6 +30,7 @@ from app.couriers.schemas import (
     CourierReviewCreate,
     CourierReviewRead,
 )
+from app.orders import tracking
 from app.uploads.schemas import UploadedImages
 from app.users.models import User, UserRole
 
@@ -76,6 +79,19 @@ async def set_availability(
     db: AsyncSession = Depends(get_db),
 ) -> CourierDetailRead:
     return await service.set_availability(db, current_user, payload)
+
+
+@router.post(
+    "/me/position", response_model=CourierPositionAck, dependencies=[Depends(require_role(UserRole.COURIER))]
+)
+async def update_position(
+    payload: CourierPositionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CourierPositionAck:
+    """Position en direct pendant une course — poussée aux acheteurs des colis en route."""
+    count = await tracking.update_position(db, current_user, payload.latitude, payload.longitude)
+    return CourierPositionAck(tracked_deliveries=count)
 
 
 @router.post("/me/documents", response_model=UploadedImages, dependencies=[Depends(require_role(UserRole.BUYER))])

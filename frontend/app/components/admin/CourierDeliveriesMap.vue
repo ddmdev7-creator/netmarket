@@ -99,7 +99,7 @@ const built = computed(() => {
           { label: 'Téléphone', value: courier.phone },
           { label: 'Engin', value: vehicleLabels[courier.vehicle_type] ?? courier.vehicle_type },
           { label: 'Courses en cours', value: assigned.length ? assigned.map((d) => d.shop_name).join(', ') : 'Aucune' },
-          { label: 'Position', value: 'Dernière mise en ligne (pas de suivi en direct)' },
+          { label: 'Position', value: 'Dernière position connue (en direct pendant une course)' },
         ],
       })
     }

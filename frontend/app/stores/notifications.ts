@@ -22,6 +22,10 @@ export const useNotificationStore = defineStore('notifications', () => {
   // jamais affiché) : les écrans livreur / point de retrait surveillent ce
   // compteur pour se rafraîchir en direct.
   const deliveriesTick = ref(0)
+  // Position en direct du livreur, par sous-commande en route (message
+  // « courier_position » du backend, app/orders/tracking.py) — lue par la
+  // carte de suivi de l'acheteur (components/order/LiveTrackingMap.vue).
+  const courierPositions = ref<Record<string, { latitude: number; longitude: number; at: string }>>({})
   let socket: WebSocket | null = null
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let reconnectDelay = 1000
@@ -37,9 +41,24 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
   }
 
-  function handleIncoming(notification: NotificationRead | { type: 'refresh'; scope: string }) {
+  type CourierPositionMessage = {
+    type: 'courier_position'
+    sub_order_id: string
+    latitude: number
+    longitude: number
+    at: string
+  }
+
+  function handleIncoming(
+    notification: NotificationRead | { type: 'refresh'; scope: string } | CourierPositionMessage,
+  ) {
     if (notification.type === 'refresh') {
       deliveriesTick.value += 1
+      return
+    }
+    if (notification.type === 'courier_position') {
+      const { sub_order_id, latitude, longitude, at } = notification as CourierPositionMessage
+      courierPositions.value = { ...courierPositions.value, [sub_order_id]: { latitude, longitude, at } }
       return
     }
     items.value = [notification, ...items.value].slice(0, 50)
@@ -176,5 +195,6 @@ export const useNotificationStore = defineStore('notifications', () => {
     clearDeliveryRequest,
     connect,
     disconnect,
+    courierPositions,
   }
 })

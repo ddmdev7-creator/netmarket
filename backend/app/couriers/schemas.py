@@ -135,3 +135,13 @@ class CourierReviewRead(BaseModel):
     rating: int
     comment: str | None
     created_at: datetime
+
+
+class CourierPositionUpdate(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class CourierPositionAck(BaseModel):
+    # Nombre de colis en route dont l'acheteur reçoit cette position.
+    tracked_deliveries: int

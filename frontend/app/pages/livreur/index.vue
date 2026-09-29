@@ -231,6 +231,66 @@ function onTodo(key: string) {
   stageFilter.value = stageFilter.value === stage ? null : stage
 }
 
+// --- Partage de position en direct --------------------------------------------
+
+// Tant que le livreur est en ligne avec au moins un colis en route et que cette
+// page est ouverte, sa position est envoyée (au plus toutes les 15 s, ou dès
+// qu'il a bougé d'environ 30 m) et relayée aux acheteurs concernés.
+const shippedCount = computed(() => ongoing.value.filter((so) => so.status === 'shipped').length)
+const sharing = computed(() => isOnline.value && shippedCount.value > 0)
+const shareError = ref<string | null>(null)
+const lastSentAt = ref<number | null>(null)
+let watchId: number | null = null
+let lastSent: { lat: number; lng: number; t: number } | null = null
+const MIN_INTERVAL_MS = 15_000
+const MIN_MOVE_KM = 0.03
+
+function movedKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const rad = Math.PI / 180
+  const x = (b.lng - a.lng) * rad * Math.cos(((a.lat + b.lat) / 2) * rad)
+  const y = (b.lat - a.lat) * rad
+  return Math.sqrt(x * x + y * y) * 6371
+}
+
+async function sendPosition(lat: number, lng: number) {
+  const now = Date.now()
+  if (lastSent && now - lastSent.t < MIN_INTERVAL_MS && movedKm(lastSent, { lat, lng }) < MIN_MOVE_KM) return
+  lastSent = { lat, lng, t: now }
+  try {
+    await apiFetch('/couriers/me/position', { method: 'POST', body: { latitude: lat, longitude: lng } })
+    lastSentAt.value = now
+    shareError.value = null
+  } catch {
+    lastSent = null
+  }
+}
+
+function startSharing() {
+  if (watchId !== null || !('geolocation' in navigator)) return
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => sendPosition(pos.coords.latitude, pos.coords.longitude),
+    (err) => {
+      shareError.value =
+        err.code === err.PERMISSION_DENIED
+          ? 'Localisation refusée : vos clients ne peuvent pas suivre leur colis.'
+          : 'Position introuvable pour le moment.'
+    },
+    { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+  )
+}
+
+function stopSharing() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+  watchId = null
+  lastSent = null
+}
+
+watch(sharing, (on) => (on ? startSharing() : stopSharing()))
+onMounted(() => {
+  if (sharing.value) startSharing()
+})
+onBeforeUnmount(stopSharing)
+
 const search = ref('')
 const visible = computed(() => {
   let list = tab.value === 'ongoing' ? ongoing.value : done.value
@@ -283,6 +343,17 @@ const visible = computed(() => {
         <template v-else-if="myCourier.status === 'rejected'">Ton profil a été rejeté{{ myCourier.admin_note ? ` — ${myCourier.admin_note}` : '' }}.</template>
         <template v-else>Ton compte est suspendu.</template>
       </v-alert>
+
+      <div v-if="sharing" class="share-banner" :class="{ 'share-banner--error': shareError }" role="status">
+        <span class="share-banner__dot" />
+        <span>
+          <template v-if="shareError">{{ shareError }}</template>
+          <template v-else>
+            Position partagée en direct avec {{ shippedCount > 1 ? `${shippedCount} clients` : 'votre client' }}
+            — gardez cette page ouverte pendant la course.
+          </template>
+        </span>
+      </div>
 
       <section v-if="todos.length" class="mb-4" aria-label="À faire">
         <h2 class="todo-title">À faire</h2>
@@ -562,5 +633,39 @@ const visible = computed(() => {
   color: hsl(30 70% var(--tint-fg));
   font-size: 12.5px;
   font-weight: 700;
+}
+
+.share-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: hsl(150 70% var(--tint-bg-soft));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.share-banner--error {
+  background: hsl(355 80% var(--tint-bg-soft));
+  color: hsl(355 65% var(--tint-fg));
+}
+
+.share-banner__dot {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+  animation: share-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes share-pulse {
+  50% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
 }
 </style>
