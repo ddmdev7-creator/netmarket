@@ -316,27 +316,34 @@ const visible = computed(() => {
        tout s'empile dans un long défilement continu. -->
   <div class="livreur-inner" style="padding-bottom: 76px">
     <div class="px-4 pt-3">
-      <div class="d-flex justify-space-between align-center flex-wrap ga-2 mb-1">
-        <div class="d-flex align-center ga-2 flex-wrap">
-          <h1 class="text-h6 mb-0" style="white-space: nowrap">Mes livraisons</h1>
-          <v-chip v-if="myCourier?.status === 'approved'" size="x-small" color="success" variant="tonal">
-            <PhCheckCircle :size="12" weight="fill" class="mr-1" />
-            Approuvé
-          </v-chip>
+      <section class="lv-hero" :class="{ 'lv-hero--online': isOnline }">
+        <div class="lv-hero__main">
+          <div class="d-flex align-center ga-2 flex-wrap">
+            <h1 class="lv-hero__title">Mes livraisons</h1>
+            <span v-if="myCourier?.status === 'approved'" class="lv-hero__chip">
+              <PhCheckCircle :size="12" weight="fill" /> Approuvé
+            </span>
+          </div>
+          <div class="lv-hero__stats">
+            <span><strong>{{ ongoing.length }}</strong> à livrer</span>
+            <span><strong>{{ done.length }}</strong> terminée{{ done.length > 1 ? 's' : '' }}</span>
+          </div>
         </div>
-        <div class="d-flex align-center ga-2">
-          <span class="text-muted text-meta">{{ isOnline ? 'Disponible' : 'Indisponible' }}</span>
-          <v-switch
-            :model-value="isOnline"
-            color="primary"
-            density="compact"
-            hide-details
-            :loading="togglingAvailability || locating"
-            :disabled="togglingAvailability || locating"
-            @update:model-value="toggleAvailability"
-          />
-        </div>
-      </div>
+        <button
+          type="button"
+          class="lv-toggle"
+          :class="{ 'lv-toggle--on': isOnline }"
+          :disabled="togglingAvailability || locating"
+          :aria-pressed="isOnline"
+          @click="toggleAvailability(!isOnline)"
+        >
+          <span class="lv-toggle__dot" />
+          <span class="lv-toggle__text">
+            <strong>{{ togglingAvailability || locating ? 'Un instant…' : isOnline ? 'En ligne' : 'Hors ligne' }}</strong>
+            <small>{{ isOnline ? 'Toucher pour faire une pause' : 'Toucher pour recevoir des courses' }}</small>
+          </span>
+        </button>
+      </section>
 
       <v-alert v-if="myCourier && myCourier.status !== 'approved'" type="warning" variant="tonal" density="compact" class="mb-3">
         <template v-if="myCourier.status === 'pending'">Ton profil est en cours de vérification par un administrateur.</template>
@@ -464,6 +471,123 @@ const visible = computed(() => {
 </template>
 
 <style scoped>
+.lv-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(125deg, hsl(222 30% 28%), hsl(222 35% 18%));
+  color: #fff;
+  box-shadow: var(--shadow-md);
+  transition: background 0.3s ease;
+}
+
+.lv-hero--online {
+  background: linear-gradient(125deg, hsl(152 62% 36%), hsl(175 70% 28%));
+}
+
+.lv-hero__title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.lv-hero__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.18);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.lv-hero__stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.lv-hero__stats strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.lv-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.lv-toggle:hover {
+  background: rgb(255 255 255 / 0.22);
+}
+
+.lv-toggle:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.lv-toggle__dot {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: hsl(0 0% 70%);
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 0.15);
+}
+
+.lv-toggle--on .lv-toggle__dot {
+  background: hsl(140 90% 60%);
+  box-shadow: 0 0 0 4px rgb(120 255 170 / 0.3);
+  animation: lv-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes lv-pulse {
+  50% {
+    box-shadow: 0 0 0 7px rgb(120 255 170 / 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-toggle--on .lv-toggle__dot {
+    animation: none;
+  }
+}
+
+.lv-toggle__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.lv-toggle__text strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.lv-toggle__text small {
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+
 /* .app-shell plafonne à 720px par défaut (voir main.css) -- trop étroit
    pour que la grille de cartes ci-dessous profite de plusieurs colonnes sur
    grand écran. Même largeur que .cart-inner (panier.vue). */

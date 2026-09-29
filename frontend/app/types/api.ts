@@ -572,6 +572,8 @@ export interface CartItemRead {
 export interface VendorCartGroup {
   vendor_id: string
   shop_name: string
+  /** « Retrait offert » : achat minimum dans la boutique ; null sans offre. */
+  pickup_offer_min?: number | null
   items: CartItemRead[]
   subtotal: number
   /** Generic estimate — buyer's delivery address unknown at the cart stage. See app/cart/service.py::get_cart. */

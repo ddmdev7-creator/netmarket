@@ -42,6 +42,9 @@ class VendorCartGroup(BaseModel):
     # distance) au devis de livraison puis figée au checkout.
     estimated_delivery_min: date | None = None
     estimated_delivery_max: date | None = None
+    # « Retrait offert » : achat minimum dans cette boutique pour que la
+    # livraison en point de retrait soit offerte (None : pas d'offre).
+    pickup_offer_min: int | None = None
 
 
 class CartRead(BaseModel):

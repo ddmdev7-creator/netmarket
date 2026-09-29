@@ -99,6 +99,7 @@ async def get_cart(db: AsyncSession, user: User) -> CartRead:
                 subtotal=0,
                 estimated_delivery_min=estimate.min_date,
                 estimated_delivery_max=estimate.max_date,
+                pickup_offer_min=vendor.pickup_offer_min_amount if vendor.offers_pickup_delivery else None,
             )
             groups[vendor.id] = group
         group.items.append(item_read)

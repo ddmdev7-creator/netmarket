@@ -10,7 +10,7 @@ watch(mdAndUp, (isDesktop) => { drawerOpen.value = isDesktop })
 
 <template>
   <v-app>
-    <v-navigation-drawer v-model="drawerOpen" :permanent="mdAndUp" width="240" border="0" class="vendor-drawer">
+    <v-navigation-drawer v-model="drawerOpen" :permanent="mdAndUp" width="260" border="0" class="vendor-drawer">
       <LayoutVendorSidebar @navigate="() => { if (!mdAndUp) drawerOpen = false }" />
     </v-navigation-drawer>
 

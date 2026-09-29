@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { PhImage, PhShoppingCart, PhTruck, PhX } from '@phosphor-icons/vue'
+import { PhArrowCounterClockwise, PhGift, PhImage, PhShieldCheck, PhShoppingCart, PhTrash, PhTruck } from '@phosphor-icons/vue'
+import type { VendorCartGroup } from '~/types/api'
 
 definePageMeta({ middleware: 'auth' })
 
@@ -24,6 +25,14 @@ async function removeItem(itemId: string) {
   await cartStore.removeItem(itemId)
 }
 
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('')
+}
+
+function offerReached(group: VendorCartGroup) {
+  return group.pickup_offer_min != null && group.subtotal >= group.pickup_offer_min
+}
+
 function goCheckout() {
   router.push('/checkout')
 }
@@ -31,23 +40,21 @@ function goCheckout() {
 
 <template>
   <!-- Pas de .app-shell ici : layouts/default.vue en fournit déjà un (avec
-       app-shell--catalog pour cette route, voir ce fichier) -- un deuxième
-       wrapper imbriqué ici l'aurait juste re-plafonné à 720px par défaut,
-       annulant l'élargissement du bandeau du haut au-dessus. .cart-inner
-       recentre uniquement LE CONTENU de cette page sur une largeur
-       confortable, sans replafonner LayoutTopBar avec. -->
-  <div class="cart-inner" style="padding-bottom: 88px">
-    <div class="pa-3">
-      <h1 class="text-h6">Mon panier ({{ itemCount }} article{{ itemCount > 1 ? 's' : '' }})</h1>
-    </div>
+       app-shell--catalog pour cette route, voir ce fichier). .cart-inner
+       recentre uniquement le contenu de cette page. -->
+  <div class="cart-inner">
+    <header class="cart-head">
+      <h1 class="text-h6 mb-0">Mon panier</h1>
+      <span v-if="hasItems" class="cart-head__count">{{ itemCount }} article{{ itemCount > 1 ? 's' : '' }}</span>
+    </header>
 
-    <div class="px-4 cart-page">
-        <div class="cart-list grid-card">
-          <div v-if="pending">
-            <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-two-line" class="mb-2" />
-          </div>
+    <div class="cart-page">
+      <div class="cart-list">
+        <div v-if="pending" class="cart-card">
+          <v-skeleton-loader v-for="n in 2" :key="n" type="list-item-avatar-two-line" class="mb-2" />
+        </div>
+        <div v-else-if="!hasItems" class="cart-card">
           <CommonEmptyState
-            v-else-if="!hasItems"
             :icon="PhShoppingCart"
             title="Votre panier est vide"
             message="Parcourez le catalogue et ajoutez les produits qui vous plaisent."
@@ -56,181 +63,247 @@ function goCheckout() {
           >
             <NuxtLink to="/favoris" class="empty-link">Voir mes favoris</NuxtLink>
           </CommonEmptyState>
-
-          <template v-else>
-            <div v-for="group in cartStore.cart!.vendors" :key="group.vendor_id" class="vendor-group">
-              <div class="vendor-group__header">{{ group.shop_name }}</div>
-
-              <div v-for="item in group.items" :key="item.id" class="cart-row">
-                <NuxtLink :to="`/produits/${item.product_id}`" class="cart-row__thumb">
-                  <img
-                    v-if="item.product_image"
-                    :src="resolveImageUrl(item.product_image, apiBase, 160)"
-                    :alt="item.product_name"
-                    loading="lazy"
-                  />
-                  <PhImage v-else :size="20" weight="light" color="var(--color-neutral-500)" />
-                </NuxtLink>
-                <div class="flex-grow-1">
-                  <div class="text-meta">{{ item.product_name }}</div>
-                  <div v-if="item.variant_label" class="text-muted text-fine">{{ item.variant_label }}</div>
-                  <div class="d-flex justify-space-between align-center mt-1">
-                    <div class="qty-selector">
-                      <button type="button" @click="updateQty(item.id, item.quantity - 1)">−</button>
-                      <span>{{ item.quantity }}</span>
-                      <button type="button" @click="updateQty(item.id, item.quantity + 1)">+</button>
-                    </div>
-                    <span class="text-meta" style="font-weight: 600">{{ formatGnf(item.subtotal) }}</span>
-                  </div>
-                </div>
-                <button class="cart-row__remove" aria-label="Retirer cet article" @click="removeItem(item.id)">
-                  <PhX :size="14" />
-                </button>
-              </div>
-
-              <div v-if="group.estimated_delivery_min && group.estimated_delivery_max" class="delivery-estimate mt-2 text-meta">
-                <PhTruck :size="12" weight="bold" />
-                Livraison estimée :
-                <strong>{{ formatDeliveryEstimate(group.estimated_delivery_min, group.estimated_delivery_max) }}</strong>
-              </div>
-              <div class="d-flex justify-space-between text-muted mt-2 text-meta">
-                <span>Sous-total {{ group.shop_name }}</span>
-                <span>{{ formatGnf(group.subtotal) }}</span>
-              </div>
-              <v-divider class="my-3" />
-            </div>
-
-            <!-- Repris dans .cart-summary sur ordinateur (voir plus bas) — l'un
-                 des deux est toujours masqué par media query, jamais les deux
-                 à la fois. -->
-            <div class="cart-total-inline d-flex justify-space-between mt-2 text-lg">
-              <span>Total</span>
-              <span>{{ formatGnf(cartStore.cart!.total) }}</span>
-            </div>
-          </template>
         </div>
 
-        <!-- Résumé fixe (sticky) : n'existe qu'à partir de 960px (voir CSS) —
-             sur mobile, le total reste inline ci-dessus et le bouton dans la
-             barre collante en bas (.checkout-bar). Sans cette colonne, la
-             moitié droite d'un grand écran resterait un vide inutilisé. -->
-        <aside v-if="hasItems" class="cart-summary grid-card">
-          <div class="cart-summary__title">Résumé</div>
-          <div class="d-flex justify-space-between text-lg mb-4">
-            <span>Total</span>
-            <span>{{ formatGnf(cartStore.cart!.total) }}</span>
-          </div>
-          <v-btn color="primary" block size="large" @click="goCheckout">Passer à la commande</v-btn>
-        </aside>
+        <template v-else>
+          <section v-for="group in cartStore.cart!.vendors" :key="group.vendor_id" class="cart-card vendor-group">
+            <header class="vendor-group__header">
+              <span class="vendor-group__logo">{{ initials(group.shop_name) }}</span>
+              <span class="vendor-group__name">{{ group.shop_name }}</span>
+              <span class="vendor-group__subtotal">{{ formatGnf(group.subtotal) }}</span>
+            </header>
+
+            <div v-if="group.pickup_offer_min != null" class="offer" :class="{ 'offer--done': offerReached(group) }">
+              <div class="offer__text">
+                <PhGift :size="16" weight="fill" />
+                <span v-if="offerReached(group)">Livraison en point de retrait <strong>offerte</strong> par la boutique.</span>
+                <span v-else>
+                  Plus que <strong>{{ formatGnf(group.pickup_offer_min - group.subtotal) }}</strong> pour un retrait offert.
+                </span>
+              </div>
+              <div v-if="group.pickup_offer_min > 0" class="offer__bar" aria-hidden="true">
+                <span :style="{ width: `${Math.min(100, (group.subtotal / group.pickup_offer_min) * 100)}%` }" />
+              </div>
+            </div>
+
+            <div v-for="item in group.items" :key="item.id" class="cart-row">
+              <NuxtLink :to="`/produits/${item.product_id}`" class="cart-row__thumb">
+                <img
+                  v-if="item.product_image"
+                  :src="resolveImageUrl(item.product_image, apiBase, 160)"
+                  :alt="item.product_name"
+                  loading="lazy"
+                />
+                <PhImage v-else :size="22" weight="light" color="var(--color-neutral-500)" />
+              </NuxtLink>
+              <div class="cart-row__body">
+                <div class="cart-row__top">
+                  <NuxtLink :to="`/produits/${item.product_id}`" class="cart-row__name">{{ item.product_name }}</NuxtLink>
+                  <button class="cart-row__remove" aria-label="Retirer cet article" @click="removeItem(item.id)">
+                    <PhTrash :size="16" />
+                  </button>
+                </div>
+                <div v-if="item.variant_label" class="cart-row__variant">{{ item.variant_label }}</div>
+                <div class="cart-row__bottom">
+                  <div class="qty-selector">
+                    <button type="button" :disabled="item.quantity <= 1" aria-label="Diminuer" @click="updateQty(item.id, item.quantity - 1)">−</button>
+                    <span>{{ item.quantity }}</span>
+                    <button type="button" aria-label="Augmenter" @click="updateQty(item.id, item.quantity + 1)">+</button>
+                  </div>
+                  <div class="cart-row__price">
+                    <strong>{{ formatGnf(item.subtotal) }}</strong>
+                    <small v-if="item.quantity > 1">{{ formatGnf(item.unit_price) }} / unité</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <footer v-if="group.estimated_delivery_min && group.estimated_delivery_max" class="vendor-group__foot">
+              <PhTruck :size="14" weight="bold" />
+              Livraison estimée : <strong>{{ formatDeliveryEstimate(group.estimated_delivery_min, group.estimated_delivery_max) }}</strong>
+            </footer>
+          </section>
+        </template>
       </div>
+
+      <aside v-if="hasItems" class="cart-summary cart-card">
+        <div class="cart-summary__title">Récapitulatif</div>
+        <div class="sum-line">
+          <span>Articles ({{ itemCount }})</span>
+          <span>{{ formatGnf(cartStore.cart!.total) }}</span>
+        </div>
+        <div class="sum-line">
+          <span>Livraison</span>
+          <span class="text-muted">Calculée à l'étape suivante</span>
+        </div>
+        <div class="sum-line sum-line--total">
+          <span>Total</span>
+          <span>{{ formatGnf(cartStore.cart!.total) }}</span>
+        </div>
+        <v-btn color="primary" block size="large" class="mt-4" @click="goCheckout">Passer à la commande</v-btn>
+        <ul class="cart-trust">
+          <li><PhShieldCheck :size="15" /> Paiement sécurisé en ligne ou NdjouriBank</li>
+          <li><PhArrowCounterClockwise :size="15" /> Annulation remboursée avant préparation</li>
+        </ul>
+      </aside>
     </div>
 
     <div v-if="hasItems" class="checkout-bar checkout-bar--mobile-only">
-      <v-btn color="primary" block size="large" @click="goCheckout">Passer à la commande</v-btn>
+      <div class="dock">
+        <div class="dock__total">
+          <span class="dock__amount">{{ formatGnf(cartStore.cart!.total) }}</span>
+          <span class="dock__meta">{{ itemCount }} article{{ itemCount > 1 ? 's' : '' }} · hors livraison</span>
+        </div>
+        <v-btn color="primary" size="large" @click="goCheckout">Commander</v-btn>
+      </div>
     </div>
+  </div>
 </template>
 
 <style scoped>
-/* Sur mobile, une seule colonne : le résumé (.cart-summary) n'existe pas
-   encore, le total reste inline et le bouton vit dans la barre collante du
-   bas. */
-.cart-summary {
-  display: none;
+.cart-inner {
+  padding: 16px 16px 160px;
 }
 
-/* .app-shell--catalog (voir main.css) n'est plus plafonné sur ordinateur --
-   le bandeau du haut (LayoutTopBar) va ainsi bord à bord comme sur l'accueil
-   -- mais un panier n'a pas vocation à s'étirer sur toute la largeur d'un
-   écran 1920px comme une grille de produits : .cart-inner recentre le
-   contenu (titre + liste + résumé) sur une largeur confortable. */
 @media (min-width: 960px) {
   .cart-inner {
-    max-width: 1120px;
+    max-width: 1160px;
     margin: 0 auto;
+    padding: 24px 24px 48px;
   }
 }
 
-/* À partir de cette largeur, un vrai layout à deux colonnes (liste + résumé
-   fixe) utilise l'espace gagné au lieu de laisser la liste seule s'étirer
-   avec un grand vide entre le sélecteur de quantité et le prix de chaque
-   ligne, ou de laisser toute la moitié droite de .cart-inner inoccupée. */
+.cart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.cart-head__count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-neutral-400);
+}
+
+.cart-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
 @media (min-width: 960px) {
   .cart-page {
-    display: grid;
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     align-items: start;
-    gap: 32px;
-  }
-
-  .cart-total-inline {
-    /* Remplacé par .cart-summary à cette largeur. */
-    display: none;
-  }
-
-  /* .grid-card (main.css) fournit le fond/bordure/ombre, partagés avec
-     .checkout-form/.checkout-summary (checkout.vue) -- les deux colonnes
-     forment une vraie paire de cartes détachées plutôt qu'une seule. */
-  .cart-list {
-    padding: 24px 28px;
-  }
-
-  .cart-summary {
-    display: block;
-    position: sticky;
-    top: 16px;
-    padding: 20px;
-  }
-
-  /* Redondant avec le bouton de .cart-summary à cette largeur. */
-  .checkout-bar--mobile-only {
-    display: none;
+    gap: 24px;
   }
 }
 
-.cart-summary__title {
-  font-family: var(--font-heading);
-  font-weight: 700;
-  font-size: 15px;
-  margin-bottom: 14px;
+.cart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-/* This page keeps the default layout's bottom nav (unlike checkout/produit
-   which use the blank layout), so the shared .checkout-bar — normally flush
-   with the screen bottom — has to sit above it instead of underneath it.
-   That bottom nav is hidden on desktop (see BottomNav.vue), so the bar goes
-   back to being flush with the screen bottom there — moot now that it's
-   hidden at that width (see .checkout-bar--mobile-only above), kept for
-   the brief window before the 960px breakpoint kicks in on a resize. */
-.checkout-bar {
-  bottom: 76px;
-  z-index: 6;
+.cart-card {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-900);
+  box-shadow: var(--shadow-sm);
 }
 
 @media (min-width: 960px) {
-  .checkout-bar {
-    bottom: 0;
+  .cart-card {
+    padding: 20px 22px;
   }
 }
 
 .vendor-group__header {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-neutral-400);
-  margin-bottom: 6px;
-}
-
-.delivery-estimate {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.vendor-group__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, hsl(152 68% 42%), hsl(190 70% 42%));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.vendor-group__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-heading);
+  font-size: 14.5px;
+  font-weight: 800;
+}
+
+.vendor-group__subtotal {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--color-neutral-300);
+}
+
+.offer {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-800);
+  font-size: 12.5px;
+  color: var(--color-neutral-300);
+}
+
+.offer--done {
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
+}
+
+.offer__text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.offer__text svg {
+  flex-shrink: 0;
+  color: hsl(150 60% 45%);
+}
+
+.offer__bar {
+  height: 5px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--color-neutral-700);
+  overflow: hidden;
+}
+
+.offer__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, hsl(152 68% 42%), hsl(170 70% 40%));
+  transition: width 0.3s ease;
 }
 
 .cart-row {
   display: flex;
-  gap: 10px;
-  padding: 10px 0;
+  gap: 14px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--color-divider);
 }
 
@@ -239,15 +312,15 @@ function goCheckout() {
 }
 
 .cart-row__thumb {
-  width: 84px;
-  height: 84px;
-  flex: none;
-  border-radius: var(--radius-sm);
-  background: var(--color-neutral-800);
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 88px;
+  height: 88px;
+  flex: none;
   overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-800);
 }
 
 .cart-row__thumb img {
@@ -257,15 +330,194 @@ function goCheckout() {
   object-fit: cover;
 }
 
+.cart-row__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.cart-row__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cart-row__name {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cart-row__name:hover {
+  color: var(--color-primary-300);
+}
+
+.cart-row__variant {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.cart-row__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.cart-row__price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+
+.cart-row__price strong {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.cart-row__price small {
+  font-size: 11px;
+  color: var(--color-neutral-400);
+}
+
 .cart-row__remove {
-  background: none;
+  display: flex;
+  padding: 6px;
+  margin: -6px -6px 0 0;
   border: none;
-  color: var(--color-neutral-600);
-  align-self: flex-start;
-  /* Icon is 14px — padding brings the actual tap target to a proper mobile size. */
-  padding: 10px;
-  margin: -10px -10px 0 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-neutral-500);
   cursor: pointer;
+}
+
+.cart-row__remove:hover {
+  background: hsl(355 80% var(--tint-bg));
+  color: var(--color-error);
+}
+
+.vendor-group__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
+  font-size: 12.5px;
+  color: var(--color-neutral-400);
+}
+
+.vendor-group__foot svg {
+  color: var(--color-success);
+}
+
+.vendor-group__foot strong {
+  color: var(--color-neutral-200);
+}
+
+.cart-summary {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .cart-summary {
+    display: block;
+    position: sticky;
+    top: 84px;
+  }
+
+  .checkout-bar--mobile-only {
+    display: none;
+  }
+}
+
+.cart-summary__title {
+  margin-bottom: 14px;
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.sum-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13.5px;
+}
+
+.sum-line--total {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-divider);
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.cart-trust {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.cart-trust li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.cart-trust svg {
+  color: var(--color-success);
+}
+
+/* Cette page garde la barre de navigation du bas : la barre de commande se
+   place au-dessus d'elle sur téléphone. */
+.checkout-bar {
+  bottom: 76px;
+  z-index: 6;
+}
+
+.dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dock__total {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.dock__amount {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.dock__meta {
+  font-size: 11.5px;
+  color: var(--color-neutral-400);
 }
 
 .empty-link {

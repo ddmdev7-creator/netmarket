@@ -2,7 +2,7 @@
 import { PhArrowLeft } from '@phosphor-icons/vue'
 
 definePageMeta({ layout: 'blank' })
-useHead({ title: 'NdjouriMarket' })
+useHead({ title: 'Netmarket' })
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -43,7 +43,7 @@ async function submit() {
       </NuxtLink>
 
       <div class="text-center mb-8">
-        <div class="auth-brand mb-3">NdjouriMarket</div>
+        <AuthBrand class="mb-5" />
         <h1 class="text-h5 mb-1">Créer un compte</h1>
         <p class="text-muted">Rejoignez la marketplace en quelques secondes</p>
       </div>

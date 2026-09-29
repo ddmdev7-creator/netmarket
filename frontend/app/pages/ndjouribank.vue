@@ -151,8 +151,11 @@ function formatDateTime(iso: string) {
 </script>
 
 <template>
-  <div class="detail-card">
-    <h1 class="text-h6 mb-4">NdjouriBank</h1>
+  <div class="nb">
+    <header class="nb__head">
+      <h1 class="text-h6 mb-0">NdjouriBank</h1>
+      <span class="text-muted" style="font-size: 13px">Votre porte-monnaie pour payer en un clic sur Netmarket</span>
+    </header>
 
     <v-skeleton-loader v-if="pending && !wallet" type="card, list-item-three-line" />
     <CommonEmptyState v-else-if="!wallet" message="Impossible de charger ton solde pour le moment." />
@@ -167,7 +170,8 @@ function formatDateTime(iso: string) {
       </p>
     </section>
 
-    <template v-else>
+    <div v-else class="nb__grid">
+      <div class="nb__main">
       <section class="balance-hero">
         <div class="balance-hero__top">
           <span class="balance-hero__label"><PhWallet :size="18" weight="fill" /> Mon solde</span>
@@ -199,6 +203,16 @@ function formatDateTime(iso: string) {
         </button>
       </div>
 
+      <p class="info-note">
+        <PhInfo :size="15" />
+        <span>
+          Ton solde NdjouriBank sert à payer tes commandes sur Netmarket. Les remboursements d'annulation y sont crédités
+          instantanément. Il n'est pas retirable vers un compte mobile money.
+        </span>
+      </p>
+      </div>
+
+      <div class="nb__side">
       <section v-if="pendingTopups.length" class="panel">
         <h2 class="panel__title mb-2">Recharges en attente</h2>
         <div v-for="t in pendingTopups" :key="t.id" class="entry">
@@ -247,13 +261,8 @@ function formatDateTime(iso: string) {
         </v-btn>
       </section>
 
-      <p class="info-note">
-        <PhInfo :size="15" />
-        <span>
-          Ton solde NdjouriBank sert à payer tes commandes sur Ndjouri. Il n'est pas retirable vers un compte mobile money.
-        </span>
-      </p>
-    </template>
+      </div>
+    </div>
 
     <v-dialog v-model="topupOpen" max-width="420">
       <v-card v-if="wallet" class="pa-5">
@@ -302,6 +311,57 @@ function formatDateTime(iso: string) {
 </template>
 
 <style scoped>
+.nb {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 16px 24px;
+}
+
+@media (min-width: 960px) {
+  .nb {
+    padding: 28px 24px 48px;
+  }
+}
+
+.nb__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.nb__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 960px) {
+  .nb__grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    align-items: start;
+  }
+
+  .nb__main {
+    position: sticky;
+    top: 84px;
+  }
+}
+
+.nb__main,
+.nb__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nb__main > *,
+.nb__side > * {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
 .soon {
   padding: 28px 20px;
   border: 1px dashed var(--color-divider);

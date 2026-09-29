@@ -330,6 +330,25 @@ h1, h2, h3, h4, h5, h6,
     max-width: 460px;
   }
 
+  /* Fond de marque derrière la carte des pages de connexion/inscription. */
+  .auth-shell::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 42%),
+      radial-gradient(circle at 88% 82%, color-mix(in srgb, #7c3aed 20%, transparent), transparent 45%),
+      radial-gradient(circle at 80% 10%, color-mix(in srgb, #f97316 12%, transparent), transparent 35%),
+      var(--color-bg);
+  }
+
+  .auth-shell > * {
+    position: relative;
+    z-index: 1;
+  }
+
   .auth-card {
     padding: 40px 36px;
     background: var(--color-neutral-900);

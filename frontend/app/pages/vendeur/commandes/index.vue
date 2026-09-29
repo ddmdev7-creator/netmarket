@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhMagnifyingGlass, PhMotorcycle } from '@phosphor-icons/vue'
+import { PhCaretDown, PhImage, PhMagnifyingGlass, PhMotorcycle } from '@phosphor-icons/vue'
 import type { CourierRead, OrderStatus, VehicleType, VendorSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -108,7 +108,11 @@ watch(
   },
 )
 
-const STATUS_FILTERS: { value: OrderStatus | 'all'; label: string }[] = [
+type StatusFilter = OrderStatus | 'all' | 'todo'
+// « À traiter » : ce qui attend une action du vendeur (confirmer, préparer, expédier).
+const TODO_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'preparing']
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'todo', label: 'À traiter' },
   { value: 'all', label: 'Toutes' },
   { value: 'pending', label: 'En attente' },
   { value: 'confirmed', label: 'Confirmée' },
@@ -125,8 +129,18 @@ const STATUS_FILTERS: { value: OrderStatus | 'all'; label: string }[] = [
 // on scroll jusqu'à sa carte une fois la liste chargée.
 const highlightOrderId = route.query.highlight as string | undefined
 // ?status=… : arrivée depuis une carte « À faire » du tableau de bord.
-const statusFilter = ref<OrderStatus | 'all'>(
-  typeof route.query.status === 'string' && !highlightOrderId ? (route.query.status as OrderStatus) : 'all',
+const statusFilter = ref<StatusFilter>(
+  typeof route.query.status === 'string' && !highlightOrderId ? (route.query.status as OrderStatus) : highlightOrderId ? 'all' : 'todo',
+)
+// Rien à traiter à l'arrivée : on montre tout plutôt qu'une liste vide.
+watch(
+  subOrders,
+  (list) => {
+    if (statusFilter.value === 'todo' && list.length && !list.some((so) => TODO_STATUSES.includes(so.status))) {
+      statusFilter.value = 'all'
+    }
+  },
+  { immediate: true },
 )
 const search = ref('')
 
@@ -142,15 +156,19 @@ watch(
 )
 
 const statusCounts = computed(() => {
-  const counts: Record<string, number> = { all: subOrders.value.length }
-  for (const so of subOrders.value) counts[so.status] = (counts[so.status] ?? 0) + 1
+  const counts: Record<string, number> = { all: subOrders.value.length, todo: 0 }
+  for (const so of subOrders.value) {
+    counts[so.status] = (counts[so.status] ?? 0) + 1
+    if (TODO_STATUSES.includes(so.status)) counts.todo! += 1
+  }
   return counts
 })
 
 const visible = computed(() => {
   const query = search.value.trim().toLowerCase()
   return subOrders.value.filter((so) => {
-    if (statusFilter.value !== 'all' && so.status !== statusFilter.value) return false
+    if (statusFilter.value === 'todo' && !TODO_STATUSES.includes(so.status)) return false
+    if (statusFilter.value !== 'all' && statusFilter.value !== 'todo' && so.status !== statusFilter.value) return false
     if (!query) return true
     return (
       shortId(so.order_id).toLowerCase().includes(query) ||
@@ -225,6 +243,11 @@ async function transition(subOrder: VendorSubOrderRead, to: OrderStatus) {
   }
 }
 
+// Commandes terminées (livrées, annulées) : carte repliée, détails à la demande.
+const isClosed = (so: VendorSubOrderRead) => so.status === 'delivered' || so.status === 'cancelled'
+const expanded = ref<Record<string, boolean>>({})
+const showDetails = (so: VendorSubOrderRead) => !isClosed(so) || !!expanded.value[so.id]
+
 function shortId(orderId: string) {
   return `#GN-${orderId.slice(0, 5).toUpperCase()}`
 }
@@ -235,17 +258,26 @@ function formatDate(iso: string) {
 
 <template>
   <div class="dashboard-shell">
-    <h1 class="text-h6 mb-3">Commandes à traiter</h1>
-
-    <v-text-field
-      v-model="search"
-      placeholder="Rechercher par code ou produit…"
-      density="compact"
-      variant="outlined"
-      hide-details
-      clearable
-      class="mb-3"
-    />
+    <div class="vo-head mb-3">
+      <div>
+        <h1 class="text-h6 mb-0">Commandes</h1>
+        <p class="text-muted mb-0" style="font-size: 13px">
+          <template v-if="statusCounts.todo">{{ statusCounts.todo }} commande{{ statusCounts.todo > 1 ? 's' : '' }} attend{{ statusCounts.todo > 1 ? 'ent' : '' }} votre action.</template>
+          <template v-else>Rien à traiter pour le moment.</template>
+        </p>
+      </div>
+      <v-text-field
+        v-model="search"
+        placeholder="Rechercher par code ou produit…"
+        density="compact"
+        variant="outlined"
+        hide-details
+        clearable
+        class="vo-search"
+      >
+        <template #prepend-inner><PhMagnifyingGlass :size="16" color="var(--color-neutral-500)" /></template>
+      </v-text-field>
+    </div>
 
     <div class="status-filters mb-4">
       <button
@@ -268,14 +300,17 @@ function formatDate(iso: string) {
       v-for="so in visible"
       :id="`sub-order-${so.order_id}`"
       :key="so.id"
-      class="mb-3 pa-3"
-      :class="{ 'sub-order-card--highlight': so.order_id === highlightOrderId }"
+      class="vo-card pa-4"
+      :class="[`vo-card--${so.status}`, { 'sub-order-card--highlight': so.order_id === highlightOrderId }]"
     >
-      <div class="d-flex justify-space-between align-center mb-2">
-        <span class="order-code">{{ shortId(so.order_id) }}</span>
+      <div class="d-flex justify-space-between align-center ga-2 mb-1">
+        <OrderNumber :id="so.order_id" />
         <StatusBadge :status="so.status" />
       </div>
-      <div class="text-muted mb-3" style="font-size: 12px">{{ formatDate(so.created_at) }}</div>
+      <div class="d-flex justify-space-between align-center mb-3 text-muted" style="font-size: 12px">
+        <span>{{ formatDate(so.created_at) }} · {{ so.delivery_type === 'pickup_point' ? 'Point de retrait' : 'Domicile' }}</span>
+        <strong class="order-amount">{{ formatGnf(so.amount) }}</strong>
+      </div>
 
       <div v-for="item in so.items" :key="item.id" class="order-item-row mb-2">
         <NuxtLink :to="`/produits/${item.product_id}`" class="order-item-row__thumb">
@@ -294,6 +329,12 @@ function formatDate(iso: string) {
         <span style="font-size: 13px">{{ formatGnf(item.unit_price * item.quantity) }}</span>
       </div>
 
+      <button v-if="isClosed(so)" type="button" class="vo-toggle" @click="expanded[so.id] = !expanded[so.id]">
+        {{ expanded[so.id] ? 'Masquer les détails' : 'Voir les détails' }}
+        <PhCaretDown :size="13" :style="{ transform: expanded[so.id] ? 'rotate(180deg)' : '' }" />
+      </button>
+
+      <template v-if="showDetails(so)">
       <OrderDeliveryDetails
         class="mt-3 mb-3"
         :zone="so.delivery_zone"
@@ -382,9 +423,10 @@ function formatDate(iso: string) {
       <v-divider class="mb-2" />
 
       <div class="d-flex justify-space-between mb-3" style="font-size: 13px">
-        <span class="text-muted">Montant · commission {{ formatGnf(so.commission) }}</span>
-        <span class="order-amount">{{ formatGnf(so.amount) }}</span>
+        <span class="text-muted">Commission Netmarket</span>
+        <span>− {{ formatGnf(so.commission) }}</span>
       </div>
+      </template>
       <div v-if="so.vendor_delivery_fee" class="d-flex justify-space-between mb-3 offered-line">
         <span>Retrait offert au client (prélevé à la livraison)</span>
         <strong>− {{ formatGnf(so.vendor_delivery_fee) }}</strong>
@@ -419,6 +461,45 @@ function formatDate(iso: string) {
 </template>
 
 <style scoped>
+.vo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vo-search {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.vo-card {
+  margin-bottom: 14px;
+  border-left: 4px solid var(--vo-accent, var(--color-divider));
+}
+
+.vo-card--pending { --vo-accent: hsl(38 90% 52%); }
+.vo-card--confirmed,
+.vo-card--preparing { --vo-accent: var(--color-primary); }
+.vo-card--shipped,
+.vo-card--arrived_at_pickup_point { --vo-accent: hsl(265 70% 60%); }
+.vo-card--delivered { --vo-accent: hsl(150 60% 45%); }
+.vo-card--cancelled { --vo-accent: var(--color-neutral-600); }
+
+.vo-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary-300);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .offered-line {
   padding: 8px 10px;
   border-radius: var(--radius-md);
@@ -441,7 +522,7 @@ function formatDate(iso: string) {
 
 @media (min-width: 960px) {
   .sub-order-grid {
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
     gap: 0 16px;
   }
 }

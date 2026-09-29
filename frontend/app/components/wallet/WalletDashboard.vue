@@ -301,8 +301,8 @@ function formatDateTime(iso: string) {
       <p class="info-note">
         <PhInfo :size="15" />
         <span>
-          Seules les commandes <strong>payées en ligne</strong> alimentent ce solde pour l'instant. Les commandes payées
-          à la livraison continuent d'être réglées comme aujourd'hui.
+          Vos gains proviennent des commandes payées <strong>en ligne</strong> ou avec <strong>NdjouriBank</strong> :
+          ils deviennent retirables {{ wallet.earnings_hold_days }} jour{{ wallet.earnings_hold_days > 1 ? 's' : '' }} après la livraison.
         </span>
       </p>
 
