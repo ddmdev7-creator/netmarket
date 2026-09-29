@@ -108,10 +108,10 @@ const MAP_RASTER_STYLE_SATELLITE = esriImageryStyle()
 
 export type MapLayerKind = 'plan' | 'satellite'
 
-/** Comme getMapRasterStyle, plus le choix plan/satellite (voir OverviewMap.vue). */
-export function getMapStyle(theme: AppThemeName, layer: MapLayerKind): MapLibreGL.StyleSpecification {
+/** Plan (fond « navigation » vectoriel, voir getNavigationStyle) ou satellite (voir OverviewMap.vue). */
+export function getMapStyle(theme: AppThemeName, layer: MapLayerKind): MapLibreGL.StyleSpecification | string {
   if (layer === 'satellite') return MAP_RASTER_STYLE_SATELLITE
-  return getMapRasterStyle(theme)
+  return getNavigationStyle(theme)
 }
 
 // Conakry — centre par défaut tant qu'aucune position/point n'oriente encore

@@ -2,7 +2,7 @@
 import { PhMagnifyingGlass, PhMapPinLine, PhWarningCircle } from '@phosphor-icons/vue'
 import type { OverviewMapItem } from '~/components/admin/OverviewMap.vue'
 import { MAP_PIN_META, type MapPinKind } from '~/utils/mapPins'
-import type { PickupPointRead, VendorRead, VendorStatus } from '~/types/api'
+import type { CourierDetailRead, PickupPointRead, VendorRead, VendorStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
 
@@ -18,7 +18,13 @@ const { data: points, pending: pointsPending } = await useAsyncData(
   () => apiFetch<PickupPointRead[]>('/admin/pickup-points'),
   { default: () => [], getCachedData: hydrateThenRefetch },
 )
+const { data: couriers } = await useAsyncData(
+  'admin-map-couriers',
+  () => apiFetch<CourierDetailRead[]>('/admin/couriers', { query: { status: 'approved' } }),
+  { default: () => [], getCachedData: hydrateThenRefetch },
+)
 const loading = computed(() => vendorsPending.value || pointsPending.value)
+const VEHICLES: Record<string, string> = { moto: 'Moto', taxi: 'Taxi', voiture: 'Voiture' }
 
 const vendorStatusMeta: Record<VendorStatus, { label: string; tone: OverviewMapItem['statusTone']; muted: boolean }> = {
   approved: { label: 'Approuvée', tone: 'success', muted: false },
@@ -133,6 +139,32 @@ const built = computed<Built>(() => {
     })
   }
 
+  // Livreurs approuvés, à leur dernière position connue.
+  for (const courier of couriers.value) {
+    if (!hasPosition(courier)) continue
+    const name = courier.full_name || courier.phone
+    placed.push({
+      id: `courier:${courier.id}`,
+      kind: 'courier',
+      name,
+      subtitle: courier.zone,
+      lat: courier.latitude!,
+      lng: courier.longitude!,
+      muted: !courier.is_online,
+      statusLabel: courier.is_online ? 'En ligne' : 'Hors ligne',
+      statusTone: courier.is_online ? 'success' : 'neutral',
+      details: [
+        { label: 'Téléphone', value: courier.phone },
+        { label: 'Engin', value: VEHICLES[courier.vehicle_type] ?? courier.vehicle_type },
+        { label: 'Position', value: 'Dernière position connue (en direct pendant une course)' },
+      ],
+      href: '/admin/livreurs',
+      hrefLabel: 'Voir les livreurs',
+      vendorStatus: null,
+      search: [name, courier.phone, courier.zone].filter(Boolean).join(' '),
+    })
+  }
+
   return { placed, unplaced }
 })
 
@@ -142,7 +174,7 @@ function normalize(text: string): string {
   return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
 }
 
-const kinds: MapPinKind[] = ['shop', 'pickup', 'shop_pickup']
+const kinds: MapPinKind[] = ['shop', 'pickup', 'shop_pickup', 'courier']
 const activeKinds = ref<Set<MapPinKind>>(new Set(kinds))
 const statusFilter = ref<VendorStatus | 'all'>('all')
 const statusOptions = [
@@ -162,7 +194,7 @@ function toggleKind(kind: MapPinKind) {
 }
 
 const countByKind = computed(() => {
-  const counts: Record<MapPinKind, number> = { shop: 0, pickup: 0, shop_pickup: 0 }
+  const counts: Record<MapPinKind, number> = { shop: 0, pickup: 0, shop_pickup: 0, courier: 0, home: 0 }
   for (const item of built.value.placed) counts[item.kind]++
   return counts
 })
@@ -192,11 +224,12 @@ const showUnplaced = ref(false)
     <div class="carte-header">
       <div>
         <h1 class="text-h6">Carte</h1>
-        <p class="text-muted carte-header__sub">Boutiques et points de retrait de la plateforme.</p>
+        <p class="text-muted carte-header__sub">Boutiques, points de retrait et livreurs de la plateforme.</p>
       </div>
       <div class="carte-stats">
         <span class="carte-stat"><strong>{{ countByKind.shop + countByKind.shop_pickup }}</strong> boutique{{ countByKind.shop + countByKind.shop_pickup > 1 ? 's' : '' }}</span>
         <span class="carte-stat"><strong>{{ countByKind.pickup + countByKind.shop_pickup }}</strong> point{{ countByKind.pickup + countByKind.shop_pickup > 1 ? 's' : '' }} de retrait</span>
+        <span class="carte-stat"><strong>{{ countByKind.courier }}</strong> livreur{{ countByKind.courier > 1 ? 's' : '' }}</span>
         <span v-if="built.unplaced.length" class="carte-stat carte-stat--warn">
           <PhWarningCircle :size="14" weight="fill" /> <strong>{{ built.unplaced.length }}</strong> sans position
         </span>
@@ -211,7 +244,7 @@ const showUnplaced = ref(false)
             v-model="search"
             type="search"
             class="carte-search__input"
-            placeholder="Nom, zone, propriétaire…"
+            placeholder="Filtrer : nom, zone, téléphone…"
             aria-label="Rechercher une boutique ou un point de retrait"
           />
         </div>
@@ -289,7 +322,13 @@ const showUnplaced = ref(false)
       </section>
 
       <section class="carte-map">
-        <AdminOverviewMap :items="filtered" :selected-id="selectedId" @select="selectedId = $event" />
+        <AdminOverviewMap
+          :items="filtered"
+          :selected-id="selectedId"
+          :legend-kinds="kinds"
+          search-placeholder="Boutique, point, livreur ou lieu…"
+          @select="selectedId = $event"
+        />
       </section>
     </div>
   </div>
@@ -615,5 +654,10 @@ const showUnplaced = ref(false)
     flex: 1;
     min-height: 140px;
   }
+}
+
+/* Le champ Vuetify s'étire par défaut dans une colonne flexible (grand bloc gris). */
+.carte-status {
+  flex: none !important;
 }
 </style>

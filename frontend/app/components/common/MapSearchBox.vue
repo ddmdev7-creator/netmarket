@@ -12,7 +12,22 @@
  */
 import { PhMagnifyingGlass, PhSpinner } from '@phosphor-icons/vue'
 
-const emit = defineEmits<{ select: [value: { label: string; lat: number; lng: number }] }>()
+export interface LocalSearchResult {
+  id: string
+  label: string
+  sub: string | null
+  color: string
+  lat: number
+  lng: number
+}
+
+// localSearch : résultats Netmarket (boutiques, points, livreurs…) affichés
+// tout de suite, avant les lieux trouvés par Nominatim.
+const props = withDefaults(defineProps<{ localSearch?: (q: string) => LocalSearchResult[]; placeholder?: string }>(), {
+  localSearch: undefined,
+  placeholder: 'Rechercher un quartier, un lieu...',
+})
+const emit = defineEmits<{ select: [value: { label: string; lat: number; lng: number; id?: string }] }>()
 
 interface NominatimResult {
   display_name: string
@@ -21,6 +36,11 @@ interface NominatimResult {
 }
 
 const query = ref('')
+const localResults = computed(() => {
+  const text = query.value.trim()
+  if (!props.localSearch || text.length < 2) return []
+  return props.localSearch(text).slice(0, 6)
+})
 const results = ref<NominatimResult[]>([])
 const loading = ref(false)
 const open = ref(false)
@@ -52,9 +72,9 @@ async function runSearch(text: string) {
 
 watch(query, (text) => {
   clearTimeout(debounceTimer)
+  open.value = localResults.value.length > 0
   if (text.trim().length < 3) {
     results.value = []
-    open.value = false
     return
   }
   debounceTimer = setTimeout(() => runSearch(text.trim()), 600)
@@ -65,6 +85,12 @@ function pick(result: NominatimResult) {
   open.value = false
   results.value = []
   emit('select', { label: result.display_name, lat: Number(result.lat), lng: Number(result.lon) })
+}
+
+function pickLocal(result: LocalSearchResult) {
+  query.value = result.label
+  open.value = false
+  emit('select', { label: result.label, lat: result.lat, lng: result.lng, id: result.id })
 }
 
 function onClickOutside(event: MouseEvent) {
@@ -85,18 +111,41 @@ onBeforeUnmount(() => {
       <input
         v-model="query"
         type="text"
-        placeholder="Rechercher un quartier, un lieu..."
+        :placeholder="placeholder"
         class="map-search__input"
-        @focus="open = results.length > 0"
+        @focus="open = results.length > 0 || localResults.length > 0"
       />
       <PhSpinner v-if="loading" :size="14" class="map-search__spinner" />
     </div>
-    <ul v-if="open && results.length > 0" class="map-search__results">
-      <li v-for="result in results" :key="result.display_name" @mousedown.prevent="pick(result)">
-        {{ result.display_name }}
-      </li>
-    </ul>
-    <div v-else-if="open && !loading" class="map-search__results map-search__results--empty">Aucun résultat.</div>
+    <div v-if="open && (localResults.length || results.length)" class="map-search__results">
+      <template v-if="localResults.length">
+        <div class="map-search__section">Sur Netmarket</div>
+        <button
+          v-for="r in localResults"
+          :key="r.id"
+          type="button"
+          class="map-search__local"
+          @mousedown.prevent="pickLocal(r)"
+        >
+          <span class="map-search__dot" :style="{ background: r.color }" />
+          <span class="map-search__local-text">
+            <strong>{{ r.label }}</strong>
+            <span v-if="r.sub">{{ r.sub }}</span>
+          </span>
+        </button>
+      </template>
+      <template v-if="results.length">
+        <div class="map-search__section">Lieux</div>
+        <ul class="map-search__places">
+          <li v-for="result in results" :key="result.display_name" @mousedown.prevent="pick(result)">
+            {{ result.display_name }}
+          </li>
+        </ul>
+      </template>
+    </div>
+    <div v-else-if="open && !loading && query.trim().length >= 3" class="map-search__results map-search__results--empty">
+      Aucun résultat.
+    </div>
   </div>
 </template>
 
@@ -162,7 +211,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-divider-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  max-height: 220px;
+  max-height: 360px;
   overflow-y: auto;
   list-style: none;
   margin: 0;
@@ -187,5 +236,58 @@ onBeforeUnmount(() => {
   padding: 10px;
   font-size: 12px;
   color: var(--color-neutral-500);
+}
+
+.map-search__section {
+  padding: 8px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-neutral-500);
+}
+
+.map-search__local {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-search__local:hover {
+  background: var(--color-neutral-800);
+}
+
+.map-search__dot {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--color-neutral-900), 0 0 0 4px var(--color-divider-strong);
+}
+
+.map-search__local-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.map-search__local-text span {
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.map-search__places {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 </style>

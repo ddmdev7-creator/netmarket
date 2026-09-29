@@ -27,6 +27,7 @@
 import type * as MapLibreGL from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { PhArrowSquareOut, PhCopy, PhNavigationArrow, PhStackSimple, PhX } from '@phosphor-icons/vue'
+import type { LocalSearchResult } from '~/components/common/MapSearchBox.vue'
 import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, getMapStyle, type MapLayerKind } from '~/utils/mapStyle'
 import { MAP_PIN_META, createClusterPin, createPin, type MapPinKind, type PinHandle } from '~/utils/mapPins'
 
@@ -67,8 +68,10 @@ const props = withDefaults(
     legendKinds?: MapPinKind[]
     ariaLabel?: string
     emptyText?: string
+    searchPlaceholder?: string
   }>(),
   {
+    searchPlaceholder: 'Rechercher sur Netmarket ou un lieu…',
     lines: () => [],
     legendKinds: () => ['shop', 'pickup', 'shop_pickup'],
     ariaLabel: 'Carte des boutiques et points de retrait',
@@ -193,19 +196,43 @@ function fitToItems() {
   map.fitBounds(boundsOf(props.items), { padding: { top: 76, bottom: 40, left: 40, right: 40 }, maxZoom: 15 })
 }
 
-function onSearchSelect({ lat, lng }: { lat: number; lng: number }) {
-  map?.flyTo({ center: [lng, lat], zoom: 15 })
+function onSearchSelect({ lat, lng, id }: { lat: number; lng: number; id?: string }) {
+  map?.flyTo({ center: [lng, lat], zoom: 16 })
+  // Élément Netmarket : sa fiche s'ouvre aussi.
+  if (id) emit('select', id)
+}
+
+// Recherche dans les éléments affichés (nom, sous-titre, détails) avant les lieux.
+function normalizeText(text: string) {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+}
+function localSearch(q: string): LocalSearchResult[] {
+  const term = normalizeText(q.trim())
+  return props.items
+    .filter((item) =>
+      normalizeText([item.name, item.subtitle, ...(item.details ?? []).map((d) => d.value)].filter(Boolean).join(' ')).includes(term),
+    )
+    .map((item) => ({
+      id: item.id,
+      label: item.name,
+      sub: [MAP_PIN_META[item.kind].label, item.subtitle].filter(Boolean).join(' · '),
+      color: MAP_PIN_META[item.kind].color,
+      lat: item.lat,
+      lng: item.lng,
+    }))
 }
 
 const LINE_SOURCE = 'om-lines'
 
-function linesData(): GeoJSON.FeatureCollection {
+// Tableaux copiés (et non les proxys réactifs de props) : MapLibre clone les
+// données vers son worker et ignore sans erreur ce qu'il ne peut pas cloner.
+function linesData(): MapLibreGL.GeoJSONSourceSpecification['data'] {
   return {
     type: 'FeatureCollection',
     features: props.lines.map((line) => ({
       type: 'Feature',
       properties: { highlighted: props.selectedId !== null && line.itemIds.includes(props.selectedId) },
-      geometry: { type: 'LineString', coordinates: [line.from, line.to] },
+      geometry: { type: 'LineString', coordinates: [[...line.from], [...line.to]] },
     })),
   }
 }
@@ -346,7 +373,7 @@ const legend = computed(() => props.legendKinds.map((kind) => ({ kind, ...MAP_PI
     <div ref="mapContainer" class="om-map" role="application" :aria-label="ariaLabel" />
 
     <div class="om-search">
-      <CommonMapSearchBox @select="onSearchSelect" />
+      <CommonMapSearchBox :local-search="localSearch" :placeholder="searchPlaceholder" @select="onSearchSelect" />
     </div>
 
     <button
@@ -450,11 +477,9 @@ const legend = computed(() => props.legendKinds.map((kind) => ({ kind, ...MAP_PI
 .om-search {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 24px);
-  max-width: 420px;
-  z-index: 2;
+  left: 12px;
+  width: min(380px, calc(100% - 140px));
+  z-index: 3;
 }
 
 .om-layer-toggle {
@@ -487,7 +512,7 @@ const legend = computed(() => props.legendKinds.map((kind) => ({ kind, ...MAP_PI
 
 .om-legend {
   position: absolute;
-  top: 12px;
+  bottom: 40px;
   left: 12px;
   z-index: 2;
   list-style: none;
@@ -696,11 +721,8 @@ const legend = computed(() => props.legendKinds.map((kind) => ({ kind, ...MAP_PI
     display: none;
   }
 
-  /* Pas assez de place à côté de la recherche centrée sur un petit écran —
-     la vue satellite reste accessible en agrandissant la fenêtre plutôt que
-     de faire chevaucher les deux. */
-  .om-layer-toggle {
-    display: none;
+  .om-search {
+    width: calc(100% - 128px);
   }
 
   .om-card {
