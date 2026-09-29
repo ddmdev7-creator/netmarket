@@ -79,7 +79,7 @@ async def get_my_vendor(db: AsyncSession, user: User) -> Vendor:
 async def update_my_vendor(db: AsyncSession, user: User, data: VendorOwnerUpdate) -> Vendor:
     vendor = await get_my_vendor(db, user)
     for field, value in data.model_dump(exclude_unset=True).items():
-        if field in ("latitude", "longitude") and value is None:
+        if value is None and field in ("latitude", "longitude", "offers_pickup_delivery", "pickup_offer_min_amount"):
             continue
         setattr(vendor, field, value)
     await db.commit()

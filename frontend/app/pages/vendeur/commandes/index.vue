@@ -385,6 +385,10 @@ function formatDate(iso: string) {
         <span class="text-muted">Montant · commission {{ formatGnf(so.commission) }}</span>
         <span class="order-amount">{{ formatGnf(so.amount) }}</span>
       </div>
+      <div v-if="so.vendor_delivery_fee" class="d-flex justify-space-between mb-3 offered-line">
+        <span>Retrait offert au client (prélevé à la livraison)</span>
+        <strong>− {{ formatGnf(so.vendor_delivery_fee) }}</strong>
+      </div>
 
       <div v-if="actionsFor(so).length" class="d-flex flex-column ga-1">
         <div class="d-flex ga-2">
@@ -415,6 +419,14 @@ function formatDate(iso: string) {
 </template>
 
 <style scoped>
+.offered-line {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 12.5px;
+}
+
 /* Une seule colonne pleine largeur reste illisible passé 960px (cartes
    étirées sur près de 1400px, voir .dashboard-shell) — sur grand écran, les
    commandes se répartissent plutôt sur plusieurs colonnes, chacune bornée à

@@ -12,6 +12,8 @@ class DeliveryFeeTierCreate(BaseModel):
     label: str | None = Field(default=None, max_length=100)
     # Jours de trajet ajoutés à la préparation du vendeur pour ce palier.
     transit_days: int = Field(default=1, ge=0, le=30)
+    # Palier appliqué quand la position de l'acheteur est inconnue.
+    is_default: bool = False
 
 
 class DeliveryFeeTierUpdate(BaseModel):
@@ -21,6 +23,7 @@ class DeliveryFeeTierUpdate(BaseModel):
     fee: int | None = Field(default=None, ge=0, le=10_000_000)
     label: str | None = Field(default=None, max_length=100)
     transit_days: int | None = Field(default=None, ge=0, le=30)
+    is_default: bool | None = None
 
 
 class DeliveryFeeTierRead(BaseModel):
@@ -31,3 +34,4 @@ class DeliveryFeeTierRead(BaseModel):
     fee: int
     label: str | None
     transit_days: int
+    is_default: bool = False

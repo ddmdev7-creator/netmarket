@@ -38,6 +38,9 @@ class VendorOwnerUpdate(BaseModel):
     preparation_days: int | None = Field(
         default=None, ge=0, le=14, description="Délai de préparation habituel, en jours"
     )
+    # « Retrait offert » (voir app/orders/pickup_offer.py).
+    offers_pickup_delivery: bool | None = None
+    pickup_offer_min_amount: int | None = Field(default=None, ge=0, le=1_000_000_000)
 
 
     @model_validator(mode="after")
@@ -64,6 +67,8 @@ class VendorRead(BaseModel):
     longitude: float | None
     commission_rate: float
     preparation_days: int
+    offers_pickup_delivery: bool = False
+    pickup_offer_min_amount: int = 0
     # Attachés en lecture depuis User (voir app/vendors/repository.py) —
     # défauts sûrs pour tout appelant qui ne ferait pas la jointure.
     owner_phone: str | None = None
@@ -85,6 +90,8 @@ class VendorPublicRead(BaseModel):
     latitude: float | None
     longitude: float | None
     preparation_days: int
+    offers_pickup_delivery: bool = False
+    pickup_offer_min_amount: int = 0
     # Renseignés uniquement par GET /vendors/{id} (encart boutique de la fiche produit).
     created_at: datetime | None = None
     product_count: int | None = None

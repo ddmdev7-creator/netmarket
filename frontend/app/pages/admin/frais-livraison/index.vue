@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhClock, PhPackage, PhPencilSimple, PhPlus, PhTrash } from '@phosphor-icons/vue'
+import { PhClock, PhMapPin, PhPackage, PhPencilSimple, PhPlus, PhTrash } from '@phosphor-icons/vue'
 import type { DeliveryFeeTierCreate, DeliveryFeeTierRead, DeliveryFeeTierUpdate } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -14,9 +14,26 @@ const { data: tiers, pending, refresh } = await useAsyncData(
 )
 
 const hasCatchAll = computed(() => tiers.value.some((t) => t.max_km === null))
+const hasDefault = computed(() => tiers.value.some((t) => t.is_default))
+
+// Palier « par défaut » : tarif appliqué quand l'acheteur n'a pas pu donner sa
+// position GPS (sinon c'est le palier « au-delà »).
+const settingDefault = ref<string | null>(null)
+async function toggleDefault(tier: DeliveryFeeTierRead) {
+  settingDefault.value = tier.id
+  try {
+    await apiFetch(`/admin/delivery-fee-tiers/${tier.id}`, { method: 'PATCH', body: { is_default: !tier.is_default } })
+    await refresh()
+    toast.success(tier.is_default ? 'Le palier « au-delà » s’applique de nouveau sans position GPS.' : 'Tarif par défaut enregistré.')
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'Impossible de modifier ce palier.'))
+  } finally {
+    settingDefault.value = null
+  }
+}
 
 function tierRange(tier: DeliveryFeeTierRead, index: number): string {
-  if (tier.max_km === null) return 'Au-delà, ou position inconnue'
+  if (tier.max_km === null) return hasDefault.value ? 'Au-delà' : 'Au-delà, ou position inconnue'
   const previous = index > 0 ? tiers.value[index - 1]?.max_km : 0
   return `${previous} – ${tier.max_km} km`
 }
@@ -142,8 +159,9 @@ async function confirmRemove() {
     <p class="text-muted fl-intro">
       Un palier fixe, pour une tranche de distance entre la boutique et l'adresse de livraison (ou le point de
       retrait), à la fois le <strong>tarif</strong> du colis et le <strong>délai de trajet</strong> ajouté à la
-      préparation du vendeur. Le palier « au-delà » s'applique aussi quand une position GPS manque. Sans aucun
-      palier, la livraison est gratuite et le délai retombe sur un jour de trajet par défaut.
+      préparation du vendeur. Quand l'acheteur n'a pas pu donner sa position GPS, c'est le palier marqué
+      <strong>« par défaut »</strong> qui s'applique (à défaut, le palier « au-delà »). Sans aucun palier, la
+      livraison est gratuite et le délai retombe sur un jour de trajet par défaut.
     </p>
 
     <CommonEmptyState
@@ -159,6 +177,7 @@ async function confirmRemove() {
           <div>
             <div class="fl-row__km">{{ tierRange(tier, index) }}</div>
             <div v-if="tier.label" class="text-muted fl-row__label">{{ tier.label }}</div>
+            <span v-if="tier.is_default" class="fl-default"><PhMapPin :size="12" weight="fill" /> Par défaut sans GPS</span>
           </div>
         </div>
 
@@ -170,6 +189,18 @@ async function confirmRemove() {
         </div>
 
         <div class="fl-row__actions">
+          <v-btn
+            icon
+            variant="text"
+            size="small"
+            :color="tier.is_default ? 'success' : undefined"
+            :loading="settingDefault === tier.id"
+            :title="tier.is_default ? 'Retirer le tarif par défaut' : 'Appliquer ce tarif quand la position GPS est inconnue'"
+            :aria-label="tier.is_default ? 'Retirer le tarif par défaut' : 'Définir comme tarif par défaut sans GPS'"
+            @click="toggleDefault(tier)"
+          >
+            <PhMapPin :size="18" :weight="tier.is_default ? 'fill' : 'regular'" />
+          </v-btn>
           <v-btn icon variant="text" size="small" aria-label="Modifier" @click="openEdit(tier)">
             <PhPencilSimple :size="18" />
           </v-btn>
@@ -242,6 +273,19 @@ async function confirmRemove() {
 </template>
 
 <style scoped>
+.fl-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
 .fl-header {
   display: flex;
   align-items: center;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowCounterClockwise, PhCrosshair, PhHandCoins, PhStorefront, PhTruck } from '@phosphor-icons/vue'
+import { PhArrowCounterClockwise, PhCrosshair, PhGift, PhHandCoins, PhStorefront, PhTruck } from '@phosphor-icons/vue'
 import type { ProductDeliveryQuote } from '~/types/api'
 
 /**
@@ -7,7 +7,9 @@ import type { ProductDeliveryQuote } from '~/types/api'
  * livraison réels (dès que la position de l'acheteur est connue), moyens de
  * paiement, retrait en point, annulation remboursée.
  */
-const props = defineProps<{ productId: string }>()
+// pickupOfferMin : la boutique offre le retrait en point de retrait dès ce
+// montant d'achat (null/undefined : pas d'offre).
+const props = defineProps<{ productId: string; pickupOfferMin?: number | null }>()
 
 const { apiFetch } = useApi()
 const toast = useToastStore()
@@ -71,7 +73,16 @@ const deliveryWindow = computed(() =>
         </template>
       </span>
     </li>
-    <li class="trust__item">
+    <li v-if="pickupOfferMin != null" class="trust__item trust__item--offer">
+      <span class="trust__icon" style="--hue: 150"><PhGift :size="18" weight="fill" /></span>
+      <span class="trust__text">
+        <strong>Retrait offert par la boutique</strong>
+        <span>
+          Livraison gratuite en point de retrait<template v-if="pickupOfferMin > 0"> dès {{ formatGnf(pickupOfferMin) }} d'achat chez elle</template>, quelle que soit la distance
+        </span>
+      </span>
+    </li>
+    <li v-else class="trust__item">
       <span class="trust__icon" style="--hue: 215"><PhStorefront :size="18" weight="duotone" /></span>
       <span class="trust__text">
         <strong>Ou retrait en point de retrait</strong>
@@ -143,6 +154,14 @@ const deliveryWindow = computed(() =>
 }
 
 .trust__item--main .trust__text strong {
+  color: hsl(150 55% var(--tint-fg));
+}
+
+.trust__item--offer {
+  background: hsl(150 70% var(--tint-bg));
+}
+
+.trust__item--offer .trust__text strong {
   color: hsl(150 55% var(--tint-fg));
 }
 

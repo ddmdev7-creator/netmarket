@@ -54,6 +54,10 @@ async def delete_category(db: AsyncSession, category: Category) -> None:
 
 # --- Products ---
 
+# Montant d'achat à partir duquel la boutique offre le retrait en point de
+# retrait (None si elle ne l'offre pas) — badge « Retrait offert ».
+_PICKUP_OFFER_MIN = case((Vendor.offers_pickup_delivery, Vendor.pickup_offer_min_amount), else_=None)
+
 
 async def create_product(db: AsyncSession, *, vendor_id: uuid.UUID, **fields) -> Product:
     product = Product(vendor_id=vendor_id, **fields)
@@ -64,7 +68,7 @@ async def create_product(db: AsyncSession, *, vendor_id: uuid.UUID, **fields) ->
 
 async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID) -> Product | None:
     stmt = (
-        select(Product, Vendor.shop_name, Vendor.zone, Vendor.preparation_days)
+        select(Product, Vendor.shop_name, Vendor.zone, Vendor.preparation_days, _PICKUP_OFFER_MIN)
         .join(Vendor, Product.vendor_id == Vendor.id)
         .options(selectinload(Product.variants).selectinload(ProductVariant.attributes))
         .where(Product.id == product_id)
@@ -72,10 +76,11 @@ async def get_product_by_id(db: AsyncSession, product_id: uuid.UUID) -> Product 
     row = (await db.execute(stmt)).first()
     if row is None:
         return None
-    product, shop_name, vendor_zone, preparation_days = row
+    product, shop_name, vendor_zone, preparation_days, pickup_offer_min = row
     product.vendor_shop_name = shop_name
     product.vendor_zone = vendor_zone
     product.vendor_preparation_days = preparation_days
+    product.vendor_pickup_offer_min = pickup_offer_min
     return product
 
 
@@ -197,7 +202,7 @@ async def list_products(
     order_by += [Product.created_at.desc(), Product.id]
 
     paged_stmt = (
-        paged_stmt.add_columns(Vendor.shop_name, Vendor.zone, Vendor.preparation_days)
+        paged_stmt.add_columns(Vendor.shop_name, Vendor.zone, Vendor.preparation_days, _PICKUP_OFFER_MIN)
         .options(selectinload(Product.variants).selectinload(ProductVariant.attributes))
         .order_by(*order_by)
         .offset(params.offset)
@@ -205,10 +210,11 @@ async def list_products(
     )
     rows = (await db.execute(paged_stmt)).all()
     products = []
-    for product, shop_name, vendor_zone, preparation_days in rows:
+    for product, shop_name, vendor_zone, preparation_days, pickup_offer_min in rows:
         product.vendor_shop_name = shop_name
         product.vendor_zone = vendor_zone
         product.vendor_preparation_days = preparation_days
+        product.vendor_pickup_offer_min = pickup_offer_min
         products.append(product)
     return products, total
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhCaretRight, PhMapPin, PhSealCheck, PhStar } from '@phosphor-icons/vue'
+import { PhCaretRight, PhGift, PhMapPin, PhSealCheck, PhStar } from '@phosphor-icons/vue'
 import type { VendorPublicRead } from '~/types/api'
 
 /** Encart boutique de la fiche produit : qui vend, sa réputation, ses autres produits. */
@@ -46,6 +46,9 @@ const shopLink = computed(() => ({ path: '/', query: { shop: props.vendorId, sho
           {{ vendor.product_count }} produit{{ vendor.product_count > 1 ? 's' : '' }}
         </template>
       </span>
+      <span v-if="vendor?.offers_pickup_delivery" class="shop__offer">
+        <PhGift :size="12" weight="fill" /> Retrait offert<template v-if="vendor.pickup_offer_min_amount"> dès {{ formatGnf(vendor.pickup_offer_min_amount) }}</template>
+      </span>
       <span v-if="vendor?.zone || since" class="shop__meta">
         <template v-if="vendor?.zone"><PhMapPin :size="12" /> {{ vendor.zone }}</template>
         <template v-if="vendor?.zone && since"><span class="shop__dot">·</span></template>
@@ -60,6 +63,20 @@ const shopLink = computed(() => ({ path: '/', query: { shop: props.vendorId, sho
 </template>
 
 <style scoped>
+.shop__offer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin: 2px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
 .shop {
   display: flex;
   align-items: center;

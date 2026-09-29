@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhShoppingCartSimple, PhStar, PhStorefront, PhTruck } from '@phosphor-icons/vue'
+import { PhGift, PhImage, PhShoppingCartSimple, PhStar, PhStorefront, PhTruck } from '@phosphor-icons/vue'
 import type { ProductRead, ProductVariantRead } from '~/types/api'
 
 const props = defineProps<{ product: ProductRead }>()
@@ -229,6 +229,14 @@ async function quickAdd(event: MouseEvent) {
         <span v-if="isOutOfStock" class="product-card__stock-tag product-card__stock-tag--out">Rupture de stock</span>
         <span v-else-if="isLowStock" class="product-card__stock-tag product-card__stock-tag--low">Derniers exemplaires</span>
 
+        <span
+          v-if="product.vendor_pickup_offer_min != null && !isOutOfStock"
+          class="product-card__offer"
+          :title="product.vendor_pickup_offer_min ? `Livraison en point de retrait offerte dès ${formatGnf(product.vendor_pickup_offer_min)} d'achat dans cette boutique` : 'Livraison en point de retrait offerte par la boutique'"
+        >
+          <PhGift :size="12" weight="fill" /> Retrait offert
+        </span>
+
         <button
           v-if="!isOutOfStock"
           type="button"
@@ -450,6 +458,24 @@ async function quickAdd(event: MouseEvent) {
 .product-card__dot--active {
   background: #fff;
   transform: scale(1.35);
+}
+
+.product-card__offer {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, hsl(152 70% 38%), hsl(170 70% 34%));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+  pointer-events: none;
 }
 
 .product-card__stock-tag {

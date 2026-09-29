@@ -118,6 +118,9 @@ class ProductRead(BaseModel):
     id: uuid.UUID
     vendor_id: uuid.UUID
     vendor_shop_name: str
+    # Boutique qui offre le retrait en point de retrait : montant minimum
+    # d'achat (None si pas d'offre).
+    vendor_pickup_offer_min: int | None = None
     category_id: uuid.UUID
     name: str
     description: str | None

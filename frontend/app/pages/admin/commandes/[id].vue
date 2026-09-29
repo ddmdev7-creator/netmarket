@@ -147,6 +147,7 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
             <div><dt>Montant</dt><dd>{{ formatGnf(so.amount) }}</dd></div>
             <div><dt>Commission</dt><dd>{{ formatGnf(so.commission) }}</dd></div>
             <div><dt>Frais de livraison</dt><dd>{{ formatGnf(so.delivery_fee) }}</dd></div>
+            <div v-if="so.vendor_delivery_fee"><dt>Retrait offert par le vendeur</dt><dd>{{ formatGnf(so.vendor_delivery_fee) }}</dd></div>
             <div v-if="so.estimated_delivery_min && so.estimated_delivery_max">
               <dt>Livraison estimée</dt>
               <dd>{{ formatDeliveryEstimate(so.estimated_delivery_min, so.estimated_delivery_max) }}</dd>

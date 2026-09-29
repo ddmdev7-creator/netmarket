@@ -325,7 +325,8 @@ function ratePickupPoint(pointId: string) {
 
           <footer class="parcel__foot">
             <span>Livraison</span>
-            <span>{{ sub.delivery_fee > 0 ? formatGnf(sub.delivery_fee) : 'Offerte' }}</span>
+            <span v-if="sub.vendor_delivery_fee" class="parcel__offered">Retrait offert par {{ sub.shop_name }}</span>
+            <span v-else>{{ sub.delivery_fee > 0 ? formatGnf(sub.delivery_fee) : 'Offerte' }}</span>
           </footer>
         </section>
       </div>
@@ -467,6 +468,11 @@ function ratePickupPoint(pointId: string) {
 </template>
 
 <style scoped>
+.parcel__offered {
+  color: hsl(150 55% var(--tint-fg));
+  font-weight: 700;
+}
+
 .cancel-title {
   margin: 0 0 10px;
   font-family: var(--font-heading);

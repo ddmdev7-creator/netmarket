@@ -6,7 +6,7 @@ catch-all ("au-delà", and also the fallback when a distance can't be
 computed because a GPS position is missing).
 """
 
-from sqlalchemy import CheckConstraint, Float, Index, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, Float, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.models import TimestampMixin, UUIDPrimaryKeyMixin
@@ -28,6 +28,7 @@ class DeliveryFeeTier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             unique=True,
             postgresql_where="max_km IS NULL",
         ),
+        Index("uq_delivery_fee_tiers_default", "is_default", unique=True, postgresql_where="is_default"),
     )
 
     max_km: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -43,3 +44,7 @@ class DeliveryFeeTier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # heuristique de zone séparée : la durée annoncée à l'acheteur repose
     # ainsi sur la même distance réelle que le prix qu'il voit.
     transit_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Palier « par défaut » : appliqué quand la distance ne peut pas être
+    # calculée (l'acheteur n'a pas pu donner sa position GPS). Au plus un
+    # palier l'est ; sans palier par défaut, c'est le palier « au-delà ».
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

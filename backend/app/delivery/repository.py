@@ -24,9 +24,9 @@ async def get_by_max_km(db: AsyncSession, max_km: float | None) -> DeliveryFeeTi
 
 
 async def create(
-    db: AsyncSession, *, max_km: float | None, fee: int, label: str | None, transit_days: int
+    db: AsyncSession, *, max_km: float | None, fee: int, label: str | None, transit_days: int, is_default: bool = False
 ) -> DeliveryFeeTier:
-    tier = DeliveryFeeTier(max_km=max_km, fee=fee, label=label, transit_days=transit_days)
+    tier = DeliveryFeeTier(max_km=max_km, fee=fee, label=label, transit_days=transit_days, is_default=is_default)
     db.add(tier)
     await db.flush()
     return tier

@@ -51,7 +51,7 @@ def _delivery(sub_order: SubOrder, order: Order) -> ProfileDelivery:
         shop_name=sub_order.shop_name,
         status=sub_order.status,
         delivery_type=order.delivery_type,
-        delivery_fee=sub_order.delivery_fee,
+        delivery_fee=sub_order.effective_delivery_fee,
         updated_at=sub_order.updated_at,
     )
 

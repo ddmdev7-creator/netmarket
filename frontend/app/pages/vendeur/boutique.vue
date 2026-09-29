@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhMapPin, PhSparkle } from '@phosphor-icons/vue'
-import type { VendorRead, VendorStatus } from '~/types/api'
+import { PhArrowLeft, PhGift, PhMapPin, PhSparkle } from '@phosphor-icons/vue'
+import type { VendorRead, VendorStatus, WalletRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
 
@@ -18,6 +18,18 @@ const zone = ref('')
 const preparationDays = ref(1)
 const latitude = ref<number | null>(null)
 const longitude = ref<number | null>(null)
+const offersPickup = ref(false)
+const offerMin = ref(0)
+
+// Solde vendeur : l'offre ne s'applique que s'il couvre la course (pas de
+// solde négatif) — voir backend app/orders/pickup_offer.py.
+const { data: wallets } = await useAsyncData('vendor-wallets-offer', () => apiFetch<WalletRead[]>('/wallets/mine'), {
+  default: () => [],
+})
+const vendorWallet = computed(() => wallets.value.find((w) => w.kind === 'vendor') ?? null)
+const offerCapacity = computed(() =>
+  vendorWallet.value ? vendorWallet.value.balance.available - (vendorWallet.value.committed_offers ?? 0) : 0,
+)
 watch(
   vendor,
   (v) => {
@@ -27,6 +39,8 @@ watch(
     preparationDays.value = v.preparation_days
     latitude.value = v.latitude
     longitude.value = v.longitude
+    offersPickup.value = v.offers_pickup_delivery
+    offerMin.value = v.pickup_offer_min_amount
   },
   { immediate: true },
 )
@@ -71,6 +85,8 @@ async function submit() {
         latitude: latitude.value,
         longitude: longitude.value,
         preparation_days: preparationDays.value,
+        offers_pickup_delivery: offersPickup.value,
+        pickup_offer_min_amount: Math.max(0, Math.round(Number(offerMin.value) || 0)),
       },
     })
     toast.success('Boutique mise à jour.')
@@ -122,6 +138,43 @@ async function submit() {
         </p>
       </v-card>
 
+      <v-card class="pa-4 mb-4 offer-card" variant="flat">
+        <div class="d-flex align-center justify-space-between ga-3">
+          <div class="d-flex align-center ga-3">
+            <span class="offer-card__icon"><PhGift :size="20" weight="fill" /></span>
+            <div>
+              <div class="section-title">Retrait offert</div>
+              <div class="text-muted" style="font-size: 12px">Vous payez la livraison vers le point de retrait choisi par le client.</div>
+            </div>
+          </div>
+          <v-switch v-model="offersPickup" color="primary" hide-details inset density="compact" class="flex-grow-0 flex-shrink-0" aria-label="Offrir le retrait" />
+        </div>
+
+        <template v-if="offersPickup">
+          <label class="field-label mt-4">À partir d'un achat de (GNF)</label>
+          <v-text-field v-model.number="offerMin" type="number" min="0" step="1000" placeholder="0 = dès le premier article" class="mb-1" />
+          <p class="text-muted mb-3" style="font-size: 11.5px">
+            Le client voit « Retrait offert » sur vos produits. Au moment de la commande, la livraison en point de retrait
+            ne lui est pas facturée si son panier chez vous atteint ce montant, quelle que soit la distance.
+          </p>
+          <ul class="offer-rules">
+            <li>La course est prélevée sur votre solde NdjouriBank à la livraison du colis. Rien si la commande est annulée.</li>
+            <li>L'offre ne s'applique que si votre solde disponible couvre la course : sinon le client paie la livraison comme d'habitude.</li>
+            <li>Les montants engagés sur des colis en route ne peuvent pas être retirés.</li>
+          </ul>
+          <div class="offer-balance" :class="{ 'is-low': offerCapacity <= 0 }">
+            <span>Disponible pour offrir</span>
+            <strong>{{ formatGnf(Math.max(0, offerCapacity)) }}</strong>
+          </div>
+          <p v-if="vendorWallet?.committed_offers" class="text-muted mt-1 mb-0" style="font-size: 11.5px">
+            Dont {{ formatGnf(vendorWallet.committed_offers) }} déjà engagés sur des colis en cours.
+          </p>
+          <p v-if="offerCapacity <= 0" class="text-muted mt-1 mb-0" style="font-size: 11.5px">
+            Solde insuffisant pour le moment : l'offre s'activera automatiquement dès que vos gains seront disponibles.
+          </p>
+        </template>
+      </v-card>
+
       <v-card class="pa-4 mb-4" variant="flat">
         <div class="section-title mb-3">Position de la boutique</div>
         <p class="text-muted mb-2" style="font-size: 11.5px">
@@ -161,6 +214,46 @@ async function submit() {
 </template>
 
 <style scoped>
+.offer-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, hsl(150 70% 45%), hsl(170 70% 40%));
+  color: #fff;
+}
+
+.offer-rules {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+}
+
+.offer-rules li + li {
+  margin-top: 4px;
+}
+
+.offer-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.offer-balance.is-low {
+  background: hsl(38 90% var(--tint-bg));
+  color: hsl(30 75% var(--tint-fg));
+}
+
 .list-item {
   display: flex;
   align-items: center;

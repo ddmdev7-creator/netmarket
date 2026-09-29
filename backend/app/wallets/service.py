@@ -26,7 +26,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
@@ -158,6 +158,22 @@ async def _post_capture(db: AsyncSession, order: Order) -> None:
     )
 
 
+async def committed_pickup_offers(db: AsyncSession, vendor_id: uuid.UUID) -> int:
+    """Frais de « Retrait offert » que le vendeur s'est engagé à payer sur des
+    colis pas encore livrés ni annulés — prélevés à la livraison, donc tenus
+    en réserve sur son solde disponible (voir app/orders/pickup_offer.py)."""
+    total = (
+        await db.execute(
+            select(func.coalesce(func.sum(SubOrder.vendor_delivery_fee), 0)).where(
+                SubOrder.vendor_id == vendor_id,
+                SubOrder.vendor_delivery_fee > 0,
+                SubOrder.status.notin_([OrderStatus.DELIVERED, OrderStatus.CANCELLED]),
+            )
+        )
+    ).scalar_one()
+    return int(total)
+
+
 async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) -> None:
     """Sous-commande livrée et payée en ligne ou avec le solde NdjouriBank :
     le séquestre (montant + frais de livraison) est réparti. Les gains des
@@ -186,12 +202,23 @@ async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) 
 
     gross = sub_order.amount + sub_order.delivery_fee
     vendor_net = sub_order.amount - sub_order.commission
+    # « Retrait offert » : la course payée par le vendeur est prélevée tout de
+    # suite (disponible immédiatement), ses gains de la vente restent soumis
+    # au délai habituel.
+    offered = sub_order.vendor_delivery_fee or 0
+    fee = sub_order.delivery_fee + offered
     courier_share = 0
-    lines: list[Line] = [(escrow, gross, None), (vendor_account, -vendor_net, hold_until)]
+    lines: list[Line] = [
+        (escrow, gross, None),
+        (vendor_account, -vendor_net, hold_until),
+        (vendor_account, offered, None),
+    ]
     details = [f"vendeur {vendor_net}"]
+    if offered:
+        details.append(f"retrait offert par le vendeur {offered}")
 
-    if sub_order.courier_id is not None and sub_order.delivery_fee > 0:
-        courier_share = round(sub_order.delivery_fee * settings_row.courier_delivery_share_percent / 100)
+    if sub_order.courier_id is not None and fee > 0:
+        courier_share = round(fee * settings_row.courier_delivery_share_percent / 100)
         courier_account = await repository.get_or_create_account(db, AccountKind.COURIER, sub_order.courier_id)
         lines.append((courier_account, -courier_share, hold_until))
         details.append(f"livreur {courier_share} ({settings_row.courier_delivery_share_percent} %)")
@@ -203,7 +230,7 @@ async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) 
         lines.append((point_account, -pickup_fee, hold_until))
         details.append(f"point de retrait {pickup_fee}")
 
-    platform = sub_order.commission + sub_order.delivery_fee - courier_share - pickup_fee
+    platform = sub_order.commission + fee - courier_share - pickup_fee
     lines.append((revenue, -platform, None))
     details.append(f"Ndjouri {platform}")
 
@@ -315,6 +342,11 @@ async def _wallet_read(db: AsyncSession, account: LedgerAccount) -> WalletRead:
         owner_label=await _owner_label(db, account),
         balance=balance,
         withdrawals_in_progress=in_progress,
+        committed_offers=(
+            await committed_pickup_offers(db, account.owner_id)
+            if account.kind == AccountKind.VENDOR and account.owner_id
+            else 0
+        ),
         payout_provider=account.payout_provider,
         payout_account_number=account.payout_account_number,
         payout_beneficiary_name=account.payout_beneficiary_name,
@@ -383,6 +415,13 @@ async def request_withdrawal(db: AsyncSession, user: User, account_id: uuid.UUID
     balance = (await _balances(db, [account]))[account.id]
     if amount > balance.available:
         raise ConflictError(f"Solde disponible insuffisant ({balance.available} GNF).")
+    if account.kind == AccountKind.VENDOR and account.owner_id is not None:
+        committed = await committed_pickup_offers(db, account.owner_id)
+        if amount > balance.available - committed:
+            raise ConflictError(
+                f"{committed} GNF sont réservés pour les retraits offerts de commandes en cours : "
+                f"vous pouvez retirer au plus {max(0, balance.available - committed)} GNF."
+            )
 
     fee_percent = float(settings_row.withdrawal_fee_percent)
     fee = math.ceil(amount * fee_percent / 100)

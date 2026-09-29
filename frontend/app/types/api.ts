@@ -61,6 +61,10 @@ export interface VendorRead {
   owner_full_name: string | null
   commission_rate: number
   preparation_days: number
+  /** « Retrait offert » : le vendeur paie la livraison vers un point de retrait. */
+  offers_pickup_delivery: boolean
+  /** Montant d'achat minimum dans la boutique pour que le retrait soit offert (0 = dès le premier article). */
+  pickup_offer_min_amount: number
 }
 
 /** Vue publique (/vendors) — sans compte propriétaire ni commission, voir VendorRead. */
@@ -71,6 +75,8 @@ export interface VendorPublicRead {
   latitude: number | null
   longitude: number | null
   preparation_days: number
+  offers_pickup_delivery?: boolean
+  pickup_offer_min_amount?: number
   /** Renseignés seulement par GET /vendors/{id}. */
   created_at?: string | null
   product_count?: number | null
@@ -445,6 +451,8 @@ export interface ProductRead {
   id: string
   vendor_id: string
   vendor_shop_name: string
+  /** Boutique qui offre le retrait en point de retrait : achat minimum ; null sinon. */
+  vendor_pickup_offer_min?: number | null
   category_id: string
   name: string
   description: string | null
@@ -598,6 +606,8 @@ interface SubOrderBase {
   commission: number
   /** Frozen at checkout (distance grid); not included in amount/commission. 0 for orders placed before delivery fees existed. */
   delivery_fee: number
+  /** « Retrait offert » : course prise en charge par le vendeur (delivery_fee vaut alors 0). */
+  vendor_delivery_fee?: number
   items: OrderItemRead[]
   /** null for orders placed before the delivery-estimate feature existed. */
   estimated_delivery_min: string | null
@@ -641,6 +651,11 @@ export interface DeliveryQuoteRead {
     vendor_id: string
     shop_name: string
     delivery_fee: number
+    /** « Retrait offert » : course prise en charge par le vendeur. */
+    vendor_delivery_fee: number
+    /** applied | below_minimum (pickup_offer_missing GNF manquants) | unavailable ; null sans offre. */
+    pickup_offer: 'applied' | 'below_minimum' | 'unavailable' | null
+    pickup_offer_missing: number
     estimated_delivery_min: string
     estimated_delivery_max: string
   }[]
@@ -658,6 +673,8 @@ export interface DeliveryFeeTierRead {
   label: string | null
   /** Extra transit days for this tier, on top of the vendor's own preparation time. */
   transit_days: number
+  /** Palier appliqué quand la position de l'acheteur est inconnue (au plus un). */
+  is_default: boolean
 }
 
 export interface DeliveryFeeTierCreate {
@@ -665,6 +682,7 @@ export interface DeliveryFeeTierCreate {
   fee: number
   label: string | null
   transit_days: number
+  is_default?: boolean
 }
 
 export type DeliveryFeeTierUpdate = Partial<DeliveryFeeTierCreate>
@@ -975,6 +993,8 @@ export interface WalletRead {
   balance: WalletBalance
   /** Réservé par des retraits demandés ou en cours de versement (déjà déduit du solde). */
   withdrawals_in_progress: number
+  /** Vendeur : retraits offerts engagés sur des colis en cours (non retirables). */
+  committed_offers?: number
   payout_provider: PayoutProvider | null
   payout_account_number: string | null
   payout_beneficiary_name: string | null

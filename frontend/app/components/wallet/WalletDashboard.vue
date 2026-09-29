@@ -9,6 +9,7 @@ import {
   PhArrowCircleDown,
   PhArrowCircleUp,
   PhClock,
+  PhGift,
   PhHourglassMedium,
   PhInfo,
   PhPencilSimple,
@@ -210,6 +211,13 @@ function formatDateTime(iso: string) {
           <div>
             <div class="stat__value">{{ formatGnf(wallet.withdrawals_in_progress) }}</div>
             <div class="stat__label">Retraits en cours de traitement</div>
+          </div>
+        </div>
+        <div v-if="wallet.committed_offers" class="stat">
+          <PhGift :size="20" class="stat__icon stat__icon--pending" />
+          <div>
+            <div class="stat__value">{{ formatGnf(wallet.committed_offers) }}</div>
+            <div class="stat__label">Réservé pour vos retraits offerts en cours (non retirable)</div>
           </div>
         </div>
       </div>

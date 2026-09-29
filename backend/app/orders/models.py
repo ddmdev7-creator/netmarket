@@ -119,6 +119,7 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         CheckConstraint("amount >= 0", name="ck_sub_orders_amount_non_negative"),
         CheckConstraint("commission >= 0", name="ck_sub_orders_commission_non_negative"),
         CheckConstraint("delivery_fee >= 0", name="ck_sub_orders_delivery_fee_non_negative"),
+        CheckConstraint("vendor_delivery_fee >= 0", name="ck_sub_orders_vendor_delivery_fee_non_negative"),
     )
 
     order_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
@@ -140,6 +141,17 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Distinct de amount : la commission ne s'applique qu'aux articles, jamais
     # au frais de livraison, et Order.total = Σ(amount + delivery_fee).
     delivery_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    # « Retrait offert » : frais de livraison en point de retrait pris en charge
+    # par le vendeur (delivery_fee vaut alors 0 pour l'acheteur). Prélevé sur
+    # ses gains à la livraison — voir app/orders/pickup_offer.py et
+    # app/wallets/service.py::settle_sub_order. Le livreur, le point et Ndjouri
+    # sont rémunérés sur delivery_fee + vendor_delivery_fee (effective_delivery_fee).
+    vendor_delivery_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    @property
+    def effective_delivery_fee(self) -> int:
+        """Prix réel de la course, quel que soit celui qui le paie."""
+        return (self.delivery_fee or 0) + (self.vendor_delivery_fee or 0)
     # Nom de la boutique figé au moment de la commande (affichage stable même si la boutique est renommée).
     shop_name: Mapped[str] = mapped_column(String(150), nullable=False)
     # Estimation de livraison calculée et figée au checkout (voir

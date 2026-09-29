@@ -2,6 +2,8 @@
 import {
   PhArrowLeft,
   PhCheck,
+  PhGift,
+  PhMapPin,
   PhDeviceMobile,
   PhHouse,
   PhImage,
@@ -166,6 +168,13 @@ watch(walletShortfall, (shortfall) => {
 function deliveryFeeFor(vendorId: string): number | null {
   return quote.value?.vendors.find((v) => v.vendor_id === vendorId)?.delivery_fee ?? null
 }
+
+function quoteFor(vendorId: string) {
+  return quote.value?.vendors.find((v) => v.vendor_id === vendorId) ?? null
+}
+
+// « Retrait offert » : boutiques qui prennent en charge la livraison en point de retrait.
+const offeredBy = computed(() => (quote.value?.vendors ?? []).filter((v) => v.pickup_offer === 'applied'))
 
 function deliveryEstimateFor(vendorId: string): string | null {
   const match = quote.value?.vendors.find((v) => v.vendor_id === vendorId)
@@ -569,6 +578,20 @@ function continueShopping() {
             />
           </div>
 
+          <p v-for="v in offeredBy" :key="v.vendor_id" class="offer-hint">
+            <PhGift :size="16" weight="fill" />
+            <span>Retrait offert par <strong>{{ v.shop_name }}</strong> : vous économisez {{ formatGnf(v.vendor_delivery_fee) }}.</span>
+          </p>
+          <template v-for="v in quote?.vendors ?? []" :key="`missing-${v.vendor_id}`">
+            <p v-if="v.pickup_offer === 'below_minimum'" class="offer-hint offer-hint--soft">
+              <PhGift :size="16" />
+              <span>Plus que <strong>{{ formatGnf(v.pickup_offer_missing) }}</strong> d'achat chez {{ v.shop_name }} et la livraison en point de retrait vous est offerte.</span>
+            </p>
+          </template>
+          <p v-if="quote && destination?.delivery_type === 'home_delivery' && destination.latitude === undefined" class="offer-hint offer-hint--soft">
+            <PhMapPin :size="16" />
+            <span>Sans position GPS, le tarif de livraison par défaut est appliqué.</span>
+          </p>
           <p v-if="quote" class="step-hint">
             Livraison : <strong>{{ quote.delivery_total ? formatGnf(quote.delivery_total) : 'offerte' }}</strong>
             <template v-if="quote.vendors.length === 1">
@@ -695,7 +718,10 @@ function continueShopping() {
             </div>
             <div class="line-fee">
               <span>Livraison</span>
-              <span v-if="deliveryFeeFor(group.vendor_id) !== null">
+              <span v-if="quoteFor(group.vendor_id)?.pickup_offer === 'applied'" class="line-fee__offer">
+                <s>{{ formatGnf(quoteFor(group.vendor_id)!.vendor_delivery_fee) }}</s> Offert par la boutique
+              </span>
+              <span v-else-if="deliveryFeeFor(group.vendor_id) !== null">
                 {{ deliveryFeeFor(group.vendor_id) ? formatGnf(deliveryFeeFor(group.vendor_id)!) : 'Offerte' }}
               </span>
               <span v-else>—</span>
@@ -839,6 +865,38 @@ function continueShopping() {
 
 .step-hint strong {
   color: var(--color-neutral-200);
+}
+
+.offer-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
+  font-size: 13px;
+}
+
+.offer-hint svg {
+  flex-shrink: 0;
+}
+
+.offer-hint--soft {
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-300);
+}
+
+.line-fee__offer {
+  color: hsl(150 55% var(--tint-fg));
+  font-weight: 700;
+}
+
+.line-fee__offer s {
+  margin-right: 4px;
+  color: var(--color-neutral-400);
+  font-weight: 500;
 }
 
 /* --- Cartes de choix (adresse, paiement) --- */

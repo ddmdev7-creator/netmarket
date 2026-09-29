@@ -139,16 +139,27 @@ watch(isHomeDelivery, (home) => {
 const positionLabel = computed(() =>
   hasPosition.value ? `${model.value.latitude!.toFixed(4)}, ${model.value.longitude!.toFixed(4)}` : '',
 )
-async function useCurrentPosition() {
+// La position GPS fixe le tarif de livraison à la distance réelle. On la
+// demande d'office pour une nouvelle adresse à domicile ; si elle est refusée
+// ou indisponible, le tarif de livraison par défaut s'applique (réglé par
+// l'admin, voir backend app/delivery/service.py) — l'acheteur peut aussi
+// placer le repère lui-même sur la carte.
+const gpsFailed = ref(false)
+async function useCurrentPosition(silent = false) {
   try {
     const { latitude, longitude } = await locate()
     model.value.latitude = latitude
     model.value.longitude = longitude
-    toast.success('Position enregistrée.')
+    gpsFailed.value = false
+    if (!silent) toast.success('Position enregistrée.')
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'Impossible de récupérer votre position.')
+    gpsFailed.value = true
+    if (!silent) toast.error(e instanceof Error ? e.message : 'Impossible de récupérer votre position.')
   }
 }
+onMounted(() => {
+  if (isHomeDelivery.value && !hasPosition.value && !model.value.zone) useCurrentPosition(true)
+})
 </script>
 
 <template>
@@ -170,7 +181,7 @@ async function useCurrentPosition() {
     <!-- Domicile : la position GPS est la source principale, le texte n'est
          qu'un complément optionnel (repère pour le livreur). -->
     <template v-if="isHomeDelivery">
-      <v-btn color="primary" block :loading="locating" class="mb-2" @click="useCurrentPosition">
+      <v-btn color="primary" block :loading="locating" class="mb-2" @click="useCurrentPosition()">
         <PhMapPin :size="17" class="mr-1" />
         {{ hasPosition ? 'Mettre à jour ma position actuelle' : 'Utiliser ma position actuelle' }}
       </v-btn>
@@ -188,7 +199,10 @@ async function useCurrentPosition() {
         <span class="text-muted">{{ positionLabel }}</span>
       </div>
       <v-alert v-else type="warning" variant="tonal" density="compact" class="mb-3">
-        Sans position GPS, décris précisément l'endroit ci-dessous.
+        <template v-if="gpsFailed">Position GPS indisponible (autorisation refusée ou signal absent).</template>
+        <template v-else>Position GPS pas encore renseignée.</template>
+        Touchez la carte pour placer votre repère, sinon le <strong>tarif de livraison par défaut</strong> s'applique.
+        Décrivez aussi précisément l'endroit ci-dessous.
       </v-alert>
 
       <label class="field-label">Description / point de repère (optionnel avec une position GPS)</label>

@@ -35,6 +35,14 @@ def _distance_km(
     return haversine_km(o_lat, o_lng, d_lat, d_lng)
 
 
+def _unknown_position_tier(
+    tiers: Sequence[DeliveryFeeTier], bounded: Sequence[DeliveryFeeTier], catch_all: DeliveryFeeTier | None
+) -> DeliveryFeeTier | None:
+    """Palier appliqué quand la distance est inconnue (position GPS absente) :
+    celui que l'admin a marqué « par défaut », sinon le palier « au-delà »."""
+    return next((t for t in tiers if getattr(t, "is_default", False)), None) or catch_all
+
+
 def _matching_bounded_tier(bounded: Sequence[DeliveryFeeTier], distance_km: float) -> DeliveryFeeTier | None:
     for tier in bounded:
         if distance_km <= tier.max_km:
@@ -50,9 +58,10 @@ def compute_fee(
     """Fee for one parcel from origin (vendor) to destination (buyer address
     or pickup point), from the distance grid.
 
-    Falls back to the catch-all tier (max_km NULL) — or, without one, the
-    dearest bounded tier — when a position is missing or the distance
-    exceeds every bounded tier: overcharging slightly is preferable to a
+    A missing position uses the tier the admin marked as default
+    (is_default). Otherwise — and when the distance exceeds every bounded
+    tier — falls back to the catch-all tier (max_km NULL) or, without one, the
+    dearest bounded tier: overcharging slightly is preferable to a
     free delivery nobody is paid for. No tiers at all means delivery is free.
     """
     if not tiers:
@@ -62,7 +71,8 @@ def compute_fee(
 
     distance = _distance_km(origin, destination)
     if distance is None:
-        return fallback
+        unknown = _unknown_position_tier(tiers, bounded, catch_all)
+        return unknown.fee if unknown is not None else fallback
     matched = _matching_bounded_tier(bounded, distance)
     return matched.fee if matched is not None else fallback
 
@@ -90,7 +100,8 @@ def compute_transit_days(
 
     distance = _distance_km(origin, destination)
     if distance is None:
-        return fallback
+        unknown = _unknown_position_tier(tiers, bounded, catch_all)
+        return unknown.transit_days if unknown is not None else fallback
     matched = _matching_bounded_tier(bounded, distance)
     return matched.transit_days if matched is not None else fallback
 
@@ -107,11 +118,22 @@ async def _ensure_max_km_free(db: AsyncSession, max_km: float | None, *, ignore_
         )
 
 
+async def _clear_default(db: AsyncSession) -> None:
+    """Un seul palier par défaut : on retire la marque de l'ancien avant d'en
+    poser une nouvelle (index unique partiel uq_delivery_fee_tiers_default)."""
+    for tier in await repository.list_all(db):
+        if tier.is_default:
+            tier.is_default = False
+    await db.flush()
+
+
 async def create_tier(db: AsyncSession, data: DeliveryFeeTierCreate) -> DeliveryFeeTier:
     await _ensure_max_km_free(db, data.max_km)
     label = (data.label or "").strip() or None
+    if data.is_default:
+        await _clear_default(db)
     tier = await repository.create(
-        db, max_km=data.max_km, fee=data.fee, label=label, transit_days=data.transit_days
+        db, max_km=data.max_km, fee=data.fee, label=label, transit_days=data.transit_days, is_default=data.is_default
     )
     await db.commit()
     return tier
@@ -130,6 +152,11 @@ async def update_tier(db: AsyncSession, tier_id: uuid.UUID, data: DeliveryFeeTie
         await _ensure_max_km_free(db, fields["max_km"], ignore_id=tier.id)
     if "label" in fields:
         fields["label"] = (fields["label"] or "").strip() or None
+    if "is_default" in fields:
+        if fields["is_default"] is None:
+            fields.pop("is_default")
+        elif fields["is_default"] and not tier.is_default:
+            await _clear_default(db)
     for field, value in fields.items():
         setattr(tier, field, value)
     await db.commit()

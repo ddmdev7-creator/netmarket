@@ -27,6 +27,9 @@ class WalletRead(BaseModel):
     # Montant réservé par des retraits demandés ou en cours de versement
     # (déjà déduit du solde).
     withdrawals_in_progress: int
+    # Vendeur : frais de « Retrait offert » engagés sur des commandes pas
+    # encore livrées. Non retirables tant qu'elles sont en cours.
+    committed_offers: int = 0
     payout_provider: PayoutProvider | None
     payout_account_number: str | None
     payout_beneficiary_name: str | None

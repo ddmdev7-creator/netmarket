@@ -541,7 +541,7 @@ onMounted(loadRecent)
           </div>
         </div>
 
-        <ProductTrustPanel :product-id="productId" class="mb-4" />
+        <ProductTrustPanel :product-id="productId" :pickup-offer-min="product.vendor_pickup_offer_min" class="mb-4" />
 
         <v-expansion-panels variant="accordion">
           <v-expansion-panel>

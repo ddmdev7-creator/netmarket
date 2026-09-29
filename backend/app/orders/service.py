@@ -23,6 +23,7 @@ from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders import handoff
 from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder
+from app.orders.pickup_offer import split_delivery_fee
 from app.orders.schemas import (
     OrderCancelRequest,
     CheckoutRequest,
@@ -180,10 +181,13 @@ async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteReques
 
     vendors: list[DeliveryQuoteVendorRead] = []
     items_total = 0
+    is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
     for vendor_items in _group_by_vendor(rows).values():
         vendor = vendor_items[0][3]
         origin = (vendor.latitude, vendor.longitude)
-        fee = compute_fee(tiers, origin, destination)
+        split = await split_delivery_fee(
+            db, vendor, amount=_vendor_amount(vendor_items), fee=compute_fee(tiers, origin, destination), is_pickup=is_pickup
+        )
         estimate = estimate_delivery_window(
             transit_days=compute_transit_days(tiers, origin, destination),
             preparation_days=vendor.preparation_days,
@@ -193,7 +197,10 @@ async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteReques
             DeliveryQuoteVendorRead(
                 vendor_id=vendor.id,
                 shop_name=vendor.shop_name,
-                delivery_fee=fee,
+                delivery_fee=split.buyer_fee,
+                vendor_delivery_fee=split.vendor_fee,
+                pickup_offer=split.offer.value if split.offer else None,
+                pickup_offer_missing=split.missing_amount,
                 estimated_delivery_min=estimate.min_date,
                 estimated_delivery_max=estimate.max_date,
             )
@@ -223,11 +230,18 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
     by_vendor = _group_by_vendor(rows)
     pickup_point_id, destination = await _resolve_destination(db, data)
     tiers = await delivery_repository.list_all(db)
-    delivery_fees = {
-        vendor_id: compute_fee(tiers, (items[0][3].latitude, items[0][3].longitude), destination)
+    is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
+    splits = {
+        vendor_id: await split_delivery_fee(
+            db,
+            items[0][3],
+            amount=_vendor_amount(items),
+            fee=compute_fee(tiers, (items[0][3].latitude, items[0][3].longitude), destination),
+            is_pickup=is_pickup,
+        )
         for vendor_id, items in by_vendor.items()
     }
-    grand_total = sum(_vendor_amount(items) for items in by_vendor.values()) + sum(delivery_fees.values())
+    grand_total = sum(_vendor_amount(items) for items in by_vendor.values()) + sum(s.buyer_fee for s in splits.values())
     if data.payment_method == PaymentMethod.WALLET:
         # Refus avant toute écriture ; le débit lui-même (compte verrouillé)
         # revérifie le solde, voir buyer_service.pay_order.
@@ -236,7 +250,6 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
     # Un point de retrait n'a pas de destinataire personnel (voir
     # AddressForm.vue côté frontend, qui vide déjà ces champs) — on l'impose
     # aussi ici plutôt que de faire confiance uniquement au client.
-    is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
     order = await repository.create_order(
         db,
         user_id=user.id,
@@ -279,7 +292,8 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
             vendor_id=vendor.id,
             amount=amount,
             commission=commission,
-            delivery_fee=delivery_fees[vendor.id],
+            delivery_fee=splits[vendor.id].buyer_fee,
+            vendor_delivery_fee=splits[vendor.id].vendor_fee,
             shop_name=vendor.shop_name,
             estimated_delivery_min=estimate.min_date,
             estimated_delivery_max=estimate.max_date,
@@ -822,7 +836,7 @@ async def _courier_earning(db: AsyncSession, sub_order: SubOrder) -> int:
     """Part des frais de livraison qui revient au livreur (réglage admin, voir
     app/wallets/service.py::settle_sub_order)."""
     settings_row = await payments_repository.get_settings(db)
-    return round((sub_order.delivery_fee or 0) * settings_row.courier_delivery_share_percent / 100)
+    return round(sub_order.effective_delivery_fee * settings_row.courier_delivery_share_percent / 100)
 
 
 async def get_delivery_offer(db: AsyncSession, user: User, sub_order_id: uuid.UUID) -> dict:

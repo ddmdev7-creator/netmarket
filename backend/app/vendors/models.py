@@ -3,7 +3,7 @@
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import Enum as SAEnum, Float, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, Enum as SAEnum, Float, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,3 +43,9 @@ class Vendor(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # app/common/delivery_estimate.py. server_default pour que les boutiques
     # déjà existantes récupèrent 1 jour par défaut sans migration de données.
     preparation_days: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    # « Retrait offert » : le vendeur prend en charge la livraison vers un point
+    # de retrait, à partir de pickup_offer_min_amount d'achat dans sa boutique
+    # (0 = dès le premier article). Appliqué seulement si son solde couvre la
+    # course — voir app/orders/pickup_offer.py.
+    offers_pickup_delivery: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    pickup_offer_min_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)

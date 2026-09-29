@@ -31,7 +31,14 @@ class DeliveryQuoteRequest(BaseModel):
 class DeliveryQuoteVendorRead(BaseModel):
     vendor_id: uuid.UUID
     shop_name: str
+    # Ce que l'acheteur paie (0 quand le vendeur offre le retrait).
     delivery_fee: int
+    # « Retrait offert » (voir app/orders/pickup_offer.py) : course prise en
+    # charge par le vendeur, statut de l'offre, et montant d'achat manquant
+    # pour la débloquer.
+    vendor_delivery_fee: int = 0
+    pickup_offer: str | None = None
+    pickup_offer_missing: int = 0
     # Même calcul que celui figé au checkout (voir SubOrder.estimated_delivery_min) :
     # l'acheteur voit ainsi le même délai avant et après avoir confirmé.
     estimated_delivery_min: date
@@ -165,6 +172,8 @@ class SubOrderBase(BaseModel):
     amount: int
     commission: int
     delivery_fee: int
+    # Course prise en charge par le vendeur (« Retrait offert »).
+    vendor_delivery_fee: int = 0
     items: list[OrderItemRead]
     # None pour les commandes passées avant l'ajout de l'estimation de
     # livraison (voir app/orders/models.py::SubOrder.estimated_delivery_min).
