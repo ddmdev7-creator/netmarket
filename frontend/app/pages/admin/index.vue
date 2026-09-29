@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import {
+  PhArrowsClockwise,
+  PhBank,
+  PhClipboardText,
+  PhFlag,
+  PhMotorcycle,
+  PhTruck,
+  PhWarningCircle,
   PhCheckCircle,
   PhClock,
   PhCurrencyCircleDollar,
@@ -8,6 +15,7 @@ import {
   PhShoppingCart,
   PhStorefront,
 } from '@phosphor-icons/vue'
+import type { TodoItem } from '~/components/common/TodoCards.vue'
 import type { AdminStats, OrderStatus, PaymentMethod, UserRole } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -17,7 +25,36 @@ const { apiFetch } = useApi()
 // getCachedData: hydrateThenRefetch — ces chiffres bougent à chaque action
 // (validation vendeur, commande livrée...), voir vendeur/index.vue pour le
 // même raisonnement.
-const { data: stats, pending } = await useAsyncData(
+const auth = useAuthStore()
+const { attention, refresh: refreshAttention } = useAdminAttention()
+onMounted(refreshAttention)
+
+const greeting = computed(() => {
+  const hour = new Date().getHours()
+  const name = auth.user?.first_name
+  return `${hour < 18 ? 'Bonjour' : 'Bonsoir'}${name ? ` ${name}` : ''}`
+})
+const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+// Section « À traiter » : chaque carte mène à l'écran concerné.
+const todos = computed<TodoItem[]>(() => {
+  const a = attention.value
+  if (!a) return []
+  const plural = (n: number, one: string, many: string) => (n > 1 ? many : one)
+  const items: TodoItem[] = [
+    { key: 'deliveries', count: a.unassigned_deliveries, title: plural(a.unassigned_deliveries, 'colis sans livreur', 'colis sans livreur'), text: 'Confirmés mais personne pour les transporter.', icon: PhTruck, hue: 355, urgent: true, to: '/admin/livraisons' },
+    { key: 'vendors', count: a.pending_vendors, title: plural(a.pending_vendors, 'boutique à valider', 'boutiques à valider'), text: 'Inscriptions de vendeurs en attente.', icon: PhStorefront, hue: 260, urgent: true, to: '/admin/vendeurs' },
+    { key: 'couriers', count: a.pending_couriers, title: plural(a.pending_couriers, 'livreur à vérifier', 'livreurs à vérifier'), text: 'Pièces et engin à contrôler.', icon: PhMotorcycle, hue: 25, urgent: true, to: '/admin/livreurs' },
+    { key: 'applications', count: a.pending_applications, title: plural(a.pending_applications, 'candidature de point', 'candidatures de point'), text: 'Dossiers de points de retrait à examiner.', icon: PhClipboardText, hue: 200, to: '/admin/candidatures' },
+    { key: 'withdrawals', count: a.pending_withdrawals, title: plural(a.pending_withdrawals, 'retrait à valider', 'retraits à valider'), text: 'Demandes de retrait des bénéficiaires.', icon: PhBank, hue: 150, to: '/admin/finance' },
+    { key: 'refunds', count: a.failed_refunds, title: plural(a.failed_refunds, 'remboursement échoué', 'remboursements échoués'), text: 'À reprendre manuellement avec l’acheteur.', icon: PhWarningCircle, hue: 0, urgent: true, to: '/admin/finance' },
+    { key: 'reports', count: a.pending_reports, title: plural(a.pending_reports, 'signalement', 'signalements'), text: 'Produits ou avis signalés par les utilisateurs.', icon: PhFlag, hue: 38, to: '/admin/signalements' },
+    { key: 'orders', count: a.pending_orders, title: plural(a.pending_orders, 'commande en attente', 'commandes en attente'), text: 'Pas encore confirmées par leur vendeur.', icon: PhShoppingCart, hue: 215, to: '/admin/commandes' },
+  ]
+  return items.filter((i) => (i.count ?? 0) > 0)
+})
+
+const { data: stats, pending, refresh: refreshStats } = await useAsyncData(
   'admin-stats',
   () => apiFetch<AdminStats>('/admin/stats'),
   { getCachedData: hydrateThenRefetch },
@@ -27,13 +64,12 @@ const tiles = computed(() => {
   if (!stats.value) return []
   const s = stats.value
   return [
-    { label: 'Boutiques', value: String(s.total_vendors), icon: PhStorefront, tone: 'primary' },
-    { label: 'Boutiques approuvées', value: String(s.approved_vendors), icon: PhCheckCircle, tone: 'success' },
-    { label: 'En attente de validation', value: String(s.pending_vendors), icon: PhClock, tone: 'accent' },
-    { label: 'Produits', value: String(s.total_products), icon: PhPackage, tone: 'primary' },
-    { label: 'Commandes', value: String(s.total_orders), icon: PhShoppingCart, tone: 'primary' },
-    { label: 'Ventes (livrées)', value: formatGnf(s.total_sales), icon: PhCurrencyCircleDollar, tone: 'accent' },
-    { label: 'Commission (livrée)', value: formatGnf(s.total_commission), icon: PhPercent, tone: 'success' },
+    { label: 'Ventes livrées', value: formatGnf(s.total_sales), icon: PhCurrencyCircleDollar, hue: 150, hero: true },
+    { label: 'Commission encaissée', value: formatGnf(s.total_commission), icon: PhPercent, hue: 260, hero: true },
+    { label: 'Commandes', value: String(s.total_orders), icon: PhShoppingCart, hue: 215 },
+    { label: 'Produits en ligne', value: String(s.total_products), icon: PhPackage, hue: 30 },
+    { label: 'Boutiques approuvées', value: `${s.approved_vendors} / ${s.total_vendors}`, icon: PhCheckCircle, hue: 170 },
+    { label: 'Boutiques en attente', value: String(s.pending_vendors), icon: PhClock, hue: 38 },
   ]
 })
 
@@ -118,14 +154,33 @@ const topVendorRows = computed(() =>
 
 <template>
   <div class="dashboard-shell">
-    <h1 class="text-h6 mb-4">Statistiques plateforme</h1>
+    <header class="dash-head">
+      <div>
+        <h1 class="text-h6 mb-0">{{ greeting }}</h1>
+        <p class="dash-head__date">{{ today }} · vue d'ensemble de la plateforme</p>
+      </div>
+      <v-btn variant="tonal" color="primary" :loading="pending" @click="refreshStats(); refreshAttention()">
+        <PhArrowsClockwise :size="16" class="mr-1" /> Actualiser
+      </v-btn>
+    </header>
 
-    <div class="stat-grid mb-5">
-      <v-skeleton-loader v-if="pending" type="card" class="stat-tile" v-for="n in 7" :key="n" />
-      <div v-else v-for="tile in tiles" :key="tile.label" class="stat-tile">
-        <div class="stat-tile__icon" :class="`stat-tile__icon--${tile.tone}`">
-          <component :is="tile.icon" :size="18" weight="bold" />
-        </div>
+    <section class="mb-6" aria-labelledby="todo-title">
+      <h2 id="todo-title" class="section-heading">À traiter</h2>
+      <CommonTodoCards :items="todos" empty-text="Rien en attente : tout est traité." />
+    </section>
+
+    <h2 class="section-heading">Indicateurs clés</h2>
+    <div class="stat-grid mb-6">
+      <v-skeleton-loader v-if="pending" type="card" class="stat-tile" v-for="n in 6" :key="n" />
+      <div
+        v-else
+        v-for="tile in tiles"
+        :key="tile.label"
+        class="stat-tile"
+        :class="{ 'stat-tile--hero': tile.hero }"
+        :style="{ '--hue': tile.hue }"
+      >
+        <div class="stat-tile__icon"><component :is="tile.icon" :size="20" weight="duotone" /></div>
         <div class="stat-tile__value">{{ tile.value }}</div>
         <div class="stat-tile__label">{{ tile.label }}</div>
       </div>
@@ -209,8 +264,8 @@ const topVendorRows = computed(() =>
 }
 
 .section-heading {
-  margin: 0 0 10px;
-  font-size: 13px;
+  margin: 0 0 12px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -255,68 +310,87 @@ const topVendorRows = computed(() =>
   }
 }
 
+.dash-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.dash-head__date {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--color-neutral-400);
+}
+
+.dash-head__date::first-letter {
+  text-transform: uppercase;
+}
+
 .stat-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 @media (min-width: 768px) {
   .stat-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
   }
 }
 
-@media (min-width: 1200px) {
-  .stat-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+.stat-tile {
+  position: relative;
+  overflow: hidden;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-900);
+  box-shadow: var(--shadow-sm);
 }
 
-.stat-tile {
-  background: var(--color-neutral-900);
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: 14px;
+/* Montants phares : dégradé de la teinte de la tuile. */
+.stat-tile--hero {
+  grid-column: span 2;
+  border-color: hsl(var(--hue) 60% 50% / 0.3);
+  background: linear-gradient(135deg, hsl(var(--hue) 70% var(--tint-bg-soft)), var(--color-neutral-900));
 }
 
 .stat-tile__icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 10px;
-}
-
-.stat-tile__icon--primary {
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
-  color: var(--color-primary);
-}
-
-.stat-tile__icon--success {
-  background: color-mix(in srgb, var(--color-success) 16%, transparent);
-  color: var(--color-success);
-}
-
-.stat-tile__icon--accent {
-  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
-  color: var(--color-accent);
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: hsl(var(--hue) 70% var(--tint-bg));
+  color: hsl(var(--hue) 60% var(--tint-fg));
 }
 
 .stat-tile__value {
   font-family: var(--font-heading);
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-tile--hero .stat-tile__value {
+  font-size: 26px;
+  color: hsl(var(--hue) 60% var(--tint-fg));
 }
 
 .stat-tile__label {
-  font-size: 11px;
-  color: var(--color-neutral-400);
   margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-neutral-400);
 }
 
 .panel-grid {
@@ -335,9 +409,9 @@ const topVendorRows = computed(() =>
 .chart-card {
   background: var(--color-neutral-900);
   border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: 14px;
+  padding: 18px;
 }
 
 .chart-card__title {

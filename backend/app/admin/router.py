@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import service
-from app.admin.schemas import ActiveDeliveryRead, AdminStats, DeliveryMonitorRead
+from app.admin.schemas import ActiveDeliveryRead, AdminAttention, AdminStats, DeliveryMonitorRead
 from app.core.deps import get_db, require_role
 from app.core.pagination import Page, PageParams, pagination_params
 from app.orders.models import OrderStatus
@@ -19,6 +19,12 @@ from app.orders.schemas import AdminOrderRead, OrderRead
 from app.users.models import UserRole
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))])
+
+
+@router.get("/attention", response_model=AdminAttention)
+async def get_attention(db: AsyncSession = Depends(get_db)) -> AdminAttention:
+    """Compteurs de ce qui attend une action (menu et tableau de bord)."""
+    return await service.get_attention(db)
 
 
 @router.get("/stats", response_model=AdminStats)

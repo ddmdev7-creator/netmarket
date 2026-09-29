@@ -1244,3 +1244,15 @@ export interface SubOrderTrackingRead {
   /** Trajet routier : livreur → destination pendant la course, sinon boutique → destination. */
   route: RouteRead | null
 }
+
+/** GET /admin/attention — ce qui attend une action de l'administration. */
+export interface AdminAttention {
+  pending_vendors: number
+  pending_couriers: number
+  pending_applications: number
+  pending_reports: number
+  pending_withdrawals: number
+  pending_orders: number
+  unassigned_deliveries: number
+  failed_refunds: number
+}

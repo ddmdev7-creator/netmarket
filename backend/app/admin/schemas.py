@@ -129,3 +129,17 @@ class DeliveryMonitorRead(BaseModel):
     # Début de la journée (UTC = heure de Conakry) pris pour « livrées aujourd'hui ».
     since: datetime
     entries: list[DeliveryMonitorEntry]
+
+
+class AdminAttention(BaseModel):
+    """Ce qui attend une action de l'administration (pastilles du menu et
+    section « À traiter » du tableau de bord)."""
+
+    pending_vendors: int
+    pending_couriers: int
+    pending_applications: int
+    pending_reports: int
+    pending_withdrawals: int
+    pending_orders: int
+    unassigned_deliveries: int
+    failed_refunds: int

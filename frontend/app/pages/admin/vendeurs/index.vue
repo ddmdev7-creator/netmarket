@@ -8,7 +8,10 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 const { apiFetch } = useApi()
 const toast = useToastStore()
 
-const tab = ref<VendorStatus>('pending')
+// S'ouvre sur « En attente » seulement s'il y a quelque chose à traiter.
+const { attention, refresh: refreshAttention } = useAdminAttention()
+if (!attention.value) await refreshAttention()
+const tab = ref<VendorStatus>(attention.value && attention.value.pending_vendors === 0 ? 'approved' : 'pending')
 const tabs: { value: VendorStatus; label: string }[] = [
   { value: 'pending', label: 'En attente' },
   { value: 'approved', label: 'Approuvées' },
@@ -148,7 +151,13 @@ async function update(vendor: VendorRead, payload: VendorAdminUpdate) {
     </template>
 
     <template v-else>
-    <CommonEmptyState v-if="!pending && vendors.length === 0" message="Aucune boutique dans cette catégorie." />
+    <CommonEmptyState
+      v-if="!pending && vendors.length === 0"
+      :icon="PhStorefront"
+      :hue="260"
+      :title="tab === 'pending' ? 'Aucune boutique à valider' : 'Aucune boutique'"
+      message="Aucune boutique dans cette catégorie."
+    />
     <CommonEmptyState
       v-else-if="!pending && visibleVendors.length === 0"
       message="Aucune boutique ne correspond à cette recherche."

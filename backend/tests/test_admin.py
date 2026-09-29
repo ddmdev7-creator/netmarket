@@ -199,3 +199,9 @@ async def test_stats_include_30_days_of_activity_and_splits(
     assert stats["orders_by_payment_method"]["cash_on_delivery"] == 1
     assert stats["orders_by_payment_method"]["wallet"] == 0
     assert stats["users_by_role"]["buyer"] >= 1
+
+
+async def test_admin_attention_counts(client: AsyncClient, admin_user: User, unapproved_vendor_user: User) -> None:
+    body = (await client.get("/admin/attention", headers=auth_headers(admin_user))).json()
+    assert body["pending_vendors"] == 1
+    assert set(body) >= {"pending_couriers", "pending_applications", "pending_reports", "unassigned_deliveries"}

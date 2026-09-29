@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhStar } from '@phosphor-icons/vue'
+import { PhFlag, PhStar } from '@phosphor-icons/vue'
 import type { ReportRead, ReportStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -7,7 +7,10 @@ definePageMeta({ middleware: 'admin', layout: 'admin' })
 const { apiFetch } = useApi()
 const toast = useToastStore()
 
-const tab = ref<ReportStatus>('pending')
+// S'ouvre sur « En attente » seulement s'il y a quelque chose à traiter.
+const { attention, refresh: refreshAttention } = useAdminAttention()
+if (!attention.value) await refreshAttention()
+const tab = ref<ReportStatus>(attention.value && attention.value.pending_reports === 0 ? 'actioned' : 'pending')
 const tabs: { value: ReportStatus; label: string }[] = [
   { value: 'pending', label: 'En attente' },
   { value: 'dismissed', label: 'Rejetés' },
@@ -54,7 +57,13 @@ function formatDate(iso: string) {
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
     </v-btn-toggle>
 
-    <CommonEmptyState v-if="!pending && reports.length === 0" message="Aucun signalement dans cette catégorie." />
+    <CommonEmptyState
+      v-if="!pending && reports.length === 0"
+      :icon="PhFlag"
+      :hue="150"
+      :title="tab === 'pending' ? 'Aucun signalement en attente' : 'Rien ici'"
+      :message="tab === 'pending' ? 'Tout a été traité. Les signalements des utilisateurs apparaîtront ici.' : 'Aucun signalement dans cette catégorie.'"
+    />
 
     <v-card v-for="r in reports" :key="r.id" class="mb-3 pa-3">
       <div class="d-flex justify-space-between align-center mb-2">

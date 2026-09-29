@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PhSparkle } from '@phosphor-icons/vue'
 import type { SubscriptionStatus, VendorSubscriptionRead } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -59,7 +60,13 @@ function formatDate(value: string) {
       <v-btn v-for="t in tabs" :key="t.value" :value="t.value" size="small">{{ t.label }}</v-btn>
     </v-btn-toggle>
 
-    <CommonEmptyState v-if="!pending && subscriptions.length === 0" message="Aucun abonnement dans cette catégorie." />
+    <CommonEmptyState
+      v-if="!pending && subscriptions.length === 0"
+      :icon="PhSparkle"
+      :hue="260"
+      :title="tab === 'pending' ? 'Aucune demande en attente' : 'Aucun abonnement'"
+      :message="tab === 'pending' ? 'Les demandes d’abonnement Premium des vendeurs apparaîtront ici. Consultez l’onglet Actifs pour les abonnements en cours.' : 'Aucun abonnement dans cette catégorie.'"
+    />
 
     <v-card v-for="subscription in subscriptions" :key="subscription.id" class="mb-3 pa-3">
       <div class="d-flex justify-space-between align-center mb-1">

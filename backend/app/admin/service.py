@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import repository
 from app.admin.schemas import (
+    AdminAttention,
     RouteRead,
     ActiveDeliveryRead,
     AdminStats,
@@ -313,3 +314,35 @@ async def list_active_deliveries(db: AsyncSession) -> list[ActiveDeliveryRead]:
         )
         for sub_order, order, vendor_lat, vendor_lng, pickup_point_name in await repository.list_active_deliveries(db)
     ]
+
+
+async def get_attention(db: AsyncSession) -> AdminAttention:
+    from sqlalchemy import func, select
+
+    from app.couriers.models import Courier, CourierStatus
+    from app.orders.models import SubOrder
+    from app.payments.models import Payment, PaymentStatus
+    from app.pickup_point_applications.models import ApplicationStatus, PickupPointApplication
+    from app.reports.models import Report, ReportStatus
+    from app.vendors.models import Vendor, VendorStatus
+    from app.wallets.models import Withdrawal, WithdrawalStatus
+
+    async def count(model, *conditions) -> int:
+        return (await db.execute(select(func.count()).select_from(model).where(*conditions))).scalar_one()
+
+    return AdminAttention(
+        pending_vendors=await count(Vendor, Vendor.status == VendorStatus.PENDING),
+        pending_couriers=await count(Courier, Courier.status == CourierStatus.PENDING),
+        pending_applications=await count(
+            PickupPointApplication, PickupPointApplication.status == ApplicationStatus.SUBMITTED
+        ),
+        pending_reports=await count(Report, Report.status == ReportStatus.PENDING),
+        pending_withdrawals=await count(Withdrawal, Withdrawal.status == WithdrawalStatus.PENDING),
+        pending_orders=await count(SubOrder, SubOrder.status == OrderStatus.PENDING),
+        unassigned_deliveries=await count(
+            SubOrder,
+            SubOrder.status.in_((OrderStatus.CONFIRMED, OrderStatus.PREPARING)),
+            SubOrder.courier_id.is_(None),
+        ),
+        failed_refunds=await count(Payment, Payment.status == PaymentStatus.REFUND_FAILED),
+    )
