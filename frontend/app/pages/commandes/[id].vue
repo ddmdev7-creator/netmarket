@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { PhArrowLeft, PhChatCircle, PhCheckCircle, PhImage, PhStar, PhWallet } from '@phosphor-icons/vue'
+import { PhChatCircle, PhCheckCircle, PhImage, PhStar, PhWallet } from '@phosphor-icons/vue'
 import type { BuyerWalletRead, OrderItemRead, OrderRead, ReviewRead } from '~/types/api'
 
-definePageMeta({ middleware: 'auth', layout: 'blank' })
+definePageMeta({ middleware: 'auth', layout: 'focus' })
 
 const route = useRoute()
 const router = useRouter()
@@ -139,11 +139,7 @@ function ratePickupPoint(pointId: string) {
   </div>
   <div v-else-if="order" class="app-shell" style="padding-bottom: 32px">
     <div class="d-flex align-center pa-2 ga-2">
-      <v-btn icon variant="text" @click="router.back()">
-        <PhArrowLeft :size="20" />
-      </v-btn>
       <h1 class="text-h6">Commande {{ shortId(order.id) }}</h1>
-      <LayoutHomeLink />
     </div>
 
     <div class="detail-card">

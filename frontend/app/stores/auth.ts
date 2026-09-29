@@ -101,6 +101,33 @@ export const useAuthStore = defineStore('auth', () => {
     clear()
   }
 
+  /**
+   * Au démarrage de l'app (plugins/auth.ts) : recharge le profil si un jeton
+   * est présent — sans ça, après un rechargement complet, la barre du haut
+   * croyait l'utilisateur déconnecté. Jeton d'accès expiré : on tente le
+   * jeton de rafraîchissement ; une API momentanément injoignable ne
+   * déconnecte personne (seul un 401 le fait).
+   */
+  async function restoreSession() {
+    if (!accessToken.value || user.value) return
+    const load = () =>
+      $fetch<UserRead>('/users/me', { baseURL: apiBase, headers: { Authorization: `Bearer ${accessToken.value}` } })
+    try {
+      user.value = await load()
+      return
+    } catch (e) {
+      const status = (e as { response?: { status?: number } }).response?.status
+      if (status !== 401) return
+    }
+    if (await tryRefresh()) {
+      try {
+        user.value = await load()
+      } catch {
+        clear()
+      }
+    }
+  }
+
   return {
     accessToken,
     refreshToken,
@@ -110,6 +137,7 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     logout,
     fetchMe,
+    restoreSession,
     tryRefresh,
     setTokens,
     forgotPassword,

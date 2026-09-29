@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  PhArrowLeft,
   PhArrowsClockwise,
   PhBellSlash,
   PhCheckCircle,
@@ -16,7 +15,7 @@ import {
 import type { Component } from 'vue'
 import type { NotificationRead, NotificationType } from '~/types/api'
 
-definePageMeta({ middleware: 'auth', layout: 'blank' })
+definePageMeta({ middleware: 'auth', layout: 'focus' })
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -88,9 +87,6 @@ function formatDate(iso: string) {
 <template>
   <div class="app-shell" style="padding-bottom: 32px">
     <div class="d-flex align-center pa-2 ga-2">
-      <v-btn icon variant="text" @click="router.back()">
-        <PhArrowLeft :size="20" />
-      </v-btn>
       <h1 class="text-h6">Notifications</h1>
       <v-btn
         v-if="notifications.unreadCount > 0"
@@ -102,7 +98,6 @@ function formatDate(iso: string) {
         <PhCheckCircle :size="16" class="mr-1" />
         Tout marquer lu
       </v-btn>
-      <LayoutHomeLink v-else />
     </div>
 
     <div class="detail-card">

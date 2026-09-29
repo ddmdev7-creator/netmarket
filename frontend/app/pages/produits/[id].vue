@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  PhArrowLeft,
   PhClockCounterClockwise,
   PhFlag,
   PhShareNetwork,
@@ -10,7 +9,7 @@ import {
 } from '@phosphor-icons/vue'
 import type { Page, ProductRead, ProductVariantRead, ReviewRead } from '~/types/api'
 
-definePageMeta({ layout: 'blank' })
+definePageMeta({ layout: 'focus' })
 
 const route = useRoute()
 const router = useRouter()
@@ -440,10 +439,6 @@ onMounted(loadRecent)
   </div>
   <div v-else-if="product" class="app-shell app-shell--wide" style="padding-bottom: 88px">
     <div class="d-flex align-center pa-2 ga-2">
-      <v-btn icon variant="text" @click="router.back()">
-        <PhArrowLeft :size="20" />
-      </v-btn>
-      <LayoutHomeLink />
       <ProductFavoriteButton :product-id="productId" variant="plain" class="ml-auto" />
       <v-btn icon variant="text" aria-label="Partager ce produit" @click="share">
         <PhShareNetwork :size="20" />
@@ -894,7 +889,8 @@ onMounted(loadRecent)
 /* Barre compacte du haut (téléphone uniquement) — voir mediaOutOfView. */
 .mini-bar {
   position: fixed;
-  top: 0;
+  /* Juste sous la barre du haut (58 px sur téléphone, voir LayoutTopBar). */
+  top: 58px;
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
@@ -904,7 +900,6 @@ onMounted(loadRecent)
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  padding-top: calc(8px + env(safe-area-inset-top, 0px));
   border: none;
   border-bottom: 1px solid var(--color-divider);
   background: var(--color-neutral-900);

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { PhArrowLeft } from '@phosphor-icons/vue'
 import type { AddressRead } from '~/types/api'
 import type { AddressFormValues } from '~/components/address/AddressForm.vue'
 
-definePageMeta({ middleware: 'auth', layout: 'blank' })
+definePageMeta({ middleware: 'auth', layout: 'focus' })
 
 const router = useRouter()
 const { apiFetch } = useApi()
@@ -64,11 +63,7 @@ async function submit() {
 <template>
   <div class="app-shell pa-0" style="padding-bottom: 32px">
     <div class="d-flex align-center pa-2 ga-2">
-      <v-btn icon variant="text" @click="router.back()">
-        <PhArrowLeft :size="20" />
-      </v-btn>
       <h1 class="text-h6">Nouvelle adresse</h1>
-      <LayoutHomeLink />
     </div>
 
     <div class="detail-card">

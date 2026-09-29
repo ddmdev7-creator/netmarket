@@ -17,7 +17,7 @@ watch(mdAndUp, (isDesktop) => { drawerOpen.value = isDesktop })
     </v-navigation-drawer>
 
     <v-main>
-      <LayoutTopBar>
+      <LayoutTopBar space="Administration">
         <template #leading>
           <button v-if="!mdAndUp" type="button" class="admin-menu-btn" aria-label="Ouvrir le menu" @click="drawerOpen = true">
             <PhList :size="20" />
@@ -41,11 +41,17 @@ watch(mdAndUp, (isDesktop) => { drawerOpen.value = isDesktop })
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
+  border-radius: 50%;
   background: none;
   border: none;
-  color: inherit;
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+
+.admin-menu-btn:hover {
+  background: var(--color-neutral-800);
 }
 </style>

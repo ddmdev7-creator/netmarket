@@ -18,11 +18,14 @@ onMounted(() => {
            ce même wrapper) resterait plafonné à 720px sur desktop même si
            la page elle-même s'étire, un bandeau du haut plus étroit que le
            contenu en dessous. -->
+      <!-- Barre du haut hors de .app-shell : toujours pleine largeur (son
+           contenu est recentré par TopBar lui-même), quelle que soit la
+           largeur de la page en dessous. -->
+      <LayoutTopBar show-nav />
       <div
         class="app-shell buyer-shell"
         :class="{ 'app-shell--catalog': ['/', '/panier', '/profil', '/commandes', '/ndjouribank', '/favoris'].includes(route.path) }"
       >
-        <LayoutTopBar show-nav />
         <slot />
       </div>
     </v-main>

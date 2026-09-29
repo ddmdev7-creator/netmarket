@@ -23,7 +23,9 @@ import type {
   PaymentOptionsRead,
 } from '~/types/api'
 
-definePageMeta({ middleware: 'auth', layout: 'blank' })
+// Barre du haut réduite : ni navigation ni panier pendant la commande, et la
+// flèche de la page revient à l'étape précédente plutôt que de quitter.
+definePageMeta({ middleware: 'auth', layout: 'focus', topbar: { back: false, nav: false, cart: false } })
 
 const cartStore = useCartStore()
 const auth = useAuthStore()
@@ -490,7 +492,6 @@ function continueShopping() {
         <PhArrowLeft :size="20" />
       </v-btn>
       <h1 class="text-h6 flex-grow-1">Commande</h1>
-      <LayoutHomeLink />
     </div>
 
     <nav class="stepper px-4" aria-label="Étapes de la commande">
