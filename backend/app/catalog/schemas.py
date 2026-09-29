@@ -18,6 +18,8 @@ class ProductSort(StrEnum):
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
     TOP_RATED = "top_rated"
+    # Vendeur : produits les moins stockés d'abord (réapprovisionnement).
+    STOCK_ASC = "stock_asc"
     # Boutiques les plus proches de near_lat/near_lng (repli sur "recent" sans position).
     NEAREST = "nearest"
 
@@ -199,17 +201,30 @@ def my_product_filters(
         default=None, description="'out' = rupture de stock, 'low' = stock faible"
     ),
     sort: ProductSort = Query(default=ProductSort.RECENT, description="Tri des résultats"),
+    q: str | None = Query(default=None, min_length=1, max_length=100, description="Recherche par nom"),
 ) -> ProductFilters:
     return ProductFilters(
         category_id=category_id,
         min_price=None,
         max_price=None,
         in_stock=None,
-        q=None,
+        q=q,
         sort=sort,
         status=status,
         stock_level=stock_level,
     )
+
+
+class MyProductsSummary(BaseModel):
+    """Compteurs de « Mes produits » (vendeur) et quantités vendues par produit."""
+
+    total: int
+    active: int
+    inactive: int
+    low_stock: int
+    out_of_stock: int
+    # Quantités vendues (commandes non annulées), par id produit.
+    sold: dict[uuid.UUID, int]
 
 
 class SuggestedProduct(BaseModel):

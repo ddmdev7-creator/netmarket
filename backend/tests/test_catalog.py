@@ -641,3 +641,31 @@ async def test_public_vendor_includes_stats(
 
     body = (await client.get(f"/vendors/{vendor.id}")).json()
     assert body["product_count"] == 1 and body["average_rating"] == 4.0 and body["review_count"] == 1
+
+
+async def test_my_products_summary_search_and_stock_sort(
+    client: AsyncClient, db_session: AsyncSession, vendor: Vendor, vendor_user: User, category: Category
+) -> None:
+    from app.catalog.models import ProductStatus
+
+    db_session.add_all(
+        [
+            Product(vendor_id=vendor.id, category_id=category.id, name="Chargeur", price=1, stock=0),
+            Product(vendor_id=vendor.id, category_id=category.id, name="Câble USB", price=1, stock=3),
+            Product(
+                vendor_id=vendor.id, category_id=category.id, name="Housse", price=1, stock=40,
+                status=ProductStatus.INACTIVE,
+            ),
+        ]
+    )
+    await db_session.flush()
+    headers = auth_headers(vendor_user)
+
+    summary = (await client.get("/products/me/summary", headers=headers)).json()
+    assert summary == {"total": 3, "active": 2, "inactive": 1, "low_stock": 1, "out_of_stock": 1, "sold": {}}
+
+    found = (await client.get("/products/me", params={"q": "cable"}, headers=headers)).json()
+    assert [i["name"] for i in found["items"]] == ["Câble USB"]
+
+    by_stock = (await client.get("/products/me", params={"sort": "stock_asc"}, headers=headers)).json()
+    assert [i["stock"] for i in by_stock["items"]] == [0, 3, 40]

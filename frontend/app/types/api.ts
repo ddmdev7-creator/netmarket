@@ -504,7 +504,7 @@ export interface ReportRead {
   review_rating: number | null
 }
 
-export type ProductSort = 'recent' | 'price_asc' | 'price_desc' | 'top_rated' | 'nearest'
+export type ProductSort = 'recent' | 'price_asc' | 'price_desc' | 'top_rated' | 'nearest' | 'stock_asc'
 
 export interface ProductFilters {
   category_id?: string
@@ -1186,4 +1186,15 @@ export interface FavoriteRead {
   /** Prix d'appel au moment de l'ajout — badge « en baisse » si le prix actuel est inférieur. */
   price_at_add: number
   created_at: string
+}
+
+/** GET /products/me/summary — compteurs de « Mes produits » (vendeur). */
+export interface MyProductsSummary {
+  total: number
+  active: number
+  inactive: number
+  low_stock: number
+  out_of_stock: number
+  /** Quantités vendues (commandes non annulées), par id produit. */
+  sold: Record<string, number>
 }

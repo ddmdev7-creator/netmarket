@@ -252,6 +252,13 @@ async def list_my_products(
     return products, total
 
 
+async def my_products_summary(db: AsyncSession, user: User) -> dict:
+    vendor = await vendor_repository.get_by_user_id(db, user.id)
+    if vendor is None:
+        raise NotFoundError("Vous n'avez pas de boutique.")
+    return await repository.my_products_summary(db, vendor.id)
+
+
 async def update_product(db: AsyncSession, user: User, product_id: uuid.UUID, data: ProductUpdate) -> Product:
     product = await get_product(db, product_id)
     await _check_product_owner(db, product, user)

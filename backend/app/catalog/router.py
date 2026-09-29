@@ -10,6 +10,7 @@ from app.catalog.schemas import (
     CategoryCreate,
     CategoryRead,
     CategoryUpdate,
+    MyProductsSummary,
     ProductCreate,
     ProductDeliveryQuote,
     ProductFilters,
@@ -116,6 +117,17 @@ async def list_my_products(
 ) -> Page[ProductRead]:
     items, total = await service.list_my_products(db, current_user, params, filters)
     return Page.create(items=items, total=total, params=params)
+
+
+@router.get(
+    "/products/me/summary",
+    response_model=MyProductsSummary,
+    dependencies=[Depends(require_role(UserRole.VENDOR))],
+)
+async def my_products_summary(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> MyProductsSummary:
+    return MyProductsSummary(**await service.my_products_summary(db, current_user))
 
 
 @router.get("/products/{product_id}/delivery-quote", response_model=ProductDeliveryQuote)

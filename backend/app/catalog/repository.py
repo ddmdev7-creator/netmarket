@@ -186,6 +186,8 @@ async def list_products(
             (Vendor.longitude - filters.near_lng) * lng_scale, 2
         )
         order_by = [distance.asc().nulls_last()]
+    elif filters.sort == ProductSort.STOCK_ASC:
+        order_by = [Product.stock.asc()]
     elif filters.sort == ProductSort.PRICE_ASC:
         order_by = [Product.price.asc()]
     elif filters.sort == ProductSort.PRICE_DESC:
@@ -209,6 +211,39 @@ async def list_products(
         product.vendor_preparation_days = preparation_days
         products.append(product)
     return products, total
+
+
+async def my_products_summary(db: AsyncSession, vendor_id: uuid.UUID) -> dict:
+    """Compteurs de la page « Mes produits » et quantités vendues par produit
+    (sous-commandes non annulées)."""
+    from app.orders.models import OrderItem, OrderStatus, SubOrder
+
+    total, active, out, low = (
+        await db.execute(
+            select(
+                func.count(),
+                func.count().filter(Product.status == ProductStatus.ACTIVE),
+                func.count().filter(Product.stock == 0),
+                func.count().filter(Product.stock > 0, Product.stock <= LOW_STOCK_THRESHOLD),
+            ).where(Product.vendor_id == vendor_id)
+        )
+    ).one()
+    sold_rows = (
+        await db.execute(
+            select(OrderItem.product_id, func.sum(OrderItem.quantity))
+            .join(SubOrder, OrderItem.sub_order_id == SubOrder.id)
+            .where(SubOrder.vendor_id == vendor_id, SubOrder.status != OrderStatus.CANCELLED)
+            .group_by(OrderItem.product_id)
+        )
+    ).all()
+    return {
+        "total": total,
+        "active": active,
+        "inactive": total - active,
+        "low_stock": low,
+        "out_of_stock": out,
+        "sold": {product_id: int(qty) for product_id, qty in sold_rows},
+    }
 
 
 async def delete_product(db: AsyncSession, product: Product) -> None:
