@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { PhCheckCircle, PhMagnifyingGlass, PhQrCode } from '@phosphor-icons/vue'
-import type { CourierDetailRead, CourierSubOrderRead } from '~/types/api'
+import {
+  PhCheckCircle,
+  PhHouse,
+  PhMagnifyingGlass,
+  PhPower,
+  PhQrCode,
+  PhStorefront,
+  PhWallet,
+  PhWarehouse,
+} from '@phosphor-icons/vue'
+import type { TodoItem } from '~/components/common/TodoCards.vue'
+import type { CourierDetailRead, CourierSubOrderRead, WalletRead } from '~/types/api'
 
 definePageMeta({ middleware: 'courier', layout: 'livreur' })
 
@@ -128,9 +138,103 @@ const tab = ref<'ongoing' | 'done'>('ongoing')
 const ongoing = computed(() => deliveries.value.filter((so) => !['delivered', 'cancelled'].includes(so.status)))
 const done = computed(() => deliveries.value.filter((so) => ['delivered', 'cancelled'].includes(so.status)))
 
+// --- « À faire » -------------------------------------------------------------
+
+// Étape d'une livraison en cours, vue du livreur.
+type Stage = 'collect' | 'home' | 'point'
+function stageOf(so: CourierSubOrderRead): Stage {
+  if (so.status !== 'shipped') return 'collect'
+  return so.delivery_type === 'pickup_point' ? 'point' : 'home'
+}
+const stageFilter = ref<Stage | null>(null)
+const stageCounts = computed(() => {
+  const counts: Record<Stage, number> = { collect: 0, home: 0, point: 0 }
+  for (const so of ongoing.value) counts[stageOf(so)]++
+  return counts
+})
+
+const walletAvailable = ref(0)
+onMounted(async () => {
+  try {
+    const wallets = await apiFetch<WalletRead[]>('/wallets/mine')
+    walletAvailable.value = wallets.find((w) => w.kind === 'courier')?.balance.available ?? 0
+  } catch {
+    walletAvailable.value = 0
+  }
+})
+
+const todos = computed<TodoItem[]>(() => {
+  const items: TodoItem[] = []
+  if (myCourier.value?.status === 'approved' && !isOnline.value) {
+    items.push({
+      key: 'offline',
+      title: 'Vous êtes hors ligne',
+      text: 'Passez disponible pour recevoir de nouvelles courses.',
+      icon: PhPower,
+      hue: 355,
+      urgent: true,
+    })
+  }
+  const c = stageCounts.value
+  const plural = (n: number, one: string, many: string) => (n > 1 ? many : one)
+  if (c.collect)
+    items.push({
+      key: 'collect',
+      count: c.collect,
+      title: plural(c.collect, 'colis à récupérer', 'colis à récupérer'),
+      text: 'En boutique : le vendeur vous le remet.',
+      icon: PhStorefront,
+      hue: 35,
+      active: stageFilter.value === 'collect',
+    })
+  if (c.home)
+    items.push({
+      key: 'home',
+      count: c.home,
+      title: plural(c.home, 'livraison chez le client', 'livraisons chez les clients'),
+      text: 'Scannez le QR du client à la remise.',
+      icon: PhHouse,
+      hue: 200,
+      urgent: true,
+      active: stageFilter.value === 'home',
+    })
+  if (c.point)
+    items.push({
+      key: 'point',
+      count: c.point,
+      title: plural(c.point, 'dépôt en point de retrait', 'dépôts en point de retrait'),
+      text: 'Le gestionnaire scanne votre code de dépôt.',
+      icon: PhWarehouse,
+      hue: 270,
+      active: stageFilter.value === 'point',
+    })
+  if (walletAvailable.value > 0)
+    items.push({
+      key: 'wallet',
+      countLabel: formatGnf(walletAvailable.value),
+      title: 'disponibles',
+      text: 'Vos gains peuvent être retirés.',
+      icon: PhWallet,
+      hue: 150,
+      to: '/livreur/gains',
+    })
+  return items
+})
+
+function onTodo(key: string) {
+  if (key === 'offline') {
+    toggleAvailability(true)
+    return
+  }
+  const stage = key as Stage
+  tab.value = 'ongoing'
+  stageFilter.value = stageFilter.value === stage ? null : stage
+}
+
 const search = ref('')
 const visible = computed(() => {
-  const list = tab.value === 'ongoing' ? ongoing.value : done.value
+  let list = tab.value === 'ongoing' ? ongoing.value : done.value
+  if (tab.value === 'ongoing' && stageFilter.value) list = list.filter((so) => stageOf(so) === stageFilter.value)
   const query = search.value.trim().toLowerCase()
   if (!query) return list
   return list.filter((so) =>
@@ -180,6 +284,14 @@ const visible = computed(() => {
         <template v-else>Ton compte est suspendu.</template>
       </v-alert>
 
+      <section v-if="todos.length" class="mb-4" aria-label="À faire">
+        <h2 class="todo-title">À faire</h2>
+        <CommonTodoCards :items="todos" @select="onTodo" />
+        <button v-if="stageFilter" type="button" class="stage-reset" @click="stageFilter = null">
+          Afficher toutes les livraisons en cours
+        </button>
+      </section>
+
       <template v-if="!pending && deliveries.length > 0">
         <v-btn-toggle v-model="tab" mandatory density="comfortable" divided class="mb-3">
           <v-btn value="ongoing">À livrer ({{ ongoing.length }})</v-btn>
@@ -221,6 +333,9 @@ const visible = computed(() => {
           <span class="delivery-card__date"> · {{ formatDate(so.created_at) }}</span>
         </div>
 
+        <p v-if="stageOf(so) === 'collect'" class="delivery-card__next">
+          <PhStorefront :size="14" /> À récupérer chez {{ so.shop_name }}
+        </p>
         <div class="delivery-card__items mb-3">
           {{ so.items.length }} article{{ so.items.length > 1 ? 's' : '' }}
           <span class="delivery-card__items-list"> — {{ itemsSummary(so) }}</span>
@@ -416,5 +531,36 @@ const visible = computed(() => {
    en plus le distingue mieux encore d'une simple ligne de texte. */
 .livreur-search :deep(.v-field) {
   box-shadow: var(--shadow-sm);
+}
+
+.todo-title {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
+  margin: 8px 0 8px;
+}
+
+.stage-reset {
+  margin-top: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-primary-300);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.delivery-card__next {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: hsl(35 85% var(--tint-bg));
+  color: hsl(30 70% var(--tint-fg));
+  font-size: 12.5px;
+  font-weight: 700;
 }
 </style>

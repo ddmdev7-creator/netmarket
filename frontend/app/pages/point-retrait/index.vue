@@ -15,9 +15,11 @@ import {
   PhQrCode,
   PhStorefront,
   PhUser,
+  PhWallet,
   PhWarning,
 } from '@phosphor-icons/vue'
-import type { PickupPointManagerSubOrderRead, PickupPointRead } from '~/types/api'
+import type { TodoItem } from '~/components/common/TodoCards.vue'
+import type { PickupPointManagerSubOrderRead, PickupPointRead, WalletRead } from '~/types/api'
 
 definePageMeta({ middleware: 'pickup-manager', layout: 'point-retrait' })
 
@@ -93,9 +95,88 @@ watch(
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
+// --- « À faire » -------------------------------------------------------------
+
+type StockFocus = 'unstored' | 'late'
+const stockFocus = ref<StockFocus | null>(null)
+const unstored = computed(() => byTab.value.stock.filter((so) => !so.storage_location).length)
+
+const walletAvailable = ref(0)
+onMounted(async () => {
+  try {
+    const wallets = await apiFetch<WalletRead[]>('/wallets/mine')
+    walletAvailable.value = wallets.find((w) => w.kind === 'pickup_point')?.balance.available ?? 0
+  } catch {
+    walletAvailable.value = 0
+  }
+})
+
+const todos = computed<TodoItem[]>(() => {
+  const items: TodoItem[] = []
+  const expected = byTab.value.expected.length
+  if (longWaits.value)
+    items.push({
+      key: 'late',
+      count: longWaits.value,
+      title: longWaits.value > 1 ? 'clients à relancer' : 'client à relancer',
+      text: `Colis au point depuis ${LONG_WAIT_DAYS} jours ou plus : appelez-les.`,
+      icon: PhWarning,
+      hue: 355,
+      urgent: true,
+      active: tab.value === 'stock' && stockFocus.value === 'late',
+    })
+  if (unstored.value)
+    items.push({
+      key: 'unstored',
+      count: unstored.value,
+      title: unstored.value > 1 ? 'colis à ranger' : 'colis à ranger',
+      text: 'Notez leur emplacement pour les retrouver vite.',
+      icon: PhMapPinLine,
+      hue: 35,
+      active: tab.value === 'stock' && stockFocus.value === 'unstored',
+    })
+  if (expected)
+    items.push({
+      key: 'expected',
+      count: expected,
+      title: expected > 1 ? 'colis en route vers vous' : 'colis en route vers vous',
+      text: 'Scannez le code du livreur à son arrivée.',
+      icon: PhMotorcycle,
+      hue: 200,
+      active: tab.value === 'expected',
+    })
+  if (walletAvailable.value > 0)
+    items.push({
+      key: 'wallet',
+      countLabel: formatGnf(walletAvailable.value),
+      title: 'disponibles',
+      text: 'Vos gains peuvent être retirés.',
+      icon: PhWallet,
+      hue: 150,
+      to: '/point-retrait/gains',
+    })
+  return items
+})
+
+function onTodo(key: string) {
+  if (key === 'expected') {
+    tab.value = 'expected'
+    stockFocus.value = null
+    return
+  }
+  const focus = key as StockFocus
+  tab.value = 'stock'
+  stockFocus.value = stockFocus.value === focus ? null : focus
+}
+watch(tab, (value) => {
+  if (value !== 'stock') stockFocus.value = null
+})
+
 const visible = computed(() => {
   const term = normalize((search.value ?? '').trim())
-  const list = byTab.value[tab.value]
+  let list = byTab.value[tab.value]
+  if (tab.value === 'stock' && stockFocus.value === 'unstored') list = list.filter((so) => !so.storage_location)
+  if (tab.value === 'stock' && stockFocus.value === 'late') list = list.filter((so) => daysSince(so.updated_at) >= LONG_WAIT_DAYS)
   if (!term) return list
   const digits = term.replace(/\D/g, '')
   return list.filter((so) => {
@@ -195,6 +276,14 @@ function itemsSummary(so: PickupPointManagerSubOrderRead) {
       <v-btn color="white" variant="flat" size="large" class="pm-head__scan" @click="scannerOpen = true">
         <PhQrCode :size="20" class="mr-1" /> Scanner
       </v-btn>
+    </section>
+
+    <section v-if="todos.length" class="mb-4" aria-label="À faire">
+      <h2 class="pm-todo-title">À faire</h2>
+      <CommonTodoCards :items="todos" @select="onTodo" />
+      <button v-if="stockFocus" type="button" class="pm-todo-reset" @click="stockFocus = null">
+        Afficher tout le stock
+      </button>
     </section>
 
     <!-- Compteurs = onglets -->
@@ -527,5 +616,23 @@ function itemsSummary(so: PickupPointManagerSubOrderRead) {
   box-shadow: var(--shadow-md);
   cursor: pointer;
   z-index: 6;
+}
+
+.pm-todo-title {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0 0 8px;
+}
+
+.pm-todo-reset {
+  margin-top: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-primary-300);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
 }
 </style>

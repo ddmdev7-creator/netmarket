@@ -2,7 +2,6 @@
 import {
   PhCaretRight,
   PhCheckCircle,
-  PhConfetti,
   PhPackage,
   PhPlus,
   PhReceipt,
@@ -11,7 +10,7 @@ import {
   PhWarning,
   PhWarningCircle,
 } from '@phosphor-icons/vue'
-import type { Component } from 'vue'
+import type { TodoItem } from '~/components/common/TodoCards.vue'
 import type { DailyOrderCount, VendorDashboard, VendorRead, VendorStatus, WalletRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -49,24 +48,13 @@ onMounted(async () => {
   }
 })
 
-interface TodoCard {
-  key: string
-  count: number
-  title: string
-  text: string
-  icon: Component
-  hue: number
-  to: string
-  urgent?: boolean
-}
-
 // Section « À faire » : ce qui attend une action du vendeur, du plus urgent
 // au moins urgent, chaque carte menant directement à la liste filtrée.
-const todos = computed<TodoCard[]>(() => {
+const todos = computed<TodoItem[]>(() => {
   const d = dashboard.value
   if (!d) return []
   const plural = (n: number, one: string, many: string) => (n > 1 ? many : one)
-  const cards: TodoCard[] = [
+  const cards: TodoItem[] = [
     {
       key: 'pending',
       count: d.pending_orders,
@@ -115,7 +103,19 @@ const todos = computed<TodoCard[]>(() => {
       to: '/vendeur/produits?stock=low',
     },
   ]
-  return cards.filter((c) => c.count > 0)
+  const result = cards.filter((c) => (c.count ?? 0) > 0)
+  if (walletAvailable.value > 0) {
+    result.push({
+      key: 'wallet',
+      countLabel: formatGnf(walletAvailable.value),
+      title: 'disponibles',
+      text: 'Vos gains peuvent être retirés vers votre mobile money.',
+      icon: PhWallet,
+      hue: 150,
+      to: '/vendeur/gains',
+    })
+  }
+  return result
 })
 
 const statusMeta: Record<VendorStatus, { label: string; color: string }> = {
@@ -170,36 +170,10 @@ const tiles = computed(() => {
         </NuxtLink>
       </div>
 
-      <div v-if="todos.length" class="todo__grid">
-        <NuxtLink
-          v-for="card in todos"
-          :key="card.key"
-          :to="card.to"
-          class="todo-card"
-          :class="{ 'todo-card--urgent': card.urgent }"
-          :style="{ '--hue': card.hue }"
-        >
-          <span class="todo-card__icon"><component :is="card.icon" :size="20" weight="duotone" /></span>
-          <span class="todo-card__body">
-            <span class="todo-card__title"><strong>{{ card.count }}</strong> {{ card.title }}</span>
-            <span class="todo-card__text">{{ card.text }}</span>
-          </span>
-          <PhCaretRight :size="16" class="todo-card__go" />
-        </NuxtLink>
-      </div>
-      <div v-else class="todo__clear">
-        <PhConfetti :size="22" weight="duotone" />
-        <span><strong>Tout est à jour.</strong> Aucune commande ni aucun produit n'attend d'action.</span>
-      </div>
-
-      <NuxtLink v-if="walletAvailable > 0" to="/vendeur/gains" class="todo-card todo-card--money mt-2" style="--hue: 150">
-        <span class="todo-card__icon"><PhWallet :size="20" weight="duotone" /></span>
-        <span class="todo-card__body">
-          <span class="todo-card__title"><strong>{{ formatGnf(walletAvailable) }}</strong> disponibles</span>
-          <span class="todo-card__text">Vos gains peuvent être retirés vers votre mobile money.</span>
-        </span>
-        <PhCaretRight :size="16" class="todo-card__go" />
-      </NuxtLink>
+      <CommonTodoCards
+        :items="todos"
+        empty-text="Tout est à jour : aucune commande ni aucun produit n'attend d'action."
+      />
       <p v-if="dashboard.shipped_orders" class="todo__note">
         <PhCheckCircle :size="14" weight="fill" />
         {{ dashboard.shipped_orders }} colis en route vers {{ dashboard.shipped_orders > 1 ? 'leurs acheteurs' : 'son acheteur' }}.
@@ -367,93 +341,18 @@ const tiles = computed(() => {
   text-decoration: none;
 }
 
-.todo__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 8px;
-}
 
-.todo-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-divider);
-  background: var(--color-neutral-900);
-  color: inherit;
-  text-decoration: none;
-  transition: border-color 0.15s ease, transform 0.15s ease;
-}
 
-.todo-card:hover {
-  border-color: hsl(var(--hue) 60% 50%);
-  transform: translateY(-1px);
-}
 
-.todo-card--urgent {
-  border-left: 4px solid hsl(var(--hue) 70% 52%);
-}
 
-.todo-card__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 12px;
-  background: hsl(var(--hue) 70% var(--tint-bg));
-  color: hsl(var(--hue) 60% var(--tint-fg));
-}
 
-.todo-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
 
-.todo-card__title {
-  font-size: 14px;
-  color: var(--color-neutral-200);
-}
 
-.todo-card__title strong {
-  font-family: var(--font-heading);
-  font-size: 16px;
-  font-weight: 800;
-}
 
-.todo-card__text {
-  font-size: 12px;
-  color: var(--color-neutral-400);
-}
 
-.todo-card__go {
-  flex-shrink: 0;
-  color: var(--color-neutral-500);
-}
 
-.todo-card--money .todo-card__title strong {
-  color: hsl(150 55% var(--tint-fg));
-}
 
-.todo__clear {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  border-radius: var(--radius-md);
-  background: hsl(150 70% var(--tint-bg-soft));
-  color: hsl(150 55% var(--tint-fg));
-  font-size: 13px;
-}
 
-.todo__clear strong {
-  color: var(--color-neutral-200);
-}
 
 .todo__note {
   display: flex;
