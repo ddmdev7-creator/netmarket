@@ -14,6 +14,7 @@ import {
   PhStorefront,
   PhTag,
   PhTruck,
+  PhUserGear,
   PhUsers,
 } from '@phosphor-icons/vue'
 import type { Component } from 'vue'
@@ -57,6 +58,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/admin/livreurs', label: 'Livreurs', icon: PhMotorcycle, badge: (a) => a.pending_couriers, urgent: true },
       { to: '/admin/points-retrait', label: 'Points de retrait', icon: PhMapPin },
+      { to: '/admin/gestionnaires', label: 'Gestionnaires', icon: PhUserGear },
       { to: '/admin/candidatures', label: 'Candidatures', icon: PhClipboardText, badge: (a) => a.pending_applications, urgent: true },
       { to: '/admin/frais-livraison', label: 'Frais de livraison', icon: PhCurrencyCircleDollar },
     ],

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhCheckCircle, PhMapPin, PhPencilSimple, PhPlus, PhStorefront, PhTrash, PhUser, PhWarningCircle } from '@phosphor-icons/vue'
+import { PhCheckCircle, PhIdentificationCard, PhMapPin, PhPencilSimple, PhPlus, PhStorefront, PhTrash, PhUser, PhWarningCircle } from '@phosphor-icons/vue'
 import type { OverviewMapItem } from '~/components/admin/OverviewMap.vue'
 import type { PickupPointManagerAdminCreate, PickupPointManagerRead, PickupPointRead, UserRead, VendorRead } from '~/types/api'
 
@@ -425,7 +425,7 @@ async function removeManager(managerId: string) {
     <div v-if="view === 'list'" class="points-grid">
       <v-card v-for="p in points" :key="p.id" class="points-grid__card pa-3">
         <div class="d-flex justify-space-between align-center mb-1">
-          <span style="font-weight: 600">{{ p.name }}</span>
+          <NuxtLink :to="`/admin/points-retrait/${p.id}`" class="point-name-link">{{ p.name }}</NuxtLink>
           <v-chip :color="p.is_active ? 'success' : 'default'" size="x-small" variant="tonal">
             {{ p.is_active ? 'Actif' : 'Inactif' }}
           </v-chip>
@@ -441,6 +441,9 @@ async function removeManager(managerId: string) {
         <span v-else class="map-link map-link--off mb-3">Sans position GPS</span>
 
         <div class="d-flex ga-2 mb-3">
+          <v-btn :to="`/admin/points-retrait/${p.id}`" variant="tonal" color="primary" size="small">
+            <PhIdentificationCard :size="15" class="mr-1" /> Fiche
+          </v-btn>
           <v-btn variant="outlined" size="small" class="flex-grow-1" :loading="togglingId === p.id" @click="toggleActive(p)">
             {{ p.is_active ? 'Désactiver' : 'Activer' }}
           </v-btn>
@@ -598,6 +601,17 @@ async function removeManager(managerId: string) {
 </template>
 
 <style scoped>
+.point-name-link {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+.point-name-link:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
 .choice__hint {
   margin: 4px 2px 12px;
   font-size: 12px;

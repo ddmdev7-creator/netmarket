@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { PhEnvelopeSimple, PhKey, PhPhone, PhTrash } from '@phosphor-icons/vue'
+import {
+  PhIdentificationCard, PhEnvelopeSimple, PhKey, PhPhone, PhTrash } from '@phosphor-icons/vue'
 import type { UserRead, UserRole } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -151,7 +152,9 @@ async function resetPassword() {
           <span class="user-card__avatar" :style="{ background: roleAvatar[user.role] }">{{ initials(user) }}</span>
           <v-chip :color="roleMeta[user.role].color" size="x-small" variant="tonal">{{ roleMeta[user.role].label }}</v-chip>
         </header>
-        <div class="user-card__name" :title="displayName(user)">{{ displayName(user) }}</div>
+        <NuxtLink :to="`/admin/utilisateurs/${user.id}`" class="user-card__name user-card__link" :title="displayName(user)">
+          {{ displayName(user) }}
+        </NuxtLink>
         <div class="user-card__line"><PhPhone :size="13" /> {{ user.phone }}</div>
         <div class="user-card__line" :title="user.email ?? ''">
           <PhEnvelopeSimple :size="13" />
@@ -163,6 +166,9 @@ async function resetPassword() {
           <v-chip v-if="user.is_pickup_point_manager && user.role !== 'pickup_point_manager'" size="x-small" variant="tonal" color="secondary">Gère un point</v-chip>
         </div>
         <footer class="user-card__actions">
+          <v-btn variant="tonal" color="primary" size="small" :to="`/admin/utilisateurs/${user.id}`">
+            <PhIdentificationCard :size="15" class="mr-1" /> Fiche
+          </v-btn>
           <v-btn variant="text" size="small" @click="openResetPassword(user.id)">
             <PhKey :size="15" class="mr-1" /> Mot de passe
           </v-btn>
@@ -324,5 +330,14 @@ async function resetPassword() {
   margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid var(--color-divider);
+}
+
+.user-card__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.user-card__link:hover {
+  color: var(--color-primary-300);
 }
 </style>

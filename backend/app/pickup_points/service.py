@@ -48,6 +48,13 @@ async def admin_list_points(db: AsyncSession) -> list[PickupPoint]:
     return await _attach_ratings(db, points)
 
 
+async def admin_get_point(db: AsyncSession, point_id: uuid.UUID) -> PickupPoint:
+    point = await repository.get_by_id(db, point_id)
+    if point is None:
+        raise NotFoundError("Point de retrait introuvable.")
+    return (await _attach_ratings(db, [point]))[0]
+
+
 async def update_point(db: AsyncSession, point_id: uuid.UUID, data: PickupPointUpdate) -> PickupPoint:
     point = await repository.get_by_id(db, point_id)
     if point is None:

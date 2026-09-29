@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db, require_role
 from app.subscriptions import service
 from app.subscriptions.models import SubscriptionStatus
-from app.subscriptions.schemas import SubscribeRequest, SubscriptionPlanRead, VendorSubscriptionRead
+from app.subscriptions.schemas import (
+    AdminSubscriptionRead,
+    SubscribeRequest,
+    SubscriptionPlanRead,
+    VendorSubscriptionRead,
+)
 from app.users.models import User, UserRole
 from app.vendors import service as vendors_service
 
@@ -48,12 +53,12 @@ async def get_my_subscription(
     return await service.get_my_subscription(db, vendor)
 
 
-@admin_router.get("", response_model=list[VendorSubscriptionRead])
+@admin_router.get("", response_model=list[AdminSubscriptionRead])
 async def admin_list_subscriptions(
     status_filter: SubscriptionStatus | None = Query(default=None, alias="status"),
     db: AsyncSession = Depends(get_db),
-) -> list[VendorSubscriptionRead]:
-    return await service.list_by_status(db, status_filter)
+) -> list[AdminSubscriptionRead]:
+    return await service.admin_list(db, status_filter)
 
 
 @admin_router.post("/{subscription_id}/confirm", response_model=VendorSubscriptionRead)

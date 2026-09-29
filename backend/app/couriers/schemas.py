@@ -67,6 +67,11 @@ class CourierAdminUpdate(BaseModel):
     status: CourierStatus | None = None
     # Requis quand status == REJECTED — voir service.admin_update_courier.
     admin_note: str | None = Field(default=None, max_length=300)
+    # Correction de la fiche par l'admin (fiche livreur).
+    vehicle_type: VehicleType | None = None
+    vehicle_name: str | None = Field(default=None, max_length=150)
+    vehicle_plate_number: str | None = Field(default=None, max_length=50)
+    zone: str | None = Field(default=None, max_length=150)
 
 
 class CourierAvailabilityUpdate(BaseModel):

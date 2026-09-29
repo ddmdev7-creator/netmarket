@@ -94,6 +94,18 @@ export interface VendorSubscriptionRead {
   plan: SubscriptionPlanRead
 }
 
+export interface AdminSubscriptionRead extends VendorSubscriptionRead {
+  created_at: string
+  payment_reference: string | null
+  shop_name: string
+  vendor_zone: string | null
+  vendor_status: VendorStatus | null
+  owner_user_id: string | null
+  owner_full_name: string | null
+  owner_phone: string | null
+  owner_email: string | null
+}
+
 export interface AddressRead {
   id: string
   label: string
@@ -1255,4 +1267,87 @@ export interface AdminAttention {
   pending_orders: number
   unassigned_deliveries: number
   failed_refunds: number
+}
+
+// --- Fiches détaillées (admin) --------------------------------------------------
+
+export interface ProfileOrder {
+  id: string
+  status: OrderStatus
+  total: number
+  item_count: number
+  created_at: string
+}
+
+export interface ProfileDelivery {
+  sub_order_id: string
+  order_id: string
+  shop_name: string
+  status: OrderStatus
+  delivery_type: DeliveryType
+  delivery_fee: number
+  updated_at: string
+}
+
+export interface ProfileWallet {
+  available: number
+  pending: number
+  total: number
+}
+
+export interface AdminUserProfile {
+  id: string
+  phone: string
+  first_name: string | null
+  last_name: string | null
+  email: string | null
+  email_verified: boolean
+  role: UserRole
+  is_active: boolean
+  created_at: string
+  orders_count: number
+  orders_total: number
+  last_order_at: string | null
+  addresses: { label: string; zone: string; delivery_type: DeliveryType; is_default: boolean }[]
+  recent_orders: ProfileOrder[]
+  buyer_wallet: ProfileWallet | null
+  vendor: { id: string; shop_name: string; status: VendorStatus; zone: string | null } | null
+  courier: { id: string; status: CourierStatus; vehicle_type: string; is_online: boolean } | null
+  managed_point: { manager_id: string; pickup_point_id: string; name: string } | null
+}
+
+export interface AdminCourierProfile {
+  courier: CourierDetailRead
+  email: string | null
+  user_is_active: boolean
+  created_at: string
+  stats: { delivered: number; in_progress: number; cancelled: number; delivered_30d: number }
+  wallet: ProfileWallet | null
+  recent_deliveries: ProfileDelivery[]
+}
+
+export interface ManagerSummary {
+  id: string
+  user_id: string
+  phone: string
+  full_name: string | null
+  email: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface AdminPickupPointProfile {
+  point: PickupPointRead
+  managers: ManagerSummary[]
+  stats: { expected: number; in_stock: number; delivered: number; delivered_30d: number }
+  wallet: ProfileWallet | null
+  recent_parcels: ProfileDelivery[]
+}
+
+export interface AdminManagerOverview extends ManagerSummary {
+  pickup_point_id: string
+  pickup_point_name: string
+  pickup_point_is_active: boolean
+  parcels_in_stock: number
+  parcels_delivered: number
 }

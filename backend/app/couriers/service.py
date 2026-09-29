@@ -138,6 +138,13 @@ async def admin_list_couriers(db: AsyncSession, status: CourierStatus | None) ->
     return await _attach_ratings(db, couriers)
 
 
+async def admin_get_courier(db: AsyncSession, courier_id: uuid.UUID) -> Courier:
+    courier = await repository.get_by_id(db, courier_id)
+    if courier is None:
+        raise NotFoundError("Livreur introuvable.")
+    return (await _attach_ratings(db, [courier]))[0]
+
+
 async def admin_update_courier(db: AsyncSession, courier_id: uuid.UUID, data: CourierAdminUpdate) -> Courier:
     courier = await repository.get_by_id(db, courier_id)
     if courier is None:

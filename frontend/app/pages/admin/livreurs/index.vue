@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhImage, PhMagnifyingGlass, PhPlus, PhScales, PhStar, PhUserCircle } from '@phosphor-icons/vue'
+import { PhIdentificationCard, PhImage, PhMagnifyingGlass, PhPlus, PhScales, PhStar, PhUserCircle } from '@phosphor-icons/vue'
 import type { CourierAdminCreate, CourierDetailRead, CourierStatus } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -318,7 +318,7 @@ async function createCourier() {
             />
             <PhUserCircle v-else :size="18" color="var(--color-neutral-500)" />
           </div>
-          <span style="font-weight: 600">{{ courier.full_name ?? courier.phone }}</span>
+          <NuxtLink :to="`/admin/livreurs/${courier.id}`" class="courier-name-link">{{ courier.full_name ?? courier.phone }}</NuxtLink>
         </div>
         <v-chip :color="statusMeta[courier.status].color" size="small" variant="tonal">
           {{ statusMeta[courier.status].label }}
@@ -409,6 +409,9 @@ async function createCourier() {
       </div>
 
       <div class="d-flex ga-2">
+        <v-btn :to="`/admin/livreurs/${courier.id}`" variant="tonal" color="primary" size="small">
+          <PhIdentificationCard :size="16" class="mr-1" /> Fiche
+        </v-btn>
         <template v-if="courier.status === 'pending'">
           <v-btn color="primary" size="small" class="flex-grow-1" :loading="updatingId === courier.id" @click="update(courier, 'approved')">
             Approuver
@@ -520,6 +523,20 @@ async function createCourier() {
 </template>
 
 <style scoped>
+.courier-name-link {
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.courier-name-link:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
 /* Même recette que .sub-order-grid (pages/vendeur/commandes/index.vue) :
    une colonne pleine largeur reste illisible passé 960px sur .dashboard-shell
    (jusqu'à 1400px) — auto-fill plutôt qu'un nombre de colonnes fixe, pour

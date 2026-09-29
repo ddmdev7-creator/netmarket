@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.subscriptions import repository
+from app.subscriptions.schemas import AdminSubscriptionRead
 from app.subscriptions.models import SubscriptionPlan, SubscriptionStatus, VendorSubscription
 from app.vendors.models import Vendor
 
@@ -66,3 +67,35 @@ async def admin_cancel(db: AsyncSession, subscription_id: uuid.UUID) -> VendorSu
     subscription.status = SubscriptionStatus.CANCELLED
     await db.commit()
     return subscription
+
+
+async def admin_list(db: AsyncSession, status: SubscriptionStatus | None) -> list[AdminSubscriptionRead]:
+    """Liste admin enrichie de la boutique et de son propriétaire."""
+    from sqlalchemy import select
+
+    from app.users.models import User
+    from app.vendors.models import Vendor
+
+    subscriptions = await repository.list_by_status(db, status)
+    vendor_ids = {s.vendor_id for s in subscriptions}
+    rows = (
+        await db.execute(select(Vendor, User).join(User, User.id == Vendor.user_id).where(Vendor.id.in_(vendor_ids)))
+    ).all() if vendor_ids else []
+    owners = {vendor.id: (vendor, user) for vendor, user in rows}
+    result = []
+    for sub in subscriptions:
+        vendor, user = owners.get(sub.vendor_id, (None, None))
+        result.append(
+            AdminSubscriptionRead.model_validate(sub).model_copy(
+                update={
+                    "shop_name": vendor.shop_name if vendor else "Boutique supprimée",
+                    "vendor_zone": vendor.zone if vendor else None,
+                    "vendor_status": vendor.status.value if vendor else None,
+                    "owner_user_id": user.id if user else None,
+                    "owner_full_name": " ".join(filter(None, [user.first_name, user.last_name])) or None if user else None,
+                    "owner_phone": user.phone if user else None,
+                    "owner_email": user.email if user else None,
+                }
+            )
+        )
+    return result

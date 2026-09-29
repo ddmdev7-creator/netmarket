@@ -26,6 +26,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
@@ -684,3 +685,13 @@ async def update_earnings_settings(db: AsyncSession, data: EarningsSettingsUpdat
         setattr(settings_row, field, value)
     await db.commit()
     return settings_row
+
+
+async def get_wallet_balance(db: AsyncSession, kind: AccountKind, owner_id: uuid.UUID) -> WalletBalance | None:
+    """Solde d'un portefeuille bénéficiaire (fiches admin) ; None s'il n'existe pas encore."""
+    account = (
+        await db.execute(select(LedgerAccount).where(LedgerAccount.kind == kind, LedgerAccount.owner_id == owner_id))
+    ).scalar_one_or_none()
+    if account is None:
+        return None
+    return (await _balances(db, [account]))[account.id]
