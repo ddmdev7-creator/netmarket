@@ -81,8 +81,8 @@ const deliveryWindow = computed(() =>
     <li class="trust__item">
       <span class="trust__icon" style="--hue: 35"><PhHandCoins :size="18" weight="duotone" /></span>
       <span class="trust__text">
-        <strong>Paiement à la livraison ou mobile money</strong>
-        <span>Payez en espèces à la réception, ou en ligne</span>
+        <strong>Paiement sécurisé en ligne</strong>
+        <span>Mobile money, carte ou solde NdjouriBank</span>
       </span>
     </li>
     <li class="trust__item">

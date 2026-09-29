@@ -206,6 +206,10 @@ async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteReques
 
 
 async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> Order:
+    if data.payment_method == PaymentMethod.CASH_ON_DELIVERY and not (
+        await payments_repository.get_settings(db)
+    ).cash_on_delivery_enabled:
+        raise ConflictError("Le paiement à la livraison n'est plus proposé : payez en ligne ou avec NdjouriBank.")
     rows = await _load_checkout_rows(db, user)
 
     for cart_item, product, variant, _vendor in rows:

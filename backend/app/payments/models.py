@@ -92,6 +92,11 @@ class PaymentSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # plus de recharge ni de remboursement sur le solde, mais un solde
     # existant reste utilisable pour payer (l'argent n'est jamais bloqué).
     buyer_wallet_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Paiement en espèces à la livraison proposé au checkout. Fermé par défaut
+    # depuis 2026-09-29 (risque de confier de grosses sommes aux livreurs) :
+    # seuls le paiement en ligne et NdjouriBank restent ; les commandes déjà
+    # passées en espèces vont au bout normalement.
+    cash_on_delivery_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     wallet_topup_min: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
     wallet_topup_max: Mapped[int] = mapped_column(Integer, nullable=False, default=2_000_000)
     # Plafond du solde d'un acheteur (monnaie électronique : limite le risque).

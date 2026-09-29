@@ -7,8 +7,8 @@ import { PhHandCoins, PhMapPinArea, PhSealCheck } from '@phosphor-icons/vue'
 const slides = [
   {
     icon: PhHandCoins,
-    title: 'Payez comme vous voulez',
-    text: 'Mobile money en ligne ou en espèces à la livraison.',
+    title: 'Paiement 100 % sécurisé',
+    text: 'Mobile money, carte ou solde NdjouriBank — remboursé si vous annulez.',
     from: '#0a66f5',
     to: '#4f46e5',
   },

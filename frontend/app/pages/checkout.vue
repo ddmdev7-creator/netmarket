@@ -14,7 +14,14 @@ import {
   PhWallet,
 } from '@phosphor-icons/vue'
 import type { AddressFormValues } from '~/components/address/AddressForm.vue'
-import type { AddressRead, BuyerWalletRead, DeliveryQuoteRead, OrderRead, PaymentMethod } from '~/types/api'
+import type {
+  AddressRead,
+  BuyerWalletRead,
+  DeliveryQuoteRead,
+  OrderRead,
+  PaymentMethod,
+  PaymentOptionsRead,
+} from '~/types/api'
 
 definePageMeta({ middleware: 'auth', layout: 'blank' })
 
@@ -66,10 +73,16 @@ const saveNewAddress = ref(true)
 const submitting = ref(false)
 const confirmedOrder = ref<OrderRead | null>(null)
 
-// Paiement à la livraison par défaut, sauf si l'acheteur a choisi autre
-// chose à sa dernière commande (mémorisé sur l'appareil).
+// Moyens proposés (réglage admin) : le paiement à la livraison peut être fermé.
+const { data: paymentOptions } = await useAsyncData('checkout-payment-options', () =>
+  apiFetch<PaymentOptionsRead>('/payments/options').catch(() => null),
+)
+const codAvailable = computed(() => paymentOptions.value?.cash_on_delivery ?? false)
+
+// Paiement en ligne par défaut (ou à la livraison si c'est encore proposé),
+// sauf si l'acheteur a choisi autre chose à sa dernière commande.
 const LAST_PAYMENT_KEY = 'nm-last-payment'
-const paymentMethod = ref<PaymentMethod>('cash_on_delivery')
+const paymentMethod = ref<PaymentMethod>(codAvailable.value ? 'cash_on_delivery' : 'online')
 const payerPhone = ref(auth.user?.phone ?? '')
 
 // Solde NdjouriBank : option proposée si le service est ouvert ou s'il reste
@@ -78,7 +91,7 @@ const buyerWallet = ref<BuyerWalletRead | null>(null)
 onMounted(async () => {
   try {
     const last = localStorage.getItem(LAST_PAYMENT_KEY)
-    if (last === 'online' || last === 'cash_on_delivery') paymentMethod.value = last
+    if (last === 'online' || (last === 'cash_on_delivery' && codAvailable.value)) paymentMethod.value = last
   } catch {
     // Stockage indisponible : on garde le défaut.
   }
@@ -141,7 +154,7 @@ const walletShortfall = computed(() =>
 // Solde devenu insuffisant (frais de livraison ajoutés au devis) : on ne
 // laisse pas l'option sélectionnée.
 watch(walletShortfall, (shortfall) => {
-  if (shortfall > 0 && paymentMethod.value === 'wallet') paymentMethod.value = 'cash_on_delivery'
+  if (shortfall > 0 && paymentMethod.value === 'wallet') paymentMethod.value = codAvailable.value ? 'cash_on_delivery' : 'online'
 })
 
 function deliveryFeeFor(vendorId: string): number | null {
@@ -290,7 +303,7 @@ const addressSummary = computed(() => {
   return { label: a.label, zone: zoneText(a) || 'Zone non précisée', pickup: a.delivery_type === 'pickup_point', recipient: a.recipient_name }
 })
 
-const PAYMENT_OPTIONS: { value: PaymentMethod; title: string; text: string; icon: object; hue: number }[] = [
+const ALL_PAYMENT_OPTIONS: { value: PaymentMethod; title: string; text: string; icon: object; hue: number }[] = [
   {
     value: 'cash_on_delivery',
     title: 'Paiement à la livraison',
@@ -306,10 +319,13 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; title: string; text: string; icon
     hue: 30,
   },
 ]
+const PAYMENT_OPTIONS = computed(() =>
+  ALL_PAYMENT_OPTIONS.filter((o) => o.value !== 'cash_on_delivery' || codAvailable.value),
+)
 
 const paymentSummary = computed(() => {
   if (paymentMethod.value === 'wallet') return { title: 'Solde NdjouriBank', text: 'Débité à la confirmation' }
-  const option = PAYMENT_OPTIONS.find((o) => o.value === paymentMethod.value)!
+  const option = ALL_PAYMENT_OPTIONS.find((o) => o.value === paymentMethod.value)!
   return {
     title: option.title,
     text: paymentMethod.value === 'online' ? `Numéro qui paie : ${payerPhone.value.trim()}` : option.text,

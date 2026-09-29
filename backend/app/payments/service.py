@@ -155,11 +155,25 @@ async def get_refund_settings(db: AsyncSession) -> PaymentSettings:
     return await repository.get_settings(db)
 
 
-async def update_refund_delay(db: AsyncSession, refund_delay_hours: int) -> PaymentSettings:
+async def update_payment_settings(
+    db: AsyncSession, *, refund_delay_hours: int | None, cash_on_delivery_enabled: bool | None
+) -> PaymentSettings:
     settings_row = await repository.get_settings(db)
-    settings_row.refund_delay_hours = refund_delay_hours
+    if refund_delay_hours is not None:
+        settings_row.refund_delay_hours = refund_delay_hours
+    if cash_on_delivery_enabled is not None:
+        settings_row.cash_on_delivery_enabled = cash_on_delivery_enabled
     await db.commit()
     return settings_row
+
+
+async def get_payment_options(db: AsyncSession) -> dict:
+    settings_row = await repository.get_settings(db)
+    return {
+        "cash_on_delivery": settings_row.cash_on_delivery_enabled,
+        "online": True,
+        "wallet": settings_row.buyer_wallet_enabled,
+    }
 
 
 async def sync_pending_payment(db: AsyncSession, order: Order) -> None:

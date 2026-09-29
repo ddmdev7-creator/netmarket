@@ -26,7 +26,7 @@ from app.core.deps import get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.orders.models import Order, OrderItem, SubOrder  # noqa: F401
-from app.payments.models import Payment  # noqa: F401
+from app.payments.models import Payment, PaymentSettings  # noqa: F401
 from app.pickup_point_applications.models import PickupPointApplication  # noqa: F401
 from app.pickup_point_managers.models import PickupPointManager  # noqa: F401
 from app.pickup_points.models import PickupPoint  # noqa: F401
@@ -70,6 +70,11 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     connection = await engine.connect()
     outer_transaction = await connection.begin()
     session = AsyncSession(bind=connection, join_transaction_mode="create_savepoint", expire_on_commit=False)
+    # Le paiement à la livraison est fermé par défaut en prod, mais la plupart
+    # des tests historiques passent commande ainsi : on l'ouvre ici (voir
+    # tests/test_payment_options.py pour le cas fermé).
+    session.add(PaymentSettings(refund_delay_hours=48, cash_on_delivery_enabled=True))
+    await session.flush()
     try:
         yield session
     finally:

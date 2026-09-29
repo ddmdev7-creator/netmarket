@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db, require_role
 from app.payments import djomy_client, service
-from app.payments.schemas import PaymentSettingsRead, PaymentSettingsUpdate
+from app.payments.schemas import PaymentOptionsRead, PaymentSettingsRead, PaymentSettingsUpdate
 from app.users.models import UserRole
 from app.wallets import buyer_service
 from app.wallets import service as wallets_service
@@ -31,7 +31,15 @@ async def admin_get_payment_settings(db: AsyncSession = Depends(get_db)) -> Paym
 async def admin_update_payment_settings(
     payload: PaymentSettingsUpdate, db: AsyncSession = Depends(get_db)
 ) -> PaymentSettingsRead:
-    return await service.update_refund_delay(db, payload.refund_delay_hours)
+    return await service.update_payment_settings(
+        db, refund_delay_hours=payload.refund_delay_hours, cash_on_delivery_enabled=payload.cash_on_delivery_enabled
+    )
+
+
+@router.get("/options", response_model=PaymentOptionsRead)
+async def payment_options(db: AsyncSession = Depends(get_db)) -> PaymentOptionsRead:
+    """Moyens de paiement proposés au checkout."""
+    return PaymentOptionsRead(**await service.get_payment_options(db))
 
 
 @router.post("/webhooks/djomy")

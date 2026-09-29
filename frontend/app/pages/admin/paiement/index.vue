@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhClockCounterClockwise } from '@phosphor-icons/vue'
+import { PhClockCounterClockwise, PhMoney } from '@phosphor-icons/vue'
 import type { PaymentSettingsRead } from '~/types/api'
 
 definePageMeta({ middleware: 'admin', layout: 'admin' })
@@ -14,6 +14,22 @@ const { data: settings, refresh } = await useAsyncData(
 
 const refundDelayHours = ref(String(settings.value?.refund_delay_hours ?? 48))
 const saving = ref(false)
+
+const codEnabled = ref(settings.value?.cash_on_delivery_enabled ?? false)
+const savingCod = ref(false)
+async function toggleCod(value: boolean | null) {
+  savingCod.value = true
+  try {
+    await apiFetch('/admin/payment-settings', { method: 'PATCH', body: { cash_on_delivery_enabled: !!value } })
+    codEnabled.value = !!value
+    toast.success(value ? 'Paiement à la livraison proposé aux acheteurs.' : 'Paiement à la livraison retiré du checkout.')
+  } catch (e) {
+    codEnabled.value = !value
+    toast.error(apiErrorMessage(e, 'Impossible d’enregistrer ce réglage.'))
+  } finally {
+    savingCod.value = false
+  }
+}
 
 async function save() {
   const hours = Number(refundDelayHours.value)
@@ -43,6 +59,27 @@ async function save() {
       ci-dessous est purement informatif — Djomy ne le garantit pas — et sert uniquement à fixer les attentes de
       l'acheteur.
     </p>
+
+    <v-card class="pa-4 mb-4" max-width="420">
+      <div class="d-flex align-center ga-2 mb-2">
+        <PhMoney :size="20" color="var(--color-primary)" />
+        <span style="font-weight: 600">Paiement à la livraison (espèces)</span>
+      </div>
+      <v-switch
+        :model-value="codEnabled"
+        color="primary"
+        inset
+        hide-details
+        :loading="savingCod"
+        :disabled="savingCod"
+        :label="codEnabled ? 'Proposé aux acheteurs' : 'Désactivé — paiement en ligne ou NdjouriBank uniquement'"
+        @update:model-value="toggleCod"
+      />
+      <p class="text-muted mt-2 mb-0" style="font-size: 11.5px">
+        Désactivé, les nouvelles commandes se paient en ligne (mobile money, carte) ou avec le solde NdjouriBank :
+        aucun livreur ne transporte d'argent. Les commandes déjà passées en espèces vont au bout normalement.
+      </p>
+    </v-card>
 
     <v-card class="pa-4" max-width="420">
       <div class="d-flex align-center ga-2 mb-3">

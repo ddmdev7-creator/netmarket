@@ -660,6 +660,15 @@ export type DeliveryFeeTierUpdate = Partial<DeliveryFeeTierCreate>
 /** GET/PATCH /admin/payment-settings — informational delay shown to the buyer after a refund is initiated (see PaymentStatus 'refund_pending'). */
 export interface PaymentSettingsRead {
   refund_delay_hours: number
+  /** Paiement en espèces à la livraison proposé au checkout (fermé par défaut). */
+  cash_on_delivery_enabled: boolean
+}
+
+/** GET /payments/options — moyens de paiement proposés au checkout. */
+export interface PaymentOptionsRead {
+  cash_on_delivery: boolean
+  online: boolean
+  wallet: boolean
 }
 
 export interface PaymentSettingsUpdate {
