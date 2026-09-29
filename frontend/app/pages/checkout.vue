@@ -84,6 +84,10 @@ const codAvailable = computed(() => paymentOptions.value?.cash_on_delivery ?? fa
 const LAST_PAYMENT_KEY = 'nm-last-payment'
 const paymentMethod = ref<PaymentMethod>(codAvailable.value ? 'cash_on_delivery' : 'online')
 const payerPhone = ref(auth.user?.phone ?? '')
+// Après un rechargement complet, le profil n'est pas encore chargé : on le
+// récupère pour préremplir le numéro qui paie (toujours modifiable).
+if (!auth.user) await auth.fetchMe()
+if (!payerPhone.value && auth.user?.phone) payerPhone.value = auth.user.phone
 
 // Solde NdjouriBank : option proposée si le service est ouvert ou s'il reste
 // un solde à dépenser. Chargé sans bloquer la page.
