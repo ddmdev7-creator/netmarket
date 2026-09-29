@@ -57,6 +57,30 @@ async def mark_all_read(current_user: User = Depends(get_current_user), db: Asyn
     return Message(detail="Notifications marquées comme lues.")
 
 
+@router.delete("/{notification_id}", response_model=Message)
+async def delete_notification(
+    notification_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Message:
+    notification = await repository.get_by_id(db, notification_id)
+    if notification is None or notification.user_id != current_user.id:
+        raise NotFoundError("Notification introuvable.")
+    await db.delete(notification)
+    await db.commit()
+    return Message(detail="Notification supprimée.")
+
+
+@router.delete("", response_model=Message)
+async def delete_read_notifications(
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> Message:
+    """Vide les notifications déjà lues (les non lues sont conservées)."""
+    count = await repository.delete_read(db, current_user.id)
+    await db.commit()
+    return Message(detail=f"{count} notification(s) supprimée(s).")
+
+
 async def _authenticate_ws(token: str) -> User | None:
     try:
         payload = decode_token(token, TokenType.ACCESS)

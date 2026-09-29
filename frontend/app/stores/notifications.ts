@@ -88,6 +88,28 @@ export const useNotificationStore = defineStore('notifications', () => {
     }
   }
 
+  async function remove(id: string) {
+    const target = items.value.find((n) => n.id === id)
+    items.value = items.value.filter((n) => n.id !== id)
+    if (target && !target.read_at) unreadCount.value = Math.max(0, unreadCount.value - 1)
+    const { apiFetch } = useApi()
+    try {
+      await apiFetch(`/notifications/${id}`, { method: 'DELETE' })
+    } catch {
+      await fetchInitial()
+    }
+  }
+
+  async function clearRead() {
+    items.value = items.value.filter((n) => !n.read_at)
+    const { apiFetch } = useApi()
+    try {
+      await apiFetch('/notifications', { method: 'DELETE' })
+    } catch {
+      await fetchInitial()
+    }
+  }
+
   async function markAllRead() {
     const hadUnread = unreadCount.value > 0
     items.value = items.value.map((n) => ({ ...n, read_at: n.read_at ?? new Date().toISOString() }))
@@ -192,6 +214,8 @@ export const useNotificationStore = defineStore('notifications', () => {
     fetchInitial,
     markRead,
     markAllRead,
+    remove,
+    clearRead,
     clearDeliveryRequest,
     connect,
     disconnect,

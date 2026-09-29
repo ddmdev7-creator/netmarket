@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.notifications.models import Notification
@@ -48,3 +48,10 @@ async def mark_all_read(db: AsyncSession, user_id: uuid.UUID) -> None:
         .where(Notification.user_id == user_id, Notification.read_at.is_(None))
         .values(read_at=datetime.now(timezone.utc))
     )
+
+
+async def delete_read(db: AsyncSession, user_id: uuid.UUID) -> int:
+    result = await db.execute(
+        delete(Notification).where(Notification.user_id == user_id, Notification.read_at.is_not(None))
+    )
+    return result.rowcount or 0

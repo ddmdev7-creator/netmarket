@@ -283,3 +283,24 @@ async def test_mark_all_read(
     assert response.status_code == 200
 
     assert (await client.get("/notifications", headers=auth_headers(buyer_user))).json()["unread_count"] == 0
+
+
+async def test_delete_one_and_clear_read_notifications(
+    client: AsyncClient, db_session: AsyncSession, buyer_user: User
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.notifications.models import Notification, NotificationType
+
+    read = Notification(user_id=buyer_user.id, type=NotificationType.CART_REMINDER, title="A", body="a", read_at=datetime.now(UTC))
+    unread = Notification(user_id=buyer_user.id, type=NotificationType.CART_REMINDER, title="B", body="b")
+    other = Notification(user_id=buyer_user.id, type=NotificationType.CART_REMINDER, title="C", body="c")
+    db_session.add_all([read, unread, other])
+    await db_session.flush()
+    headers = auth_headers(buyer_user)
+
+    assert (await client.delete(f"/notifications/{other.id}", headers=headers)).status_code == 200
+    assert (await client.delete("/notifications", headers=headers)).status_code == 200
+
+    titles = [n["title"] for n in (await client.get("/notifications", headers=headers)).json()["items"]]
+    assert titles == ["B"]
