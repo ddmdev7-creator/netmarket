@@ -23,6 +23,7 @@ from app.notifications.ws_manager import manager as ws_manager
 from app.orders import repository
 from app.orders.models import DeliveryType, Order, OrderStatus, SubOrder
 from app.pickup_points.models import PickupPoint
+from app.routing import service as routing_service
 from app.users.models import User, UserRole
 from app.vendors.models import Vendor
 
@@ -49,6 +50,7 @@ async def update_position(db: AsyncSession, user: User, latitude: float, longitu
     courier.longitude = longitude
     courier.position_updated_at = now
 
+    admin_ids = (await db.execute(select(User.id).where(User.role == UserRole.ADMIN, User.is_active.is_(True)))).scalars().all()
     rows = (
         await db.execute(
             select(SubOrder.id, Order.user_id, Order.id)
@@ -59,20 +61,20 @@ async def update_position(db: AsyncSession, user: User, latitude: float, longitu
     await db.commit()
 
     for sub_order_id, buyer_id, order_id in rows:
-        try:
-            await ws_manager.send_to_user(
-                buyer_id,
-                {
-                    "type": "courier_position",
-                    "sub_order_id": str(sub_order_id),
-                    "order_id": str(order_id),
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "at": now.isoformat(),
-                },
-            )
-        except Exception:  # noqa: BLE001 - la relecture périodique rattrape un envoi perdu
-            logger.info("Position non poussée pour la sous-commande %s", sub_order_id, exc_info=True)
+        payload = {
+            "type": "courier_position",
+            "sub_order_id": str(sub_order_id),
+            "order_id": str(order_id),
+            "latitude": latitude,
+            "longitude": longitude,
+            "at": now.isoformat(),
+        }
+        # L'acheteur du colis, et les administrateurs (carte du suivi des livraisons).
+        for recipient in (buyer_id, *admin_ids):
+            try:
+                await ws_manager.send_to_user(recipient, payload)
+            except Exception:  # noqa: BLE001 - la relecture périodique rattrape un envoi perdu
+                logger.info("Position non poussée pour la sous-commande %s", sub_order_id, exc_info=True)
     return len(rows)
 
 
@@ -104,6 +106,17 @@ async def get_tracking(db: AsyncSession, user: User, sub_order_id: uuid.UUID) ->
     distance = None
     if live and None not in destination:
         distance = round(haversine_km(courier.latitude, courier.longitude, *destination), 1)
+
+    # Trajet routier : du livreur à la destination pendant la course, sinon
+    # de la boutique à la destination (aperçu avant l'expédition).
+    route = None
+    if sub_order.status not in (OrderStatus.DELIVERED, OrderStatus.CANCELLED) and None not in destination:
+        start = (courier.latitude, courier.longitude) if live else origin
+        if None not in start:
+            route = await routing_service.get_route([start, destination])
+    if route and live:
+        distance = route["distance_km"]
+    eta = route["duration_min"] if route and live else (eta_minutes(distance) if distance is not None else None)
     return {
         "sub_order_id": sub_order.id,
         "status": sub_order.status,
@@ -116,5 +129,6 @@ async def get_tracking(db: AsyncSession, user: User, sub_order_id: uuid.UUID) ->
         "courier_longitude": courier.longitude if live else None,
         "courier_position_at": courier.position_updated_at if live else None,
         "distance_km": distance,
-        "eta_minutes": eta_minutes(distance) if distance is not None else None,
+        "eta_minutes": eta,
+        "route": route,
     }

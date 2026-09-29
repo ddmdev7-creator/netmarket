@@ -153,7 +153,7 @@ function placeMarker(lngLat: [number, number]) {
 }
 
 onMounted(async () => {
-  maplibregl = await import('maplibre-gl')
+  maplibregl = await loadMapLibre()
   if (!mapContainer.value) return
 
   const hasPosition = props.latitude !== null && props.longitude !== null

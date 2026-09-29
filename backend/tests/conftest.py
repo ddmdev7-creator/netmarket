@@ -11,6 +11,7 @@ import os
 import uuid
 from collections.abc import AsyncGenerator
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -63,6 +64,16 @@ async def _prepare_database() -> AsyncGenerator[None, None]:
         await conn.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _no_external_routing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Jamais d'appel au serveur d'itinéraires pendant les tests : pas de trajet."""
+
+    async def _no_route(points):  # noqa: ARG001
+        return None
+
+    monkeypatch.setattr("app.routing.service.get_route", _no_route)
 
 
 @pytest_asyncio.fixture

@@ -240,6 +240,19 @@ function progressPct(order: OrderRead): number {
   return Math.round((rank / last) * 100)
 }
 
+const STEP_LABELS: Record<OrderStatus, string> = {
+  pending: 'Commande reçue',
+  confirmed: 'Confirmée',
+  preparing: 'En préparation',
+  shipped: 'En route',
+  arrived_at_pickup_point: 'Au point de retrait',
+  delivered: 'Livrée',
+  cancelled: 'Annulée',
+}
+function progressLabel(order: OrderRead): string {
+  return STEP_LABELS[order.status]
+}
+
 // Ce que l'acheteur a à faire (ou à savoir) tout de suite, sur la carte.
 function orderAction(order: OrderRead): { text: string; icon: object; tone: string } | null {
   if (order.sub_orders.some((so) => so.handoff_ready)) {
@@ -437,7 +450,7 @@ const statusAccent: Record<OrderStatus, string> = {
       >
         <div class="order-card__head">
           <div>
-            <div class="order-card__id">{{ shortId(order.id) }}</div>
+            <OrderNumber :id="order.id" class="order-card__id" />
             <div class="order-card__date">{{ formatDate(order.created_at) }}</div>
           </div>
           <StatusBadge :status="order.status" />
@@ -460,8 +473,14 @@ const statusAccent: Record<OrderStatus, string> = {
 
         <div class="order-card__title">{{ orderTitle(order) }}</div>
 
-        <div v-if="order.status !== 'cancelled'" class="order-card__progress" :aria-label="`Progression : ${progressPct(order)} %`">
-          <span :style="{ width: `${progressPct(order)}%` }" />
+        <div v-if="order.status !== 'cancelled'" class="order-card__progress-wrap">
+          <div class="order-card__progress-label">
+            <span>{{ progressLabel(order) }}</span>
+            <span>{{ progressPct(order) }} %</span>
+          </div>
+          <div class="order-card__progress" :aria-label="`Progression : ${progressPct(order)} %`">
+            <span :style="{ width: `${Math.max(progressPct(order), 6)}%` }" />
+          </div>
         </div>
         <div v-if="orderAction(order)" class="order-card__action" :class="`order-card__action--${orderAction(order)!.tone}`">
           <component :is="orderAction(order)!.icon" :size="15" weight="bold" />
@@ -491,7 +510,10 @@ const statusAccent: Record<OrderStatus, string> = {
             <div class="order-card__total-label">Total</div>
             <div class="order-card__total">{{ formatGnf(order.total) }}</div>
           </div>
-          <span class="order-card__cta">Détails <PhArrowRight :size="14" weight="bold" /></span>
+          <span class="order-card__cta">
+            {{ ['delivered', 'cancelled'].includes(order.status) ? 'Détails' : 'Suivre' }}
+            <PhArrowRight :size="14" weight="bold" />
+          </span>
         </div>
       </NuxtLink>
     </div>
@@ -912,13 +934,14 @@ const statusAccent: Record<OrderStatus, string> = {
 }
 
 .order-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 16px;
+  overflow: hidden;
   background: var(--color-neutral-900);
   border: 1px solid var(--color-divider);
-  border-top: 3px solid var(--accent);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   color: var(--color-neutral-200);
@@ -926,11 +949,33 @@ const statusAccent: Record<OrderStatus, string> = {
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
+/* Liseré de statut à gauche + halo discret en haut de la carte. */
+.order-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--accent);
+}
+
+.order-card::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 70px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent);
+  pointer-events: none;
+}
+
+.order-card > * {
+  position: relative;
+  z-index: 1;
+}
+
 .order-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--color-divider-strong);
-  border-top-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--color-divider));
 }
 
 .order-card:focus-visible {
@@ -946,11 +991,7 @@ const statusAccent: Record<OrderStatus, string> = {
 }
 
 .order-card__id {
-  font-family: var(--font-heading);
-  font-size: 15.5px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--color-neutral-200);
+  font-size: 16.5px;
 }
 
 .order-card__date {
@@ -959,22 +1000,29 @@ const statusAccent: Record<OrderStatus, string> = {
   color: var(--color-neutral-400);
 }
 
+/* Vignettes qui se chevauchent légèrement, comme une pile de colis. */
 .order-card__thumbs {
   display: flex;
-  gap: 8px;
+  padding-left: 2px;
 }
 
 .thumb {
-  width: 52px;
-  height: 52px;
+  width: 60px;
+  height: 60px;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-sm);
+  margin-left: -10px;
+  border: 2px solid var(--color-neutral-900);
+  border-radius: 14px;
   background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.thumb:first-child {
+  margin-left: 0;
 }
 
 .thumb img {
@@ -1065,10 +1113,38 @@ const statusAccent: Record<OrderStatus, string> = {
 .order-card__cta {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--color-primary-100);
   font-size: 13px;
   font-weight: 700;
   color: var(--color-primary-300);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.order-card:hover .order-card__cta {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.order-card__progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.order-card__progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-neutral-300);
+}
+
+.order-card__progress-label span:last-child {
+  color: var(--color-neutral-500);
+  font-variant-numeric: tabular-nums;
 }
 
 .order-card:hover .order-card__cta svg {

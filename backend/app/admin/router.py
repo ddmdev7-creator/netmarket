@@ -32,9 +32,12 @@ async def list_active_deliveries(db: AsyncSession = Depends(get_db)) -> list[Act
 
 
 @router.get("/deliveries/monitor", response_model=DeliveryMonitorRead)
-async def get_delivery_monitor(db: AsyncSession = Depends(get_db)) -> DeliveryMonitorRead:
+async def get_delivery_monitor(
+    with_routes: bool = Query(default=False, description="Ajouter le trajet routier de chaque livraison en cours"),
+    db: AsyncSession = Depends(get_db),
+) -> DeliveryMonitorRead:
     """Écran de suivi des livraisons, rafraîchi en continu par le front."""
-    return await service.get_delivery_monitor(db)
+    return await service.get_delivery_monitor(db, with_routes=with_routes)
 
 
 @router.get("/orders", response_model=Page[OrderRead])

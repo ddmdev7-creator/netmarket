@@ -177,9 +177,20 @@ MONITORED_STATUSES = (*ACTIVE_DELIVERY_STATUSES, OrderStatus.ARRIVED_AT_PICKUP_P
 
 
 async def list_monitored_deliveries(db: AsyncSession, since: datetime) -> list[tuple]:
-    """(SubOrder, Order, buyer User | None, vendor zone, pickup point name)."""
+    """(SubOrder, Order, buyer User | None, vendor zone, pickup point name,
+    vendor lat, vendor lng, pickup point lat, pickup point lng)."""
     stmt = (
-        select(SubOrder, Order, User, Vendor.zone, PickupPoint.name)
+        select(
+            SubOrder,
+            Order,
+            User,
+            Vendor.zone,
+            PickupPoint.name,
+            Vendor.latitude,
+            Vendor.longitude,
+            PickupPoint.latitude,
+            PickupPoint.longitude,
+        )
         .join(Order, SubOrder.order_id == Order.id)
         .join(Vendor, SubOrder.vendor_id == Vendor.id)
         .outerjoin(User, Order.user_id == User.id)

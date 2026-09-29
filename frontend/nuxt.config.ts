@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { daylightTheme } from './app/theme/daylight'
 import { nocturneTheme } from './app/theme/nocturne'
 
@@ -9,6 +10,20 @@ export default defineNuxtConfig({
   modules: ['vuetify-nuxt-module', '@pinia/nuxt', '@vite-pwa/nuxt'],
 
   css: ['~/assets/styles/main.css'],
+
+  // Worker de MapLibre (fonds vectoriels, tracés GeoJSON) : Vite ne le publie
+  // pas avec le reste du bundle, il était donc introuvable (404) en prod et
+  // ces couches ne s'affichaient jamais. Servi tel quel sous /maplibre (voir
+  // utils/maplibre.ts, qui indique cette adresse à la bibliothèque).
+  nitro: {
+    publicAssets: [
+      {
+        dir: fileURLToPath(new URL('./node_modules/maplibre-gl/dist', import.meta.url)),
+        baseURL: '/maplibre',
+        maxAge: 60 * 60 * 24 * 30,
+      },
+    ],
+  },
 
   app: {
     head: {

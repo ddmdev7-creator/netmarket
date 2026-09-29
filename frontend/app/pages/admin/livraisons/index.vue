@@ -32,9 +32,15 @@ const { apiFetch } = useApi()
 
 // lazy : la page s'affiche tout de suite, avec une boîte de chargement
 // (voir loadingDialog) plutôt qu'une navigation figée le temps de la requête.
+const view = ref<'list' | 'map'>('list')
+
+// Les trajets routiers ne sont demandés que pour la vue Carte (plus lourds).
 const { data, pending, error, refresh } = await useAsyncData(
   'admin-delivery-monitor',
-  () => apiFetch<DeliveryMonitorRead>('/admin/deliveries/monitor'),
+  () =>
+    apiFetch<DeliveryMonitorRead>('/admin/deliveries/monitor', {
+      query: { with_routes: view.value === 'map' ? true : undefined },
+    }),
   { getCachedData: hydrateThenRefetch, lazy: true },
 )
 
@@ -51,7 +57,7 @@ async function refreshNow() {
   }
 }
 
-const view = ref<'list' | 'map'>('list')
+watch(view, () => refresh())
 
 // --- Étapes ------------------------------------------------------------------
 
@@ -287,7 +293,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <template v-if="view === 'list'">
       <div class="kpis mb-4">
         <button
           v-for="s in STAGES"
@@ -322,6 +327,7 @@ onBeforeUnmount(() => {
         class="mb-4"
       />
 
+    <template v-if="view === 'list'">
       <CommonEmptyState
         v-if="data && !counts.active && !counts.byStage.delivered"
         message="Aucune livraison en cours ni terminée aujourd'hui."
@@ -414,7 +420,7 @@ onBeforeUnmount(() => {
       </TransitionGroup>
     </template>
 
-    <AdminCourierDeliveriesMap v-else />
+    <AdminDeliveryLiveMap v-else :rows="visibleRows" :stage-meta="stageMeta" />
   </div>
 </template>
 

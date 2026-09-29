@@ -239,7 +239,7 @@ function refreshLines() {
 const itemsKey = computed(() => props.items.map((item) => item.id).join('|'))
 
 onMounted(async () => {
-  maplibregl = await import('maplibre-gl')
+  maplibregl = await loadMapLibre()
   if (!mapContainer.value) return
 
   try {

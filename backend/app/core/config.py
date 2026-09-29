@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # app/payments/provider.py::DjomyProvider) — jamais utilisée pour un appel
     # serveur, seulement pour composer un lien renvoyé au navigateur.
     frontend_url: str = "https://netmarket.ndjouri.com"
+    # Serveur OSRM pour tracer les trajets de livraison (app/routing).
+    routing_url: str = "https://router.project-osrm.org"
 
     # Paiement en ligne via Djomy (https://developers.djomy.africa) — voir
     # app/payments/djomy_client.py. Sans clé, seul CashOnDeliveryProvider

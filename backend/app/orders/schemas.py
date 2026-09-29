@@ -453,3 +453,6 @@ class SubOrderTrackingRead(BaseModel):
     courier_position_at: datetime | None
     distance_km: float | None
     eta_minutes: int | None
+    # Trajet routier ({coordinates: [[lng, lat]…], distance_km, duration_min}),
+    # livreur → destination pendant la course, sinon boutique → destination.
+    route: dict | None = None

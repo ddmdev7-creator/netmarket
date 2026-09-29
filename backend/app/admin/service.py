@@ -1,5 +1,6 @@
 """Compose aggregate queries into the admin dashboard payload."""
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, time, timedelta
 
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin import repository
 from app.admin.schemas import (
+    RouteRead,
     ActiveDeliveryRead,
     AdminStats,
     DailyActivity,
@@ -20,10 +22,12 @@ from app.core.pagination import PageParams
 from app.couriers import repository as couriers_repository
 from app.orders import repository as orders_repository
 from app.orders import service as orders_service
-from app.orders.models import Order, OrderStatus
+from app.orders import tracking
+from app.orders.models import DeliveryType, Order, OrderStatus
 from app.orders.schemas import AdminBuyerInfo, AdminCourierInfo, AdminPickupPointInfo, AdminVendorInfo
 from app.payments import repository as payments_repository
 from app.pickup_points import repository as pickup_points_repository
+from app.routing import service as routing_service
 from app.users import repository as users_repository
 
 
@@ -181,7 +185,7 @@ async def get_order_detail(db: AsyncSession, order_id: uuid.UUID) -> Order:
     return order
 
 
-async def get_delivery_monitor(db: AsyncSession) -> DeliveryMonitorRead:
+async def get_delivery_monitor(db: AsyncSession, *, with_routes: bool = False) -> DeliveryMonitorRead:
     now = datetime.now(UTC)
     since = now.replace(hour=0, minute=0, second=0, microsecond=0)
     rows = await repository.list_monitored_deliveries(db, since)
@@ -199,8 +203,26 @@ async def get_delivery_monitor(db: AsyncSession) -> DeliveryMonitorRead:
         return (courier.full_name or courier.phone) if courier else None
 
     entries = []
-    for sub_order, order, buyer, vendor_zone, pickup_point_name in rows:
+    for (
+        sub_order,
+        order,
+        buyer,
+        vendor_zone,
+        pickup_point_name,
+        vendor_lat,
+        vendor_lng,
+        point_lat,
+        point_lng,
+    ) in rows:
         courier = couriers.get(sub_order.courier_id) if sub_order.courier_id else None
+        is_pickup = order.delivery_type == DeliveryType.PICKUP_POINT
+        live = bool(
+            courier
+            and sub_order.status == OrderStatus.SHIPPED
+            and courier.position_updated_at
+            and courier.latitude is not None
+            and now - courier.position_updated_at <= tracking.POSITION_MAX_AGE
+        )
         entries.append(
             DeliveryMonitorEntry(
                 sub_order_id=sub_order.id,
@@ -231,9 +253,42 @@ async def get_delivery_monitor(db: AsyncSession) -> DeliveryMonitorRead:
                 courier_is_online=courier.is_online if courier else None,
                 dispatch_offered_courier_id=sub_order.dispatch_offered_courier_id,
                 dispatch_offered_courier_name=courier_name(sub_order.dispatch_offered_courier_id),
+                origin_latitude=vendor_lat,
+                origin_longitude=vendor_lng,
+                destination_latitude=point_lat if is_pickup else order.delivery_latitude,
+                destination_longitude=point_lng if is_pickup else order.delivery_longitude,
+                courier_latitude=courier.latitude if live else None,
+                courier_longitude=courier.longitude if live else None,
+                courier_position_at=courier.position_updated_at if live else None,
+                courier_live=live,
             )
         )
+    if with_routes:
+        await _attach_routes(entries)
     return DeliveryMonitorRead(generated_at=now, since=since, entries=entries)
+
+
+async def _attach_routes(entries: list[DeliveryMonitorEntry]) -> None:
+    """Trajet de chaque livraison en cours : livreur → destination quand sa
+    position est connue en direct, sinon boutique → destination."""
+    semaphore = asyncio.Semaphore(4)
+
+    async def one(entry: DeliveryMonitorEntry) -> None:
+        if entry.status == OrderStatus.DELIVERED or entry.destination_latitude is None:
+            return
+        start = (
+            (entry.courier_latitude, entry.courier_longitude)
+            if entry.courier_live
+            else (entry.origin_latitude, entry.origin_longitude)
+        )
+        if start[0] is None:
+            return
+        async with semaphore:
+            route = await routing_service.get_route([start, (entry.destination_latitude, entry.destination_longitude)])
+        if route:
+            entry.route = RouteRead(**route)
+
+    await asyncio.gather(*(one(e) for e in entries))
 
 
 async def list_active_deliveries(db: AsyncSession) -> list[ActiveDeliveryRead]:

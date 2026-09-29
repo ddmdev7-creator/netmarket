@@ -819,6 +819,24 @@ export interface DeliveryMonitorEntry {
   courier_is_online: boolean | null
   dispatch_offered_courier_id: string | null
   dispatch_offered_courier_name: string | null
+  origin_latitude: number | null
+  origin_longitude: number | null
+  destination_latitude: number | null
+  destination_longitude: number | null
+  /** Position du livreur si elle est partagée en direct pendant la course. */
+  courier_latitude: number | null
+  courier_longitude: number | null
+  courier_position_at: string | null
+  courier_live: boolean
+  /** Trajet routier (seulement avec ?with_routes=true). */
+  route: RouteRead | null
+}
+
+/** Trajet routier (OSRM) : coordonnées [lng, lat]. */
+export interface RouteRead {
+  coordinates: [number, number][]
+  distance_km: number
+  duration_min: number
 }
 
 export interface DeliveryMonitorRead {
@@ -1223,4 +1241,6 @@ export interface SubOrderTrackingRead {
   courier_position_at: string | null
   distance_km: number | null
   eta_minutes: number | null
+  /** Trajet routier : livreur → destination pendant la course, sinon boutique → destination. */
+  route: RouteRead | null
 }

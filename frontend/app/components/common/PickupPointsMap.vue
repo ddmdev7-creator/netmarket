@@ -86,7 +86,7 @@ function onSearchSelect({ lat, lng }: { lat: number; lng: number }) {
 }
 
 onMounted(async () => {
-  maplibregl = await import('maplibre-gl')
+  maplibregl = await loadMapLibre()
   if (!mapContainer.value) return
 
   try {

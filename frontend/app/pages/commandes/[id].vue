@@ -199,7 +199,7 @@ function ratePickupPoint(pointId: string) {
     <header class="od-head">
       <div class="od-head__main">
         <div class="od-head__row">
-          <h1 class="od-head__title">Commande {{ shortId(order.id) }}</h1>
+          <h1 class="od-head__title">Commande <OrderNumber :id="order.id" size="lg" /></h1>
           <StatusBadge :status="order.status" />
         </div>
         <p class="od-head__meta">

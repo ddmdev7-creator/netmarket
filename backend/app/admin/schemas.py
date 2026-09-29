@@ -71,6 +71,12 @@ class ActiveDeliveryRead(BaseModel):
     dispatch_offered_courier_id: uuid.UUID | None
 
 
+class RouteRead(BaseModel):
+    coordinates: list[list[float]]
+    distance_km: float
+    duration_min: int
+
+
 class DeliveryMonitorEntry(BaseModel):
     """Une sous-commande suivie par l'écran admin de suivi des livraisons
     (pages/admin/livraisons) — tout ce qu'il faut pour repérer un colis
@@ -104,6 +110,18 @@ class DeliveryMonitorEntry(BaseModel):
     courier_is_online: bool | None
     dispatch_offered_courier_id: uuid.UUID | None
     dispatch_offered_courier_name: str | None
+    # Carte : départ (boutique), arrivée (domicile ou point de retrait) et
+    # position du livreur si elle est récente (partagée en direct pendant une course).
+    origin_latitude: float | None = None
+    origin_longitude: float | None = None
+    destination_latitude: float | None = None
+    destination_longitude: float | None = None
+    courier_latitude: float | None = None
+    courier_longitude: float | None = None
+    courier_position_at: datetime | None = None
+    courier_live: bool = False
+    # Trajet routier (seulement si demandé : ?with_routes=true), voir app/routing.
+    route: RouteRead | None = None
 
 
 class DeliveryMonitorRead(BaseModel):

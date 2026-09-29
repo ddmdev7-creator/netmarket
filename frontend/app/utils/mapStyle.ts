@@ -118,3 +118,13 @@ export function getMapStyle(theme: AppThemeName, layer: MapLayerKind): MapLibreG
 // la carte.
 export const MAP_DEFAULT_CENTER: [number, number] = [-13.5784, 9.6412]
 export const MAP_DEFAULT_ZOOM = 13
+
+
+/**
+ * Fond « navigation » (vectoriel OpenFreeMap, sans clé) : routes colorées,
+ * noms de rues, bâtiments — pour les cartes de trajets (suivi de livraison,
+ * carte admin). Style sombre dédié en thème nocturne.
+ */
+export function getNavigationStyle(theme: AppThemeName): string {
+  return theme === 'dark' ? 'https://tiles.openfreemap.org/styles/fiord' : 'https://tiles.openfreemap.org/styles/liberty'
+}
