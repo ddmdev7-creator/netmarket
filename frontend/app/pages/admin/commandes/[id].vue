@@ -57,6 +57,16 @@ function mapsUrl(lat: number | null, lng: number | null) {
 // Agrandissement d'une photo produit — l'admin doit pouvoir identifier
 // l'article sans ouvrir la fiche produit (qui a pu changer depuis).
 const zoomed = ref<OrderItemRead | null>(null)
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'en attente de paiement',
+  paid: 'payée',
+  failed: 'échec du paiement',
+  cancelled: 'paiement annulé',
+  refund_pending: 'remboursement en cours',
+  refunded: 'remboursée',
+  refund_failed: 'remboursement échoué',
+}
 </script>
 
 <template>
@@ -70,7 +80,7 @@ const zoomed = ref<OrderItemRead | null>(null)
         <v-btn icon variant="text" size="small" aria-label="Retour" @click="router.back()">
           <PhArrowLeft :size="18" />
         </v-btn>
-        <h1 class="text-h6 mb-0">Commande {{ shortId(order.id) }}</h1>
+        <h1 class="text-h6 mb-0">Commande <OrderNumber :id="order.id" size="lg" /></h1>
         <StatusBadge :status="order.status" />
       </div>
 
@@ -83,7 +93,7 @@ const zoomed = ref<OrderItemRead | null>(null)
           <div class="text-muted text-fine">Paiement</div>
           <div style="font-weight: 600">
             {{ PAYMENT_METHOD_LABELS[order.payment_method].short }}
-            · {{ order.payment_status ?? '—' }}
+            · {{ order.payment_status ? (PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status) : '—' }}
           </div>
         </div>
         <div>
@@ -103,6 +113,7 @@ const zoomed = ref<OrderItemRead | null>(null)
           <StatusBadge :status="so.status" />
         </div>
         <div class="panel-card__body">
+          <OrderLiveTrackingMap v-if="so.status === 'shipped' && so.courier" :sub-order-id="so.id" class="mb-4" />
           <div class="items">
             <div v-for="item in so.items" :key="item.id" class="item">
               <button

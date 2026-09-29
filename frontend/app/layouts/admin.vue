@@ -157,6 +157,25 @@ watch(mdAndUp, (isDesktop) => { drawerOpen.value = isDesktop })
   background: var(--color-neutral-900);
 }
 
+/* Boutons : tailles homogènes d'une page à l'autre, sans capitales forcées. */
+.admin-main .v-btn {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 700;
+}
+
+.admin-main .v-btn--size-default {
+  font-size: 14px !important;
+}
+
+.admin-main .v-btn--size-small {
+  font-size: 12.5px !important;
+}
+
+.admin-main .v-btn--size-x-small {
+  font-size: 12px !important;
+}
+
 .admin-main .empty-state {
   border-radius: var(--radius-lg);
   border: 1px dashed var(--color-divider-strong);
