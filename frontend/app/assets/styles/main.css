@@ -232,10 +232,11 @@ h1, h2, h3, h4, h5, h6,
    du haut (LayoutTopBar, imbriqué dans .app-shell) devient ainsi lui aussi
    une bande pleine largeur, cohérent avec les back-offices (admin/vendeur)
    où il l'est déjà. */
-@media (min-width: 960px) {
-  .app-shell--catalog {
-    max-width: 100%;
-  }
+/* À toutes les largeurs (et pas seulement sur ordinateur) : sur tablette,
+   ces pages profitent aussi de la largeur (2 à 3 colonnes de cartes) plutôt
+   que de rester dans la colonne de 480 px pensée pour le téléphone. */
+.app-shell--catalog {
+  max-width: 100%;
 }
 
 /* Fiche produit : assez de place pour une mise en page à deux colonnes

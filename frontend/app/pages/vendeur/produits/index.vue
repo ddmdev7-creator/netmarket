@@ -467,7 +467,7 @@ async function deleteProduct() {
               </v-list-item>
               <v-list-item :href="`/produits/${p.id}`" target="_blank">
                 <template #prepend><PhArrowSquareOut :size="16" class="mr-3" /></template>
-                Voir en boutique
+                Voir sur le marché
               </v-list-item>
               <v-list-item base-color="error" @click="confirmDelete = p">
                 <template #prepend><PhTrash :size="16" class="mr-3" /></template>

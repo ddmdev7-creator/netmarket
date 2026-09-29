@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import {
   PhArrowRight,
+  PhCheckCircle,
+  PhQrCode,
+  PhWallet,
   PhFunnelSimple,
   PhImage,
   PhMagnifyingGlass,
@@ -208,6 +211,47 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// --- Vue d'ensemble -------------------------------------------------------------
+
+const summary = computed(() => {
+  const all = orders.value
+  const count = (value: StatusFilter) => {
+    const match = STATUS_FILTERS.find((f) => f.value === value)!.match
+    return all.filter((o) => match(o.status)).length
+  }
+  const spent = all.filter((o) => o.status !== 'cancelled').reduce((n, o) => n + o.total, 0)
+  return { ongoing: count('ongoing'), pickup: count('pickup'), delivered: count('delivered'), spent }
+})
+
+// Progression d'une commande (étapes franchies / total), pour la barre de la carte.
+const STEP_RANK: Record<OrderStatus, number> = {
+  pending: 0,
+  confirmed: 1,
+  preparing: 2,
+  shipped: 3,
+  arrived_at_pickup_point: 4,
+  delivered: 5,
+  cancelled: -1,
+}
+function progressPct(order: OrderRead): number {
+  if (order.status === 'cancelled') return 0
+  const last = order.delivery_type === 'pickup_point' ? 5 : 4
+  const rank = order.status === 'delivered' ? last : Math.min(STEP_RANK[order.status], last)
+  return Math.round((rank / last) * 100)
+}
+
+// Ce que l'acheteur a à faire (ou à savoir) tout de suite, sur la carte.
+function orderAction(order: OrderRead): { text: string; icon: object; tone: string } | null {
+  if (order.sub_orders.some((so) => so.handoff_ready)) {
+    return order.delivery_type === 'pickup_point'
+      ? { text: 'À récupérer : présentez votre QR', icon: PhQrCode, tone: 'warning' }
+      : { text: 'Livreur en approche : QR prêt', icon: PhQrCode, tone: 'info' }
+  }
+  if (order.sub_orders.some((so) => so.status === 'shipped')) return { text: 'En route — suivi en direct', icon: PhTruck, tone: 'info' }
+  if (order.status === 'delivered') return { text: 'Livrée', icon: PhCheckCircle, tone: 'success' }
+  return null
+}
+
 // Liseré haut de carte, même code couleur que StatusBadge.
 const statusAccent: Record<OrderStatus, string> = {
   pending: 'var(--color-neutral-500)',
@@ -230,6 +274,26 @@ const statusAccent: Record<OrderStatus, string> = {
         </p>
       </div>
     </header>
+
+    <!-- Vue d'ensemble (tuiles = filtres rapides) -->
+    <section v-if="orders.length" class="overview" aria-label="Vue d'ensemble">
+      <button type="button" class="ov-tile" :class="{ 'is-active': status === 'ongoing' }" style="--hue: 215" @click="status = status === 'ongoing' ? 'all' : 'ongoing'">
+        <span class="ov-tile__icon"><PhTruck :size="20" weight="duotone" /></span>
+        <span><strong>{{ summary.ongoing }}</strong> en cours</span>
+      </button>
+      <button type="button" class="ov-tile" :class="{ 'is-active': status === 'pickup', 'is-alert': summary.pickup > 0 }" style="--hue: 35" @click="status = status === 'pickup' ? 'all' : 'pickup'">
+        <span class="ov-tile__icon"><PhQrCode :size="20" weight="duotone" /></span>
+        <span><strong>{{ summary.pickup }}</strong> à récupérer</span>
+      </button>
+      <button type="button" class="ov-tile" :class="{ 'is-active': status === 'delivered' }" style="--hue: 150" @click="status = status === 'delivered' ? 'all' : 'delivered'">
+        <span class="ov-tile__icon"><PhCheckCircle :size="20" weight="duotone" /></span>
+        <span><strong>{{ summary.delivered }}</strong> livrée{{ summary.delivered > 1 ? 's' : '' }}</span>
+      </button>
+      <div class="ov-tile ov-tile--static" style="--hue: 260">
+        <span class="ov-tile__icon"><PhWallet :size="20" weight="duotone" /></span>
+        <span><strong>{{ formatGnf(summary.spent) }}</strong> d'achats</span>
+      </div>
+    </section>
 
     <!-- Produits reçus pas encore notés -->
     <section v-if="reviewable.toReview.value.length" class="to-review" aria-labelledby="to-review-title">
@@ -396,6 +460,14 @@ const statusAccent: Record<OrderStatus, string> = {
 
         <div class="order-card__title">{{ orderTitle(order) }}</div>
 
+        <div v-if="order.status !== 'cancelled'" class="order-card__progress" :aria-label="`Progression : ${progressPct(order)} %`">
+          <span :style="{ width: `${progressPct(order)}%` }" />
+        </div>
+        <div v-if="orderAction(order)" class="order-card__action" :class="`order-card__action--${orderAction(order)!.tone}`">
+          <component :is="orderAction(order)!.icon" :size="15" weight="bold" />
+          {{ orderAction(order)!.text }}
+        </div>
+
         <ul class="order-card__facts">
           <li>
             <PhStorefront :size="15" />
@@ -430,9 +502,124 @@ const statusAccent: Record<OrderStatus, string> = {
 /* Pas de .detail-card ici (plafonnée à 640px) : la grille a besoin de la
    largeur de l'écran — la route est en app-shell--catalog (layouts/default.vue). */
 .orders-page {
-  max-width: 1320px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 16px 16px 24px;
+  padding: 16px 12px 32px;
+}
+
+@media (min-width: 960px) {
+  .orders-page {
+    padding: 24px 32px 40px;
+  }
+}
+
+/* --- Vue d'ensemble --------------------------------------------------------- */
+.overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 720px) {
+  .overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.ov-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-divider);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-400);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ov-tile strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--color-neutral-200);
+  line-height: 1.15;
+}
+
+.ov-tile:hover:not(.ov-tile--static) {
+  border-color: hsl(var(--hue) 60% 55%);
+}
+
+.ov-tile.is-active {
+  border-color: hsl(var(--hue) 65% 50%);
+  box-shadow: 0 0 0 3px hsl(var(--hue) 70% var(--tint-bg));
+}
+
+.ov-tile.is-alert strong {
+  color: hsl(var(--hue) 70% var(--tint-fg));
+}
+
+.ov-tile--static {
+  cursor: default;
+}
+
+.ov-tile__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: hsl(var(--hue) 70% var(--tint-bg));
+  color: hsl(var(--hue) 60% var(--tint-fg));
+}
+
+/* --- Progression et action sur la carte --- */
+.order-card__progress {
+  height: 5px;
+  border-radius: 5px;
+  background: var(--color-neutral-700);
+  overflow: hidden;
+}
+
+.order-card__progress span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--color-primary), var(--accent));
+}
+
+.order-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.order-card__action--info {
+  background: hsl(200 80% var(--tint-bg));
+  color: hsl(200 70% var(--tint-fg));
+}
+
+.order-card__action--warning {
+  background: hsl(38 90% var(--tint-bg));
+  color: hsl(30 75% var(--tint-fg));
+}
+
+.order-card__action--success {
+  background: hsl(150 70% var(--tint-bg));
+  color: hsl(150 55% var(--tint-fg));
 }
 
 .orders-head {
@@ -707,19 +894,12 @@ const statusAccent: Record<OrderStatus, string> = {
 
 /* --- Grille --------------------------------------------------------------- */
 
-/* 4 cartes par ligne sur grand écran, puis 3, 2, 1. */
+/* Autant de colonnes que la largeur le permet (cartes de 280 px au moins) :
+   1 sur téléphone, 2 sur tablette, 3 à 5 sur ordinateur. */
 .orders-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
-}
-
-@media (max-width: 1280px) {
-  .orders-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-@media (max-width: 960px) {
-  .orders-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {

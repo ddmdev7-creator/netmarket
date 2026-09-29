@@ -196,7 +196,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
                 <component :is="roleSpace.icon" :size="18" /> {{ roleSpace.label }}
               </NuxtLink>
               <NuxtLink v-if="space" to="/" class="tb-menu__item tb-menu__item--accent">
-                <PhStorefront :size="18" /> Voir la boutique
+                <PhStorefront :size="18" /> Visiter le marché
               </NuxtLink>
               <NuxtLink to="/profil" class="tb-menu__item"><PhUser :size="18" /> Mon profil</NuxtLink>
               <template v-if="isBuyerSide">
