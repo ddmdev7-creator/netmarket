@@ -1,7 +1,7 @@
 <template>
-  <NuxtLink to="/" class="auth-mark" aria-label="Netmarket — accueil">
+  <NuxtLink to="/" class="auth-mark" aria-label="NdjouriMarket — accueil">
     <span class="auth-mark__logo">N</span>
-    <span class="auth-mark__name">Netmarket</span>
+    <span class="auth-mark__name">Ndjouri<span class="auth-mark__accent">Market</span></span>
   </NuxtLink>
 </template>
 
@@ -34,5 +34,10 @@
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.auth-mark__accent {
+  color: var(--color-primary);
 }
 </style>

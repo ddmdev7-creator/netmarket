@@ -4,13 +4,10 @@ import {
   PhCaretDown,
   PhImage,
   PhPlus,
-  PhSparkle,
-  PhSpinner,
   PhTrash,
-  PhUploadSimple,
   PhX,
 } from '@phosphor-icons/vue'
-import type { CategoryRead, VendorSubscriptionRead } from '~/types/api'
+import type { CategoryRead } from '~/types/api'
 
 export interface VariantAttributeRow {
   name: string
@@ -54,50 +51,6 @@ const model = defineModel<ProductFormValues>({ required: true })
 // hideContext : la page d'édition a déjà son propre en-tête récapitulatif.
 // wizard : l'assistant de création affiche ses propres étapes, sans les onglets.
 defineProps<{ categories: CategoryRead[]; hideContext?: boolean; wizard?: boolean }>()
-
-const { apiFetch } = useApi()
-
-// Pas d'await ici : ProductForm est un composant enfant, pas une page — on
-// laisse le statut premium arriver de façon réactive plutôt que de bloquer
-// le rendu du formulaire dessus.
-const { data: subscription } = useAsyncData(
-  'product-form-subscription',
-  () => apiFetch<VendorSubscriptionRead | null>('/subscriptions/me'),
-  { default: () => null },
-)
-const isPremium = computed(() => subscription.value?.status === 'active')
-
-const enhancing = ref(false)
-const enhanceFileInput = ref<HTMLInputElement | null>(null)
-const toast = useToastStore()
-
-function pickEnhanceFiles() {
-  if (!isPremium.value) {
-    navigateTo('/vendeur/abonnement')
-    return
-  }
-  enhanceFileInput.value?.click()
-}
-
-async function onEnhanceFilesSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = input.files ? Array.from(input.files) : []
-  input.value = ''
-  if (files.length === 0) return
-
-  enhancing.value = true
-  try {
-    const formData = new FormData()
-    for (const file of files) formData.append('files', file)
-    const { keys } = await apiFetch<{ keys: string[] }>('/uploads/images/enhance', { method: 'POST', body: formData })
-    model.value.images.push(...keys)
-    toast.success(keys.length > 1 ? `${keys.length} images ajoutées.` : 'Image ajoutée.')
-  } catch (e) {
-    toast.error(apiErrorMessage(e, "Impossible d'envoyer ces images."))
-  } finally {
-    enhancing.value = false
-  }
-}
 
 // --- Variantes ---
 
@@ -318,34 +271,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
           </div>
           <div class="panel-card__body">
             <label class="field-label">Au moins 3 recommandées — la fiche produit affiche un carrousel</label>
-            <CommonImagePicker v-model="model.images">
-              <template #extra-actions>
-                <div class="ai-hint">
-                  <PhSparkle :size="13" />
-                  <span>Ou uploade de nouvelles photos et laisse l'IA les améliorer automatiquement (fond, netteté) :</span>
-                </div>
-                <input
-                  ref="enhanceFileInput"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  class="d-none"
-                  @change="onEnhanceFilesSelected"
-                />
-                <v-btn
-                  variant="tonal"
-                  color="primary"
-                  size="small"
-                  class="mb-2"
-                  :loading="enhancing"
-                  @click="pickEnhanceFiles"
-                >
-                  <PhSpinner v-if="enhancing" :size="14" class="mr-1" />
-                  <PhUploadSimple v-else :size="14" class="mr-1" />
-                  Uploader avec amélioration IA {{ isPremium ? '' : '(Premium)' }}
-                </v-btn>
-              </template>
-            </CommonImagePicker>
+            <CommonImagePicker v-model="model.images" :label="''" ai />
           </div>
         </div>
       </v-window-item>
@@ -403,7 +329,7 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
                     Photos
                     <span class="variant-section__opt">facultatif</span>
                   </div>
-                  <CommonImagePicker v-model="row.images" :label="''" compact />
+                  <CommonImagePicker v-model="row.images" :label="''" compact ai />
                   <p class="variant-section__help">
                     Sans photo, la variante reprend celles du produit. Ajoutes-en si elle a un aspect différent (autre
                     couleur, motif…).
@@ -837,17 +763,4 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
   color: var(--color-neutral-200);
 }
 
-.ai-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  color: var(--color-primary-300);
-  font-size: 11.5px;
-  margin-bottom: 8px;
-}
-
-.ai-hint svg {
-  flex-shrink: 0;
-  margin-top: 1px;
-}
 </style>

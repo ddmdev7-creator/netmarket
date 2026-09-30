@@ -152,6 +152,52 @@ async def test_premium_vendor_can_enhance_images(
     assert _KEY_PATTERN.match(keys[0])
 
 
+async def test_premium_vendor_can_enhance_a_stored_image(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    vendor_user: User,
+    vendor: Vendor,
+    subscription_plan: SubscriptionPlan,
+) -> None:
+    upload = await client.post(
+        "/uploads/images",
+        files=[("files", ("produit.jpg", _fake_jpeg(), "image/jpeg"))],
+        headers=auth_headers(vendor_user),
+    )
+    key = upload.json()["keys"][0]
+
+    refused = await client.post(f"/uploads/images/{key}/enhance", headers=auth_headers(vendor_user))
+    assert refused.status_code == 403
+
+    await _make_premium(db_session, vendor, subscription_plan)
+    response = await client.post(f"/uploads/images/{key}/enhance", headers=auth_headers(vendor_user))
+
+    assert response.status_code == 200
+    fresh = response.json()["keys"][0]
+    assert _KEY_PATTERN.match(fresh)
+    assert fresh != key
+    # L'original reste servi sous sa clé.
+    assert (await client.get(f"/uploads/images/{key}")).status_code == 200
+
+
+async def test_enhancing_an_unknown_image_is_404(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    vendor_user: User,
+    vendor: Vendor,
+    subscription_plan: SubscriptionPlan,
+) -> None:
+    await _make_premium(db_session, vendor, subscription_plan)
+
+    missing = await client.post(
+        "/uploads/images/00000000-0000-0000-0000-000000000000.jpg/enhance", headers=auth_headers(vendor_user)
+    )
+    malformed = await client.post("/uploads/images/nope/enhance", headers=auth_headers(vendor_user))
+
+    assert missing.status_code == 404
+    assert malformed.status_code == 404
+
+
 async def test_image_variant_is_resized_and_webp_when_accepted(client: AsyncClient, vendor_user: User) -> None:
     upload_response = await client.post(
         "/uploads/images",

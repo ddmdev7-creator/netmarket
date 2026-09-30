@@ -130,9 +130,9 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
         <PhArrowLeft :size="20" />
       </button>
 
-      <NuxtLink :to="logoTo" class="tb__brand" :class="{ 'tb__brand--compact': space || back }" aria-label="Netmarket — accueil">
+      <NuxtLink :to="logoTo" class="tb__brand" :class="{ 'tb__brand--compact': space || back }" aria-label="NdjouriMarket — accueil">
         <span class="tb__logo">N</span>
-        <span class="tb__wordmark">Netmarket</span>
+        <span class="tb__wordmark">Ndjouri<span class="tb__wordmark-accent">Market</span></span>
       </NuxtLink>
       <span v-if="space" class="tb__space">{{ space }}</span>
 
@@ -300,6 +300,11 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
   font-size: 18px;
   letter-spacing: -0.01em;
   color: var(--color-neutral-200);
+  white-space: nowrap;
+}
+
+.tb__wordmark-accent {
+  color: var(--color-primary);
 }
 
 .tb__space {
@@ -313,7 +318,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 }
 
 @media (max-width: 420px) {
-  /* Téléphone étroit en espace pro : le libellé d'espace suffit, le mot "Netmarket" saute. */
+  /* Téléphone étroit en espace pro : le libellé d'espace suffit, le mot "NdjouriMarket" saute. */
   .tb__brand--compact .tb__wordmark {
     display: none;
   }

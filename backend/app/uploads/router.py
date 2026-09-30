@@ -77,11 +77,30 @@ async def enhance_images(files: list[UploadFile] = File(...)) -> UploadedImages:
     keys: list[str] = []
     for filename, content in contents:
         try:
-            keys.append(upload_image(enhance_image(content)))
+            # Détourage ONNX : plusieurs secondes de CPU — hors de la boucle
+            # d'événements, sinon toute l'API se fige pendant ce temps.
+            keys.append(await run_in_threadpool(_enhance_and_store, content))
         except UnidentifiedImageError as exc:
             raise ConflictError(f"« {filename} » n'est pas une image valide.") from exc
 
     return UploadedImages(keys=keys)
+
+
+def _enhance_and_store(content: bytes) -> str:
+    return upload_image(enhance_image(content))
+
+
+@router.post("/images/{key}/enhance", response_model=UploadedImages, dependencies=[Depends(require_premium_vendor)])
+async def enhance_stored_image(key: str) -> UploadedImages:
+    """Améliore une photo déjà envoyée (bouton « Améliorer » sur la vignette).
+    L'original reste intact sous sa clé : le résultat reçoit une clé neuve,
+    que le formulaire met à la place de l'ancienne."""
+    if not _KEY_PATTERN.match(key):
+        raise NotFoundError("Image introuvable.")
+    content = await run_in_threadpool(fetch_image, key)
+    if content is None:
+        raise NotFoundError("Image introuvable.")
+    return UploadedImages(keys=[await run_in_threadpool(_enhance_and_store, content)])
 
 
 @router.get("/images/{key}")
