@@ -17,13 +17,12 @@ from app.core.database import AsyncSessionLocal
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.couriers import repository as courier_repository
 from app.couriers.models import CourierStatus
-from app.delivery import repository as delivery_repository
-from app.delivery.service import compute_fee, compute_transit_days
+from app.delivery import service as delivery_service
 from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders import handoff
 from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder
-from app.orders.pickup_offer import split_delivery_fee
+from app.orders.pickup_offer import DeliverySplit, split_delivery_fee
 from app.orders.schemas import (
     OrderCancelRequest,
     CheckoutRequest,
@@ -172,24 +171,43 @@ async def _resolve_destination(
     return point.id, (point.latitude, point.longitude)
 
 
+async def _split_for(
+    db: AsyncSession,
+    vendor,
+    vendor_items: list[tuple],
+    grid: delivery_service.FeeGrid,
+    origin: tuple[float | None, float | None],
+    destination: tuple[float | None, float | None],
+    is_pickup: bool,
+) -> DeliverySplit:
+    """Course d'un colis et sa répartition acheteur / vendeur (retrait offert)."""
+    distance = None if None in (*origin, *destination) else haversine_km(*origin, *destination)
+    return await split_delivery_fee(
+        db,
+        vendor,
+        amount=_vendor_amount(vendor_items),
+        fee=grid.fee(origin, destination),
+        is_pickup=is_pickup,
+        distance_km=distance,
+    )
+
+
 async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteRequest) -> DeliveryQuoteRead:
     """Delivery fee per vendor parcel for the current cart, without ordering —
     same computation as checkout_cart, so the amount shown never differs."""
     rows = await _load_checkout_rows(db, user)
     _, destination = await _resolve_destination(db, data)
-    tiers = await delivery_repository.list_all(db)
+    is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
+    grid = await delivery_service.grid_for(db, is_pickup=is_pickup)
 
     vendors: list[DeliveryQuoteVendorRead] = []
     items_total = 0
-    is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
     for vendor_items in _group_by_vendor(rows).values():
         vendor = vendor_items[0][3]
         origin = (vendor.latitude, vendor.longitude)
-        split = await split_delivery_fee(
-            db, vendor, amount=_vendor_amount(vendor_items), fee=compute_fee(tiers, origin, destination), is_pickup=is_pickup
-        )
+        split = await _split_for(db, vendor, vendor_items, grid, origin, destination, is_pickup)
         estimate = estimate_delivery_window(
-            transit_days=compute_transit_days(tiers, origin, destination),
+            transit_days=grid.transit_days(origin, destination),
             preparation_days=vendor.preparation_days,
             from_date=date.today(),
         )
@@ -229,15 +247,11 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
 
     by_vendor = _group_by_vendor(rows)
     pickup_point_id, destination = await _resolve_destination(db, data)
-    tiers = await delivery_repository.list_all(db)
     is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
+    grid = await delivery_service.grid_for(db, is_pickup=is_pickup)
     splits = {
-        vendor_id: await split_delivery_fee(
-            db,
-            items[0][3],
-            amount=_vendor_amount(items),
-            fee=compute_fee(tiers, (items[0][3].latitude, items[0][3].longitude), destination),
-            is_pickup=is_pickup,
+        vendor_id: await _split_for(
+            db, items[0][3], items, grid, (items[0][3].latitude, items[0][3].longitude), destination, is_pickup
         )
         for vendor_id, items in by_vendor.items()
     }
@@ -281,7 +295,7 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
         # Figée au checkout — voir le commentaire sur SubOrder.estimated_delivery_min
         # dans app/orders/models.py pour pourquoi ce n'est pas recalculé à la volée.
         estimate = estimate_delivery_window(
-            transit_days=compute_transit_days(tiers, (vendor.latitude, vendor.longitude), destination),
+            transit_days=grid.transit_days((vendor.latitude, vendor.longitude), destination),
             preparation_days=vendor.preparation_days,
             from_date=date.today(),
         )

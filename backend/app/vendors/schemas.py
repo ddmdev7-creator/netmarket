@@ -41,6 +41,9 @@ class VendorOwnerUpdate(BaseModel):
     # « Retrait offert » (voir app/orders/pickup_offer.py).
     offers_pickup_delivery: bool | None = None
     pickup_offer_min_amount: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    # None = sans plafond (champ explicitement vidé par le vendeur).
+    pickup_offer_max_amount: int | None = Field(default=None, gt=0, le=100_000_000)
+    pickup_offer_max_km: float | None = Field(default=None, gt=0, le=1000)
 
 
     @model_validator(mode="after")
@@ -69,6 +72,8 @@ class VendorRead(BaseModel):
     preparation_days: int
     offers_pickup_delivery: bool = False
     pickup_offer_min_amount: int = 0
+    pickup_offer_max_amount: int | None = None
+    pickup_offer_max_km: float | None = None
     # Attachés en lecture depuis User (voir app/vendors/repository.py) —
     # défauts sûrs pour tout appelant qui ne ferait pas la jointure.
     owner_phone: str | None = None
@@ -92,6 +97,8 @@ class VendorPublicRead(BaseModel):
     preparation_days: int
     offers_pickup_delivery: bool = False
     pickup_offer_min_amount: int = 0
+    pickup_offer_max_amount: int | None = None
+    pickup_offer_max_km: float | None = None
     # Renseignés uniquement par GET /vendors/{id} (encart boutique de la fiche produit).
     created_at: datetime | None = None
     product_count: int | None = None

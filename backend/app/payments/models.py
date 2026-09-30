@@ -79,6 +79,12 @@ class PaymentSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     courier_delivery_share_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
     # Rémunération fixe d'un point de retrait par colis remis, prise sur la part Ndjouri.
     pickup_point_fee_per_parcel: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
+
+    # --- Tarif de livraison en point de retrait (voir app/delivery/service.py::grid_for) ---
+    # « percent » : tarif domicile × pickup_fee_percent ; « grid » : grille
+    # dédiée (paliers kind=pickup), le pourcentage restant le repli si elle est vide.
+    pickup_pricing_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="percent", server_default="percent")
+    pickup_fee_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
     # Délai entre la livraison et le moment où le gain devient retirable (litiges, retours).
     earnings_hold_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
 

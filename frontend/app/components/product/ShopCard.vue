@@ -47,7 +47,7 @@ const shopLink = computed(() => ({ path: '/', query: { shop: props.vendorId, sho
         </template>
       </span>
       <span v-if="vendor?.offers_pickup_delivery" class="shop__offer">
-        <PhGift :size="12" weight="fill" /> Retrait offert<template v-if="vendor.pickup_offer_min_amount"> dès {{ formatGnf(vendor.pickup_offer_min_amount) }}</template>
+        <PhGift :size="12" weight="fill" /> Retrait offert<template v-if="vendor.pickup_offer_max_amount"> jusqu'à {{ formatGnf(vendor.pickup_offer_max_amount) }}</template><template v-if="vendor.pickup_offer_min_amount"> dès {{ formatGnf(vendor.pickup_offer_min_amount) }} d'achat</template>
       </span>
       <span v-if="vendor?.zone || since" class="shop__meta">
         <template v-if="vendor?.zone"><PhMapPin :size="12" /> {{ vendor.zone }}</template>

@@ -2,14 +2,21 @@
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.geo import haversine_km
 from app.core.exceptions import ConflictError, NotFoundError
 from app.delivery import repository
-from app.delivery.models import DeliveryFeeTier
-from app.delivery.schemas import DeliveryFeeTierCreate, DeliveryFeeTierUpdate
+from app.delivery.models import DeliveryFeeTier, PickupPricingMode, TierKind
+from app.delivery.schemas import (
+    DeliveryFeeTierCreate,
+    DeliveryFeeTierUpdate,
+    DeliveryPricingSettings,
+    DeliveryPricingSettingsUpdate,
+)
+from app.payments import repository as payments_repository
 
 
 # Repli quand il n'existe aucun palier du tout — seul cas où compute_transit_days
@@ -106,34 +113,91 @@ def compute_transit_days(
     return matched.transit_days if matched is not None else fallback
 
 
+def _round_fee(amount: float) -> int:
+    """Montant en GNF arrondi à la centaine (pas de 10 450 GNF affichés)."""
+    return int(round(amount / 100) * 100)
+
+
+@dataclass
+class FeeGrid:
+    """Grille qui tarife une livraison : paliers de distance, éventuellement
+    ajustés d'un pourcentage (point de retrait en mode PERCENT)."""
+
+    tiers: list[DeliveryFeeTier] = field(default_factory=list)
+    percent: int = 100
+
+    def fee(self, origin: tuple[float | None, float | None], destination: tuple[float | None, float | None]) -> int:
+        base = compute_fee(self.tiers, origin, destination)
+        return base if self.percent == 100 else _round_fee(base * self.percent / 100)
+
+    def transit_days(
+        self, origin: tuple[float | None, float | None], destination: tuple[float | None, float | None]
+    ) -> int:
+        return compute_transit_days(self.tiers, origin, destination)
+
+
+async def grid_for(db: AsyncSession, *, is_pickup: bool) -> FeeGrid:
+    """Domicile : la grille domicile. Point de retrait : la grille dédiée en
+    mode GRID si elle a des paliers, sinon la grille domicile × le
+    pourcentage réglé par l'admin (100 % = même prix qu'à domicile)."""
+    if not is_pickup:
+        return FeeGrid(await repository.list_all(db, TierKind.HOME))
+    settings_row = await payments_repository.get_settings(db)
+    if settings_row.pickup_pricing_mode == PickupPricingMode.GRID:
+        pickup_tiers = await repository.list_all(db, TierKind.PICKUP)
+        if pickup_tiers:
+            return FeeGrid(pickup_tiers)
+    return FeeGrid(await repository.list_all(db, TierKind.HOME), percent=settings_row.pickup_fee_percent)
+
+
+async def get_pricing_settings(db: AsyncSession) -> DeliveryPricingSettings:
+    return DeliveryPricingSettings.model_validate(await payments_repository.get_settings(db))
+
+
+async def update_pricing_settings(db: AsyncSession, data: DeliveryPricingSettingsUpdate) -> DeliveryPricingSettings:
+    settings_row = await payments_repository.get_settings(db)
+    for name, value in data.model_dump(exclude_unset=True, exclude_none=True).items():
+        setattr(settings_row, name, value)
+    await db.commit()
+    return DeliveryPricingSettings.model_validate(settings_row)
+
+
 async def list_tiers(db: AsyncSession) -> list[DeliveryFeeTier]:
-    return await repository.list_all(db)
+    return await repository.list_all(db, kind=None)
 
 
-async def _ensure_max_km_free(db: AsyncSession, max_km: float | None, *, ignore_id: uuid.UUID | None = None) -> None:
-    existing = await repository.get_by_max_km(db, max_km)
+async def _ensure_max_km_free(
+    db: AsyncSession, kind: str, max_km: float | None, *, ignore_id: uuid.UUID | None = None
+) -> None:
+    existing = await repository.get_by_max_km(db, kind, max_km)
     if existing is not None and existing.id != ignore_id:
         raise ConflictError(
             "Un palier « au-delà » existe déjà." if max_km is None else f"Un palier jusqu'à {max_km:g} km existe déjà."
         )
 
 
-async def _clear_default(db: AsyncSession) -> None:
-    """Un seul palier par défaut : on retire la marque de l'ancien avant d'en
-    poser une nouvelle (index unique partiel uq_delivery_fee_tiers_default)."""
-    for tier in await repository.list_all(db):
+async def _clear_default(db: AsyncSession, kind: str) -> None:
+    """Un seul palier par défaut par grille : on retire la marque de l'ancien
+    avant d'en poser une nouvelle (index unique partiel uq_delivery_fee_tiers_default)."""
+    for tier in await repository.list_all(db, TierKind(kind)):
         if tier.is_default:
             tier.is_default = False
     await db.flush()
 
 
 async def create_tier(db: AsyncSession, data: DeliveryFeeTierCreate) -> DeliveryFeeTier:
-    await _ensure_max_km_free(db, data.max_km)
+    await _ensure_max_km_free(db, data.kind, data.max_km)
     label = (data.label or "").strip() or None
     if data.is_default:
-        await _clear_default(db)
+        await _clear_default(db, data.kind)
     tier = await repository.create(
-        db, max_km=data.max_km, fee=data.fee, label=label, transit_days=data.transit_days, is_default=data.is_default
+        db,
+        kind=data.kind,
+        max_km=data.max_km,
+        fee=data.fee,
+        label=label,
+        transit_days=data.transit_days,
+        is_default=data.is_default,
     )
     await db.commit()
     return tier
@@ -149,16 +213,16 @@ async def update_tier(db: AsyncSession, tier_id: uuid.UUID, data: DeliveryFeeTie
     if "transit_days" in fields and fields["transit_days"] is None:
         raise ConflictError("Le délai de trajet du palier est obligatoire.")
     if "max_km" in fields:
-        await _ensure_max_km_free(db, fields["max_km"], ignore_id=tier.id)
+        await _ensure_max_km_free(db, tier.kind, fields["max_km"], ignore_id=tier.id)
     if "label" in fields:
         fields["label"] = (fields["label"] or "").strip() or None
     if "is_default" in fields:
         if fields["is_default"] is None:
             fields.pop("is_default")
         elif fields["is_default"] and not tier.is_default:
-            await _clear_default(db)
-    for field, value in fields.items():
-        setattr(tier, field, value)
+            await _clear_default(db, tier.kind)
+    for name, value in fields.items():
+        setattr(tier, name, value)
     await db.commit()
     return tier
 

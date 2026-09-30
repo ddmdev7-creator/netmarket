@@ -45,6 +45,8 @@ class VendorCartGroup(BaseModel):
     # « Retrait offert » : achat minimum dans cette boutique pour que la
     # livraison en point de retrait soit offerte (None : pas d'offre).
     pickup_offer_min: int | None = None
+    # Plafond de prise en charge du vendeur (None = course entière offerte).
+    pickup_offer_max_amount: int | None = None
 
 
 class CartRead(BaseModel):

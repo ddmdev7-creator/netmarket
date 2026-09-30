@@ -65,6 +65,10 @@ export interface VendorRead {
   offers_pickup_delivery: boolean
   /** Montant d'achat minimum dans la boutique pour que le retrait soit offert (0 = dès le premier article). */
   pickup_offer_min_amount: number
+  /** Plafond de prise en charge en GNF (null = course entière) ; l'acheteur paie le reste. */
+  pickup_offer_max_amount: number | null
+  /** Distance maximale boutique → point de retrait (null = sans limite). */
+  pickup_offer_max_km: number | null
 }
 
 /** Vue publique (/vendors) — sans compte propriétaire ni commission, voir VendorRead. */
@@ -77,6 +81,8 @@ export interface VendorPublicRead {
   preparation_days: number
   offers_pickup_delivery?: boolean
   pickup_offer_min_amount?: number
+  pickup_offer_max_amount?: number | null
+  pickup_offer_max_km?: number | null
   /** Renseignés seulement par GET /vendors/{id}. */
   created_at?: string | null
   product_count?: number | null
@@ -574,6 +580,8 @@ export interface VendorCartGroup {
   shop_name: string
   /** « Retrait offert » : achat minimum dans la boutique ; null sans offre. */
   pickup_offer_min?: number | null
+  /** Plafond de prise en charge du vendeur (null = course entière offerte). */
+  pickup_offer_max_amount?: number | null
   items: CartItemRead[]
   subtotal: number
   /** Generic estimate — buyer's delivery address unknown at the cart stage. See app/cart/service.py::get_cart. */
@@ -655,8 +663,8 @@ export interface DeliveryQuoteRead {
     delivery_fee: number
     /** « Retrait offert » : course prise en charge par le vendeur. */
     vendor_delivery_fee: number
-    /** applied | below_minimum (pickup_offer_missing GNF manquants) | unavailable ; null sans offre. */
-    pickup_offer: 'applied' | 'below_minimum' | 'unavailable' | null
+    /** applied | partial (plafond atteint, l'acheteur paie le reste) | below_minimum (pickup_offer_missing GNF manquants) | out_of_range (point trop loin) | unavailable ; null sans offre. */
+    pickup_offer: 'applied' | 'partial' | 'below_minimum' | 'out_of_range' | 'unavailable' | null
     pickup_offer_missing: number
     estimated_delivery_min: string
     estimated_delivery_max: string
@@ -667,8 +675,12 @@ export interface DeliveryQuoteRead {
 }
 
 /** One row of the admin distance grid; max_km null = "au-delà" catch-all (also the fallback when a position is missing). */
+export type DeliveryTierKind = 'home' | 'pickup'
+
 export interface DeliveryFeeTierRead {
   id: string
+  /** Grille domicile, ou grille dédiée aux points de retrait. */
+  kind: DeliveryTierKind
   max_km: number | null
   fee: number
   /** Free-text zone description for the admin; informational only. */
@@ -680,6 +692,7 @@ export interface DeliveryFeeTierRead {
 }
 
 export interface DeliveryFeeTierCreate {
+  kind?: DeliveryTierKind
   max_km: number | null
   fee: number
   label: string | null
@@ -688,6 +701,13 @@ export interface DeliveryFeeTierCreate {
 }
 
 export type DeliveryFeeTierUpdate = Partial<DeliveryFeeTierCreate>
+
+/** GET/PATCH /admin/delivery-fee-tiers/settings — tarif en point de retrait. */
+export interface DeliveryPricingSettings {
+  /** percent : tarif domicile × pickup_fee_percent ; grid : grille dédiée (repli sur le pourcentage si vide). */
+  pickup_pricing_mode: 'percent' | 'grid'
+  pickup_fee_percent: number
+}
 
 /** GET/PATCH /admin/payment-settings — informational delay shown to the buyer after a refund is initiated (see PaymentStatus 'refund_pending'). */
 export interface PaymentSettingsRead {

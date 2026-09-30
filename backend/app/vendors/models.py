@@ -49,3 +49,8 @@ class Vendor(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # course — voir app/orders/pickup_offer.py.
     offers_pickup_delivery: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     pickup_offer_min_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    # Plafonds facultatifs (None = sans plafond) : au-delà de max_amount GNF
+    # l'acheteur paie le reste de la course ; au-delà de max_km entre la
+    # boutique et le point, l'offre ne s'applique pas.
+    pickup_offer_max_amount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pickup_offer_max_km: Mapped[float | None] = mapped_column(Float, nullable=True)

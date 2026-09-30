@@ -4,13 +4,31 @@ that prices a sub-order's delivery (see service.compute_fee).
 A tier covers "up to max_km"; the single tier with max_km NULL is the
 catch-all ("au-delà", and also the fallback when a distance can't be
 computed because a GPS position is missing).
+
+Two grids live in this table (`kind`): home delivery, and an optional
+dedicated pickup-point grid — see service.grid_for for how the pickup price
+is chosen (dedicated grid, or a percentage of the home grid).
 """
+
+from enum import StrEnum
 
 from sqlalchemy import Boolean, CheckConstraint, Float, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.models import TimestampMixin, UUIDPrimaryKeyMixin
 from app.core.database import Base
+
+
+class TierKind(StrEnum):
+    HOME = "home"
+    PICKUP = "pickup"
+
+
+class PickupPricingMode(StrEnum):
+    # Tarif domicile × PaymentSettings.pickup_fee_percent.
+    PERCENT = "percent"
+    # Grille dédiée (paliers kind=pickup) ; vide → repli sur PERCENT.
+    GRID = "grid"
 
 
 class DeliveryFeeTier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -21,15 +39,19 @@ class DeliveryFeeTier(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         CheckConstraint("transit_days >= 0", name="ck_delivery_fee_tiers_transit_days_non_negative"),
         # NULL n'est jamais égal à NULL pour un unique classique : sans cet
         # index partiel, on pourrait créer plusieurs paliers "au-delà".
-        Index("uq_delivery_fee_tiers_max_km", "max_km", unique=True),
+        Index("uq_delivery_fee_tiers_max_km", "kind", "max_km", unique=True),
         Index(
             "uq_delivery_fee_tiers_catch_all",
-            "max_km",
+            "kind",
             unique=True,
             postgresql_where="max_km IS NULL",
         ),
-        Index("uq_delivery_fee_tiers_default", "is_default", unique=True, postgresql_where="is_default"),
+        Index("uq_delivery_fee_tiers_default", "kind", unique=True, postgresql_where="is_default"),
     )
+
+    # Grille à laquelle appartient le palier (TierKind) — chaque grille a ses
+    # propres unicités (distance, « au-delà », « par défaut »).
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default=TierKind.HOME, server_default=TierKind.HOME.value)
 
     max_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Libellé libre à l'usage de l'admin (ex. "Grand Conakry — Coyah, Dubréka") :

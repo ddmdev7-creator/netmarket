@@ -8,12 +8,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.schemas import Message
 from app.core.deps import get_db, require_role
 from app.delivery import service
-from app.delivery.schemas import DeliveryFeeTierCreate, DeliveryFeeTierRead, DeliveryFeeTierUpdate
+from app.delivery.schemas import (
+    DeliveryFeeTierCreate,
+    DeliveryFeeTierRead,
+    DeliveryFeeTierUpdate,
+    DeliveryPricingSettings,
+    DeliveryPricingSettingsUpdate,
+)
 from app.users.models import UserRole
 
 admin_router = APIRouter(
     prefix="/admin/delivery-fee-tiers", tags=["admin"], dependencies=[Depends(require_role(UserRole.ADMIN))]
 )
+
+
+# Déclarées avant /{tier_id} : « settings » ne doit pas être pris pour un id.
+@admin_router.get("/settings", response_model=DeliveryPricingSettings)
+async def admin_get_pricing_settings(db: AsyncSession = Depends(get_db)) -> DeliveryPricingSettings:
+    return await service.get_pricing_settings(db)
+
+
+@admin_router.patch("/settings", response_model=DeliveryPricingSettings)
+async def admin_update_pricing_settings(
+    payload: DeliveryPricingSettingsUpdate, db: AsyncSession = Depends(get_db)
+) -> DeliveryPricingSettings:
+    return await service.update_pricing_settings(db, payload)
 
 
 @admin_router.get("", response_model=list[DeliveryFeeTierRead])

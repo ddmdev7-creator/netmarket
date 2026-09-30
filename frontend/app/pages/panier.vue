@@ -76,7 +76,10 @@ function goCheckout() {
             <div v-if="group.pickup_offer_min != null" class="offer" :class="{ 'offer--done': offerReached(group) }">
               <div class="offer__text">
                 <PhGift :size="16" weight="fill" />
-                <span v-if="offerReached(group)">Livraison en point de retrait <strong>offerte</strong> par la boutique.</span>
+                <span v-if="offerReached(group) && group.pickup_offer_max_amount">
+                  La boutique prend en charge la livraison en point de retrait <strong>jusqu'à {{ formatGnf(group.pickup_offer_max_amount) }}</strong>.
+                </span>
+                <span v-else-if="offerReached(group)">Livraison en point de retrait <strong>offerte</strong> par la boutique.</span>
                 <span v-else>
                   Plus que <strong>{{ formatGnf(group.pickup_offer_min - group.subtotal) }}</strong> pour un retrait offert.
                 </span>

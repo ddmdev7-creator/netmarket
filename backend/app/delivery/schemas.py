@@ -4,8 +4,12 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.delivery.models import PickupPricingMode, TierKind
+
 
 class DeliveryFeeTierCreate(BaseModel):
+    # Grille domicile, ou grille dédiée aux points de retrait.
+    kind: TierKind = TierKind.HOME
     # None = palier "au-delà" (et repli quand la distance est inconnue).
     max_km: float | None = Field(default=None, gt=0, le=1000)
     fee: int = Field(ge=0, le=10_000_000)
@@ -30,8 +34,23 @@ class DeliveryFeeTierRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    kind: TierKind = TierKind.HOME
     max_km: float | None
     fee: int
     label: str | None
     transit_days: int
     is_default: bool = False
+
+
+class DeliveryPricingSettings(BaseModel):
+    """Tarif en point de retrait (voir service.grid_for)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    pickup_pricing_mode: PickupPricingMode
+    pickup_fee_percent: int
+
+
+class DeliveryPricingSettingsUpdate(BaseModel):
+    pickup_pricing_mode: PickupPricingMode | None = None
+    pickup_fee_percent: int | None = Field(default=None, ge=0, le=300)

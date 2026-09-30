@@ -20,6 +20,14 @@ const latitude = ref<number | null>(null)
 const longitude = ref<number | null>(null)
 const offersPickup = ref(false)
 const offerMin = ref(0)
+// Plafonds facultatifs : champ vide = sans plafond (null côté API).
+const offerMaxAmount = ref('')
+const offerMaxKm = ref('')
+
+function optionalPositive(value: string): number | null {
+  const n = Number(String(value).replace(',', '.').trim())
+  return String(value).trim() && Number.isFinite(n) && n > 0 ? n : null
+}
 
 // Solde vendeur : l'offre ne s'applique que s'il couvre la course (pas de
 // solde négatif) — voir backend app/orders/pickup_offer.py.
@@ -41,6 +49,8 @@ watch(
     longitude.value = v.longitude
     offersPickup.value = v.offers_pickup_delivery
     offerMin.value = v.pickup_offer_min_amount
+    offerMaxAmount.value = v.pickup_offer_max_amount != null ? String(v.pickup_offer_max_amount) : ''
+    offerMaxKm.value = v.pickup_offer_max_km != null ? String(v.pickup_offer_max_km) : ''
   },
   { immediate: true },
 )
@@ -87,6 +97,11 @@ async function submit() {
         preparation_days: preparationDays.value,
         offers_pickup_delivery: offersPickup.value,
         pickup_offer_min_amount: Math.max(0, Math.round(Number(offerMin.value) || 0)),
+        pickup_offer_max_amount: (() => {
+          const cap = optionalPositive(offerMaxAmount.value)
+          return cap === null ? null : Math.round(cap)
+        })(),
+        pickup_offer_max_km: optionalPositive(offerMaxKm.value),
       },
     })
     toast.success('Boutique mise à jour.')
@@ -155,7 +170,22 @@ async function submit() {
           <v-text-field v-model.number="offerMin" type="number" min="0" step="1000" placeholder="0 = dès le premier article" class="mb-1" />
           <p class="text-muted mb-3" style="font-size: 11.5px">
             Le client voit « Retrait offert » sur vos produits. Au moment de la commande, la livraison en point de retrait
-            ne lui est pas facturée si son panier chez vous atteint ce montant, quelle que soit la distance.
+            ne lui est pas facturée si son panier chez vous atteint ce montant.
+          </p>
+
+          <div class="offer-caps">
+            <div>
+              <label class="field-label">Je prends en charge jusqu'à (GNF)</label>
+              <v-text-field v-model="offerMaxAmount" inputmode="numeric" placeholder="Vide = toute la course" suffix="GNF" hide-details />
+            </div>
+            <div>
+              <label class="field-label">Jusqu'à une distance de</label>
+              <v-text-field v-model="offerMaxKm" inputmode="decimal" placeholder="Vide = sans limite" suffix="km" hide-details />
+            </div>
+          </div>
+          <p class="text-muted mb-3 mt-1" style="font-size: 11.5px">
+            Au-delà du plafond, le client paie le reste de la course. Si le point de retrait est plus loin que la distance
+            choisie (depuis votre boutique), l'offre ne s'applique pas.
           </p>
           <ul class="offer-rules">
             <li>La course est prélevée sur votre solde NdjouriBank à la livraison du colis. Rien si la commande est annulée.</li>
@@ -224,6 +254,12 @@ async function submit() {
   border-radius: 12px;
   background: linear-gradient(135deg, hsl(150 70% 45%), hsl(170 70% 40%));
   color: #fff;
+}
+
+.offer-caps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 14px;
 }
 
 .offer-rules {
