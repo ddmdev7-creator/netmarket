@@ -182,6 +182,14 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # une livraison à domicile (delivery_type == home_delivery).
     storage_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # Taille du colis (app/common/parcel.py) : calculée au checkout
+    # (declared_parcel_size, figée), corrigeable par le point à l'arrivée
+    # (parcel_size) — c'est parcel_size qui fixe la rémunération du point.
+    parcel_size: Mapped[str] = mapped_column(String(2), default="S", server_default="S", nullable=False)
+    declared_parcel_size: Mapped[str] = mapped_column(String(2), default="S", server_default="S", nullable=False)
+    # Part des frais de livraison due à la taille (supplément L/XL), pour l'affichage.
+    size_surcharge: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
     # Code de remise (QR) de l'étape en cours — voir app/orders/handoff.py.
     # Seul un nombre aléatoire est stocké : le code affiché se calcule avec la
     # clé du serveur et change toutes les 60 s. Renouvelé à chaque étape, donc

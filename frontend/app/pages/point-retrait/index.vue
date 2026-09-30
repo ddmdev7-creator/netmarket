@@ -17,9 +17,10 @@ import {
   PhUser,
   PhWallet,
   PhWarning,
+  PhPackage,
 } from '@phosphor-icons/vue'
 import type { TodoItem } from '~/components/common/TodoCards.vue'
-import type { PickupPointManagerSubOrderRead, PickupPointRead, WalletRead } from '~/types/api'
+import type { ParcelSize, PickupPointManagerSubOrderRead, PickupPointRead, WalletRead } from '~/types/api'
 
 definePageMeta({ middleware: 'pickup-manager', layout: 'point-retrait' })
 
@@ -221,6 +222,24 @@ async function saveLocation(so: PickupPointManagerSubOrderRead) {
   }
 }
 
+// --- Taille du colis : vérifiée à la réception, elle fixe la rémunération ------------
+
+const sizingId = ref<string | null>(null)
+
+async function setSize(so: PickupPointManagerSubOrderRead, size: ParcelSize) {
+  if (size === so.parcel_size) return
+  sizingId.value = so.id
+  try {
+    await apiFetch(`/orders/sub-orders/${so.id}/parcel-size`, { method: 'PATCH', body: { parcel_size: size } })
+    await refresh()
+    toast.success(`Taille corrigée : ${parcelSizeLabel(size)}.`)
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'Impossible de corriger la taille.'))
+  } finally {
+    sizingId.value = null
+  }
+}
+
 // --- Scan ------------------------------------------------------------------------------
 // Un seul scanner : le serveur reconnaît le colis et l'étape (dépôt du
 // livreur ou retrait du client) à partir du code.
@@ -353,6 +372,24 @@ function itemsSummary(so: PickupPointManagerSubOrderRead) {
           <a v-if="so.courier_phone" :href="`tel:${so.courier_phone}`" class="parcel__tel"><PhPhone :size="12" /> {{ so.courier_phone }}</a>
         </div>
 
+        <!-- Taille : corrigeable tant que le colis est au point -->
+        <div class="parcel__size">
+          <PhPackage :size="15" color="var(--color-primary)" />
+          <span class="parcel__size-label">Colis {{ parcelSizeLabel(so.parcel_size) }}</span>
+          <span v-if="so.parcel_size !== so.declared_parcel_size" class="parcel__size-fixed">corrigé (déclaré {{ so.declared_parcel_size }})</span>
+          <v-menu v-if="tab === 'stock'" location="bottom end">
+            <template #activator="{ props: menu }">
+              <button type="button" class="parcel__edit" v-bind="menu" :disabled="sizingId === so.id">Corriger</button>
+            </template>
+            <v-list density="compact">
+              <v-list-item v-for="size in PARCEL_SIZES" :key="size.value" :active="size.value === so.parcel_size" @click="setSize(so, size.value)">
+                <v-list-item-title>{{ size.value }} · {{ size.label }}</v-list-item-title>
+                <v-list-item-subtitle>{{ size.examples }}</v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+        </div>
+
         <!-- Emplacement : en stock (et modifiable), ou à prévoir pour un colis attendu -->
         <div v-if="tab !== 'done'" class="parcel__storage">
           <PhMapPinLine :size="15" color="var(--color-primary)" />
@@ -388,6 +425,31 @@ function itemsSummary(so: PickupPointManagerSubOrderRead) {
 </template>
 
 <style scoped>
+.parcel__size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.parcel__size-label {
+  font-weight: 600;
+}
+
+.parcel__size-fixed {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: hsl(38 90% var(--tint-bg));
+  color: hsl(30 75% var(--tint-fg));
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.parcel__size .parcel__edit {
+  margin-left: auto;
+}
+
 .pm {
   max-width: 820px;
   margin: 0 auto;

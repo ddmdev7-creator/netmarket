@@ -126,8 +126,13 @@ async def create_sub_order(
     shop_name: str,
     estimated_delivery_min: date | None = None,
     estimated_delivery_max: date | None = None,
+    parcel_size: str = "S",
+    size_surcharge: int = 0,
 ) -> SubOrder:
     sub_order = SubOrder(
+        parcel_size=parcel_size,
+        declared_parcel_size=parcel_size,
+        size_surcharge=size_surcharge,
         order_id=order_id,
         vendor_id=vendor_id,
         amount=amount,

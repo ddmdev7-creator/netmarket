@@ -39,6 +39,7 @@ const form = ref<ProductFormValues>({
   stock: 0,
   images: [''],
   variants: [],
+  parcel_size: 'S',
 })
 watch(
   product,
@@ -52,6 +53,7 @@ watch(
       stock: p.stock,
       images: p.images.length ? [...p.images] : [''],
       variants: p.variants.map(toVariantRow),
+      parcel_size: p.parcel_size ?? 'S',
     }
   },
   { immediate: true },
@@ -125,6 +127,7 @@ async function submit() {
       description: form.value.description.trim() || null,
       price: form.value.price,
       images: form.value.images.map((url) => url.trim()).filter(Boolean),
+      parcel_size: form.value.parcel_size,
     }
     if (activeVariants.length === 0) body.stock = form.value.stock ?? 0
 

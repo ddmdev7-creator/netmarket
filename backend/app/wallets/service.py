@@ -32,7 +32,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.core.pagination import PageParams
 from app.couriers import repository as couriers_repository
-from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder
+from app.common.parcel import ParcelSize, pickup_fee_for
+from app.orders.models import DeliveryType, Order, OrderStatus, PaymentMethod, SubOrder, SubOrderStatusEvent
 from app.payments import djomy_client
 from app.payments import repository as payments_repository
 from app.payments.models import PaymentStatus
@@ -174,6 +175,52 @@ async def committed_pickup_offers(db: AsyncSession, vendor_id: uuid.UUID) -> int
     return int(total)
 
 
+async def pickup_point_fee(db: AsyncSession, settings_row, sub_order: SubOrder, pickup_point_id: uuid.UUID) -> tuple[int, str]:
+    """Rémunération du point pour un colis remis (décision 2026-09-30) :
+    tarif selon la taille du colis, + garde prolongée (par jour au-delà des
+    jours gratuits, plafonnée), + bonus volume au-delà de N colis remis dans
+    le mois. Renvoie (montant, détail lisible pour le journal)."""
+    size = sub_order.parcel_size or ParcelSize.S
+    base = pickup_fee_for(settings_row, size)
+    parts = [f"taille {size} {base}"]
+
+    arrived_at = (
+        await db.execute(
+            select(func.min(SubOrderStatusEvent.created_at)).where(
+                SubOrderStatusEvent.sub_order_id == sub_order.id,
+                SubOrderStatusEvent.status == OrderStatus.ARRIVED_AT_PICKUP_POINT,
+            )
+        )
+    ).scalar_one_or_none()
+    storage = 0
+    if arrived_at is not None:
+        days = int((_now() - arrived_at) / timedelta(days=1))
+        billable = max(0, min(days, settings_row.pickup_storage_max_days) - settings_row.pickup_storage_free_days)
+        storage = billable * settings_row.pickup_storage_fee_per_day
+        if storage:
+            parts.append(f"garde {billable} j {storage}")
+
+    month_start = _now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    delivered_this_month = (
+        await db.execute(
+            select(func.count())
+            .select_from(SubOrder)
+            .join(Order, Order.id == SubOrder.order_id)
+            .where(
+                Order.pickup_point_id == pickup_point_id,
+                SubOrder.status == OrderStatus.DELIVERED,
+                SubOrder.id != sub_order.id,
+                SubOrder.updated_at >= month_start,
+            )
+        )
+    ).scalar_one()
+    bonus = 0
+    if delivered_this_month >= settings_row.pickup_volume_bonus_threshold:
+        bonus = round((base + storage) * settings_row.pickup_volume_bonus_percent / 100)
+        parts.append(f"bonus volume {bonus}")
+    return base + storage + bonus, ", ".join(parts)
+
+
 async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) -> None:
     """Sous-commande livrée et payée en ligne ou avec le solde NdjouriBank :
     le séquestre (montant + frais de livraison) est réparti. Les gains des
@@ -225,10 +272,10 @@ async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) 
 
     pickup_fee = 0
     if order.delivery_type == DeliveryType.PICKUP_POINT and order.pickup_point_id is not None:
-        pickup_fee = settings_row.pickup_point_fee_per_parcel
+        pickup_fee, pickup_detail = await pickup_point_fee(db, settings_row, sub_order, order.pickup_point_id)
         point_account = await repository.get_or_create_account(db, AccountKind.PICKUP_POINT, order.pickup_point_id)
         lines.append((point_account, -pickup_fee, hold_until))
-        details.append(f"point de retrait {pickup_fee}")
+        details.append(f"point de retrait {pickup_fee} ({pickup_detail})")
 
     platform = sub_order.commission + fee - courier_share - pickup_fee
     lines.append((revenue, -platform, None))

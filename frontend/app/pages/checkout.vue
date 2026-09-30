@@ -740,6 +740,10 @@ function continueShopping() {
               </span>
               <span v-else>—</span>
             </div>
+            <p v-if="quoteFor(group.vendor_id)?.size_surcharge" class="line-fee__note">
+              Colis volumineux ({{ quoteFor(group.vendor_id)!.parcel_size }}) : supplément de
+              {{ formatGnf(quoteFor(group.vendor_id)!.size_surcharge) }} inclus.
+            </p>
           </div>
         </section>
       </div>
@@ -785,6 +789,12 @@ function continueShopping() {
 </template>
 
 <style scoped>
+.line-fee__note {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--color-neutral-500);
+}
+
 /* --- Étapes --- */
 .stepper {
   display: flex;

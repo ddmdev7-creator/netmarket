@@ -423,10 +423,19 @@ function formatDate(iso: string) {
       <v-divider class="mb-2" />
 
       <div class="d-flex justify-space-between mb-3" style="font-size: 13px">
-        <span class="text-muted">Commission Netmarket</span>
+        <span class="text-muted">Commission NdjouriMarket</span>
         <span>− {{ formatGnf(so.commission) }}</span>
       </div>
       </template>
+      <div class="d-flex justify-space-between mb-3" style="font-size: 13px">
+        <span class="text-muted">Taille du colis</span>
+        <span>
+          {{ parcelSizeLabel(so.parcel_size) }}
+          <em v-if="so.declared_parcel_size && so.parcel_size !== so.declared_parcel_size" class="text-muted">
+            (corrigée par le point, déclarée {{ so.declared_parcel_size }})
+          </em>
+        </span>
+      </div>
       <div v-if="so.vendor_delivery_fee" class="d-flex justify-space-between mb-3 offered-line">
         <span>Retrait offert au client (prélevé à la livraison)</span>
         <strong>− {{ formatGnf(so.vendor_delivery_fee) }}</strong>

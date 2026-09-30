@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.common.parcel import ParcelSize
 from app.couriers.models import VehicleType
 from app.orders.models import DeliveryType, OrderStatus, PaymentMethod
 from app.payments.models import PaymentStatus
@@ -39,6 +40,9 @@ class DeliveryQuoteVendorRead(BaseModel):
     vendor_delivery_fee: int = 0
     pickup_offer: str | None = None
     pickup_offer_missing: int = 0
+    # Taille du colis (app/common/parcel.py) et supplément L/XL inclus dans la course.
+    parcel_size: str = "S"
+    size_surcharge: int = 0
     # Même calcul que celui figé au checkout (voir SubOrder.estimated_delivery_min) :
     # l'acheteur voit ainsi le même délai avant et après avoir confirmé.
     estimated_delivery_min: date
@@ -174,6 +178,10 @@ class SubOrderBase(BaseModel):
     delivery_fee: int
     # Course prise en charge par le vendeur (« Retrait offert »).
     vendor_delivery_fee: int = 0
+    # Taille du colis : actuelle (corrigeable par le point) et calculée au checkout.
+    parcel_size: str = "S"
+    declared_parcel_size: str = "S"
+    size_surcharge: int = 0
     items: list[OrderItemRead]
     # None pour les commandes passées avant l'ajout de l'estimation de
     # livraison (voir app/orders/models.py::SubOrder.estimated_delivery_min).
@@ -289,6 +297,8 @@ class PickupPointManagerSubOrderRead(BaseModel):
     courier_name: str | None = None
     courier_phone: str | None = None
     storage_location: str | None = None
+    parcel_size: str = "S"
+    declared_parcel_size: str = "S"
     customer_name: str | None = None
     customer_phone: str | None = None
     # Dernier changement de statut : pour un colis au point, depuis quand il attend.
@@ -465,3 +475,7 @@ class SubOrderTrackingRead(BaseModel):
     # Trajet routier ({coordinates: [[lng, lat]…], distance_km, duration_min}),
     # livreur → destination pendant la course, sinon boutique → destination.
     route: dict | None = None
+
+
+class ParcelSizeUpdate(BaseModel):
+    parcel_size: ParcelSize

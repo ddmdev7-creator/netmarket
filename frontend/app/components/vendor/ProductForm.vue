@@ -7,7 +7,7 @@ import {
   PhTrash,
   PhX,
 } from '@phosphor-icons/vue'
-import type { CategoryRead } from '~/types/api'
+import type { CategoryRead, ParcelSize } from '~/types/api'
 
 export interface VariantAttributeRow {
   name: string
@@ -45,6 +45,9 @@ export interface ProductFormValues {
   stock: number | null
   images: string[]
   variants: VariantFormRow[]
+  // Taille de colis (utils/parcel.ts) — fixe la rémunération du point de
+  // retrait et, pour L/XL, un supplément de livraison.
+  parcel_size: ParcelSize
 }
 
 const model = defineModel<ProductFormValues>({ required: true })
@@ -229,6 +232,27 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
                 />
               </div>
             </div>
+
+            <label class="field-label">Taille du colis</label>
+            <div class="size-picker mb-1" role="radiogroup" aria-label="Taille du colis">
+              <button
+                v-for="size in PARCEL_SIZES"
+                :key="size.value"
+                type="button"
+                role="radio"
+                class="size-option"
+                :class="{ 'size-option--on': model.parcel_size === size.value }"
+                :aria-checked="model.parcel_size === size.value"
+                @click="model.parcel_size = size.value"
+              >
+                <span class="size-option__badge">{{ size.value }}</span>
+                <span class="size-option__label">{{ size.label }}</span>
+              </button>
+            </div>
+            <p class="text-muted size-hint mb-4">
+              {{ PARCEL_SIZES.find((s) => s.value === model.parcel_size)?.examples }}.
+              <template v-if="model.parcel_size === 'L' || model.parcel_size === 'XL'"> Un supplément de livraison s'applique aux colis encombrants.</template>
+            </p>
 
             <label class="field-label">Description (optionnel)</label>
             <CommonRichTextEditor v-model="model.description" class="mb-3" />
@@ -448,6 +472,48 @@ const commonAttributeNames = ['Couleur', 'Taille', 'Pointure', 'Matière', 'Capa
 </template>
 
 <style scoped>
+.size-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 520px;
+}
+
+.size-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--color-divider);
+  background: var(--color-neutral-900);
+  color: var(--color-neutral-300);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.size-option--on {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.size-option__badge {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.size-option__label {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.size-hint {
+  font-size: 12px;
+}
+
 .icon-btn {
   background: none;
   border: none;

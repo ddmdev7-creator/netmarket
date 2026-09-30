@@ -22,6 +22,7 @@ const form = ref<ProductFormValues>({
   stock: 0,
   images: [''],
   variants: [],
+  parcel_size: 'S',
 })
 const submitting = ref(false)
 
@@ -94,6 +95,7 @@ const previewProduct = computed<ProductRead>(() => ({
     : (form.value.stock ?? 0),
   images: photos.value,
   status: 'active',
+  parcel_size: form.value.parcel_size,
   average_rating: null,
   review_count: 0,
   estimated_delivery_min: null,
@@ -152,6 +154,7 @@ async function submit() {
         price: form.value.price,
         stock: form.value.stock ?? 0,
         images: form.value.images.map((url) => url.trim()).filter(Boolean),
+        parcel_size: form.value.parcel_size,
       },
     })
 

@@ -21,6 +21,7 @@ export type OrderStatus =
 export type PaymentMethod = 'cash_on_delivery' | 'online' | 'wallet'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled' | 'refund_pending' | 'refunded' | 'refund_failed'
 export type DeliveryType = 'home_delivery' | 'pickup_point'
+export type ParcelSize = 'S' | 'M' | 'L' | 'XL'
 export type SubscriptionStatus = 'pending' | 'active' | 'expired' | 'cancelled'
 
 export interface TokenPair {
@@ -415,6 +416,8 @@ export interface PickupPointManagerSubOrderRead {
   courier_name: string | null
   courier_phone: string | null
   storage_location: string | null
+  parcel_size: ParcelSize
+  declared_parcel_size: ParcelSize
   customer_name: string | null
   customer_phone: string | null
   /** Dernier changement de statut (arrivée au point pour un colis en stock). */
@@ -521,6 +524,8 @@ export interface ProductRead {
   stock: number
   images: string[]
   status: ProductStatus
+  /** Taille de colis déclarée par le vendeur (utils/parcel.ts). */
+  parcel_size: ParcelSize
   average_rating: number | null
   review_count: number
   /** Generic estimate — buyer's zone unknown on the catalog. See app/catalog/service.py::_attach_delivery_estimate. */
@@ -673,6 +678,11 @@ interface SubOrderBase {
   delivery_fee: number
   /** « Retrait offert » : course prise en charge par le vendeur (delivery_fee vaut alors 0). */
   vendor_delivery_fee?: number
+  /** Taille du colis : actuelle (corrigeable par le point) et calculée au checkout. */
+  parcel_size?: ParcelSize
+  declared_parcel_size?: ParcelSize
+  /** Supplément L/XL inclus dans les frais de livraison. */
+  size_surcharge?: number
   items: OrderItemRead[]
   /** null for orders placed before the delivery-estimate feature existed. */
   estimated_delivery_min: string | null
@@ -718,6 +728,8 @@ export interface DeliveryQuoteRead {
     delivery_fee: number
     /** « Retrait offert » : course prise en charge par le vendeur. */
     vendor_delivery_fee: number
+    parcel_size: ParcelSize
+    size_surcharge: number
     /** applied | partial (plafond atteint, l'acheteur paie le reste) | below_minimum (pickup_offer_missing GNF manquants) | out_of_range (point trop loin) | unavailable ; null sans offre. */
     pickup_offer: 'applied' | 'partial' | 'below_minimum' | 'out_of_range' | 'unavailable' | null
     pickup_offer_missing: number
@@ -1174,7 +1186,19 @@ export interface LedgerTransactionRead {
 
 export interface EarningsSettings {
   courier_delivery_share_percent: number
+  /** Rémunération du point pour un colis S (les autres tailles ci-dessous). */
   pickup_point_fee_per_parcel: number
+  pickup_fee_m: number
+  pickup_fee_l: number
+  pickup_fee_xl: number
+  pickup_storage_free_days: number
+  pickup_storage_fee_per_day: number
+  pickup_storage_max_days: number
+  pickup_volume_bonus_threshold: number
+  pickup_volume_bonus_percent: number
+  pickup_return_percent: number
+  delivery_surcharge_l: number
+  delivery_surcharge_xl: number
   earnings_hold_days: number
   withdrawal_fee_percent: number
   min_withdrawal_amount: number

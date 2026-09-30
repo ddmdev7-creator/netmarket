@@ -153,7 +153,19 @@ class EarningsSettingsRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     courier_delivery_share_percent: int
+    # Rémunération du point par taille de colis (S = pickup_point_fee_per_parcel), voir app/common/parcel.py.
     pickup_point_fee_per_parcel: int
+    pickup_fee_m: int
+    pickup_fee_l: int
+    pickup_fee_xl: int
+    pickup_storage_free_days: int
+    pickup_storage_fee_per_day: int
+    pickup_storage_max_days: int
+    pickup_volume_bonus_threshold: int
+    pickup_volume_bonus_percent: int
+    pickup_return_percent: int
+    delivery_surcharge_l: int
+    delivery_surcharge_xl: int
     earnings_hold_days: int
     withdrawal_fee_percent: float
     min_withdrawal_amount: int
@@ -169,6 +181,18 @@ class EarningsSettingsUpdate(BaseModel):
     earnings_hold_days: int = Field(ge=0, le=60)
     withdrawal_fee_percent: float = Field(ge=0, le=20)
     min_withdrawal_amount: int = Field(ge=1000, le=100_000_000)
+    # Tailles de colis, garde, bonus, suppléments — optionnels (absents = inchangés).
+    pickup_fee_m: int | None = Field(default=None, ge=0, le=1_000_000)
+    pickup_fee_l: int | None = Field(default=None, ge=0, le=1_000_000)
+    pickup_fee_xl: int | None = Field(default=None, ge=0, le=1_000_000)
+    pickup_storage_free_days: int | None = Field(default=None, ge=0, le=60)
+    pickup_storage_fee_per_day: int | None = Field(default=None, ge=0, le=1_000_000)
+    pickup_storage_max_days: int | None = Field(default=None, ge=0, le=90)
+    pickup_volume_bonus_threshold: int | None = Field(default=None, ge=1, le=100000)
+    pickup_volume_bonus_percent: int | None = Field(default=None, ge=0, le=100)
+    pickup_return_percent: int | None = Field(default=None, ge=0, le=100)
+    delivery_surcharge_l: int | None = Field(default=None, ge=0, le=1_000_000)
+    delivery_surcharge_xl: int | None = Field(default=None, ge=0, le=1_000_000)
     # NdjouriBank acheteurs — optionnels (absents = inchangés).
     buyer_wallet_enabled: bool | None = None
     wallet_topup_min: int | None = Field(default=None, ge=100, le=100_000_000)

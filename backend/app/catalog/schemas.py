@@ -10,6 +10,7 @@ from fastapi import Query
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.common.parcel import ParcelSize
 from app.catalog.models import ProductStatus
 
 
@@ -57,6 +58,8 @@ class ProductCreate(BaseModel):
     price: int = Field(ge=0, description="Prix en GNF, montant entier")
     stock: int = Field(default=0, ge=0)
     images: list[str] = Field(default_factory=list)
+    # Taille de colis (app/common/parcel.py).
+    parcel_size: ParcelSize = ParcelSize.S
 
 
 class ProductUpdate(BaseModel):
@@ -67,6 +70,7 @@ class ProductUpdate(BaseModel):
     stock: int | None = Field(default=None, ge=0)
     images: list[str] | None = None
     status: ProductStatus | None = None
+    parcel_size: ParcelSize | None = None
 
 
 class ProductVariantAttributeCreate(BaseModel):
@@ -128,6 +132,7 @@ class ProductRead(BaseModel):
     stock: int
     images: list[str]
     status: ProductStatus
+    parcel_size: str = "S"
     average_rating: float | None = None
     review_count: int = 0
     # Estimation générique (zone acheteur inconnue à ce stade — voir

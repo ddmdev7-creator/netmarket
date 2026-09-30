@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -18,6 +19,7 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.couriers import repository as courier_repository
 from app.couriers.models import CourierStatus
 from app.delivery import service as delivery_service
+from app.common.parcel import ParcelSize, delivery_surcharge_for, parcel_size_for
 from app.subscriptions import quotas
 from app.notifications import service as notifications_service
 from app.orders import repository
@@ -172,6 +174,13 @@ async def _resolve_destination(
     return point.id, (point.latitude, point.longitude)
 
 
+@dataclass
+class ParcelQuote:
+    split: DeliverySplit
+    parcel_size: str
+    size_surcharge: int
+
+
 async def _split_for(
     db: AsyncSession,
     vendor,
@@ -180,17 +189,24 @@ async def _split_for(
     origin: tuple[float | None, float | None],
     destination: tuple[float | None, float | None],
     is_pickup: bool,
-) -> DeliverySplit:
-    """Course d'un colis et sa répartition acheteur / vendeur (retrait offert)."""
+    settings_row,
+) -> ParcelQuote:
+    """Course d'un colis — grille de distance + supplément de taille L/XL
+    (app/common/parcel.py) — et sa répartition acheteur / vendeur (retrait offert)."""
+    size = parcel_size_for([(product.parcel_size, cart_item.quantity) for cart_item, product, _, _ in vendor_items])
+    base = grid.fee(origin, destination)
+    # Sans grille (livraison gratuite), pas de supplément non plus.
+    surcharge = delivery_surcharge_for(settings_row, size) if base > 0 else 0
     distance = None if None in (*origin, *destination) else haversine_km(*origin, *destination)
-    return await split_delivery_fee(
+    split = await split_delivery_fee(
         db,
         vendor,
         amount=_vendor_amount(vendor_items),
-        fee=grid.fee(origin, destination),
+        fee=base + surcharge,
         is_pickup=is_pickup,
         distance_km=distance,
     )
+    return ParcelQuote(split=split, parcel_size=size, size_surcharge=surcharge)
 
 
 async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteRequest) -> DeliveryQuoteRead:
@@ -200,13 +216,15 @@ async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteReques
     _, destination = await _resolve_destination(db, data)
     is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
     grid = await delivery_service.grid_for(db, is_pickup=is_pickup)
+    settings_row = await payments_repository.get_settings(db)
 
     vendors: list[DeliveryQuoteVendorRead] = []
     items_total = 0
     for vendor_items in _group_by_vendor(rows).values():
         vendor = vendor_items[0][3]
         origin = (vendor.latitude, vendor.longitude)
-        split = await _split_for(db, vendor, vendor_items, grid, origin, destination, is_pickup)
+        parcel = await _split_for(db, vendor, vendor_items, grid, origin, destination, is_pickup, settings_row)
+        split = parcel.split
         estimate = estimate_delivery_window(
             transit_days=grid.transit_days(origin, destination),
             preparation_days=vendor.preparation_days,
@@ -220,6 +238,8 @@ async def quote_delivery(db: AsyncSession, user: User, data: DeliveryQuoteReques
                 vendor_delivery_fee=split.vendor_fee,
                 pickup_offer=split.offer.value if split.offer else None,
                 pickup_offer_missing=split.missing_amount,
+                parcel_size=parcel.parcel_size,
+                size_surcharge=parcel.size_surcharge,
                 estimated_delivery_min=estimate.min_date,
                 estimated_delivery_max=estimate.max_date,
             )
@@ -250,12 +270,21 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
     pickup_point_id, destination = await _resolve_destination(db, data)
     is_pickup = data.delivery_type == DeliveryType.PICKUP_POINT
     grid = await delivery_service.grid_for(db, is_pickup=is_pickup)
-    splits = {
+    settings_row = await payments_repository.get_settings(db)
+    parcels = {
         vendor_id: await _split_for(
-            db, items[0][3], items, grid, (items[0][3].latitude, items[0][3].longitude), destination, is_pickup
+            db,
+            items[0][3],
+            items,
+            grid,
+            (items[0][3].latitude, items[0][3].longitude),
+            destination,
+            is_pickup,
+            settings_row,
         )
         for vendor_id, items in by_vendor.items()
     }
+    splits = {vendor_id: parcel.split for vendor_id, parcel in parcels.items()}
     grand_total = sum(_vendor_amount(items) for items in by_vendor.values()) + sum(s.buyer_fee for s in splits.values())
     if data.payment_method == PaymentMethod.WALLET:
         # Refus avant toute écriture ; le débit lui-même (compte verrouillé)
@@ -310,6 +339,8 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
             commission=commission,
             delivery_fee=splits[vendor.id].buyer_fee,
             vendor_delivery_fee=splits[vendor.id].vendor_fee,
+            parcel_size=parcels[vendor.id].parcel_size,
+            size_surcharge=parcels[vendor.id].size_surcharge,
             shop_name=vendor.shop_name,
             estimated_delivery_min=estimate.min_date,
             estimated_delivery_max=estimate.max_date,
@@ -652,6 +683,32 @@ async def update_storage_location(
         raise ForbiddenError("Cette sous-commande ne fait pas partie de votre point de retrait.")
 
     sub_order.storage_location = storage_location
+    await db.commit()
+
+    updated = await repository.get_sub_order_by_id(db, sub_order_id)
+    _attach_delivery_address(updated)
+    await _attach_courier_info(db, updated)
+    await _attach_product_images(db, updated)
+    return updated
+
+
+async def update_parcel_size(db: AsyncSession, user: User, sub_order_id: uuid.UUID, size: ParcelSize) -> SubOrder:
+    """Le gestionnaire corrige la taille du colis à sa réception (avant la
+    remise) : c'est elle qui fixe sa rémunération. declared_parcel_size
+    garde la taille calculée au checkout, pour le contrôle par l'admin et le
+    vendeur. Le prix payé par l'acheteur ne change pas."""
+    sub_order = await repository.get_sub_order_by_id(db, sub_order_id)
+    if sub_order is None:
+        raise NotFoundError("Sous-commande introuvable.")
+    if sub_order.order.delivery_type != DeliveryType.PICKUP_POINT:
+        raise ConflictError("Cette commande n'est pas une livraison en point de retrait.")
+    manager = await pickup_point_manager_repository.get_by_user_id(db, user.id)
+    if manager is None or manager.pickup_point_id != sub_order.order.pickup_point_id:
+        raise ForbiddenError("Cette sous-commande ne fait pas partie de votre point de retrait.")
+    if sub_order.status != OrderStatus.ARRIVED_AT_PICKUP_POINT:
+        raise ConflictError("La taille se corrige à la réception du colis, avant sa remise.")
+
+    sub_order.parcel_size = size
     await db.commit()
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)

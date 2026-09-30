@@ -43,6 +43,8 @@ class Product(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     price: Mapped[int] = mapped_column(Integer, nullable=False)
     stock: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     images: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    # Taille de colis S/M/L/XL déclarée par le vendeur (app/common/parcel.py).
+    parcel_size: Mapped[str] = mapped_column(String(2), default="S", server_default="S", nullable=False)
     status: Mapped[ProductStatus] = mapped_column(
         SAEnum(ProductStatus, name="product_status", values_callable=lambda enum: [e.value for e in enum]),
         default=ProductStatus.ACTIVE,

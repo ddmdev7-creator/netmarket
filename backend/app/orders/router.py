@@ -24,6 +24,7 @@ from app.orders.schemas import (
     DeliveryQuoteRequest,
     DispatchRequest,
     OrderRead,
+    ParcelSizeUpdate,
     PickupPointManagerSubOrderRead,
     StorageLocationUpdate,
     SubOrderStatusUpdate,
@@ -165,6 +166,20 @@ async def update_storage_location(
     db: AsyncSession = Depends(get_db),
 ) -> PickupPointManagerSubOrderRead:
     return await service.update_storage_location(db, current_user, sub_order_id, payload.storage_location)
+
+
+@router.patch(
+    "/sub-orders/{sub_order_id}/parcel-size",
+    response_model=PickupPointManagerSubOrderRead,
+)
+async def update_parcel_size(
+    sub_order_id: uuid.UUID,
+    payload: ParcelSizeUpdate,
+    current_user: User = Depends(get_pickup_point_manager),
+    db: AsyncSession = Depends(get_db),
+) -> PickupPointManagerSubOrderRead:
+    """Correction de la taille du colis par le point de retrait, à sa réception."""
+    return await service.update_parcel_size(db, current_user, sub_order_id, payload.parcel_size)
 
 
 @router.patch(

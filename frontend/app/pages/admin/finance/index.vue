@@ -21,6 +21,8 @@ import type {
   AdminFinanceOverview,
   AdminWalletRead,
   AdminWithdrawalRead,
+  DeliveryFeeTierRead,
+  DeliveryPricingSettings,
   EarningsSettings,
   LedgerTransactionRead,
   Page,
@@ -140,7 +142,18 @@ const visibleWallets = computed(() => {
 
 const settings = reactive<EarningsSettings>({
   courier_delivery_share_percent: 80,
-  pickup_point_fee_per_parcel: 2000,
+  pickup_point_fee_per_parcel: 1500,
+  pickup_fee_m: 2500,
+  pickup_fee_l: 4000,
+  pickup_fee_xl: 6000,
+  pickup_storage_free_days: 3,
+  pickup_storage_fee_per_day: 200,
+  pickup_storage_max_days: 7,
+  pickup_volume_bonus_threshold: 100,
+  pickup_volume_bonus_percent: 10,
+  pickup_return_percent: 50,
+  delivery_surcharge_l: 5000,
+  delivery_surcharge_xl: 10000,
   earnings_hold_days: 3,
   withdrawal_fee_percent: 0,
   min_withdrawal_amount: 10000,
@@ -169,11 +182,55 @@ async function saveSettings() {
   }
 }
 
+// --- Contrôle de marge en point de retrait --------------------------------------
+// Pour chaque palier : ce que paie l'acheteur (tarif point de retrait, + supplément
+// L/XL), moins la part du livreur et la rémunération du point. Négatif = Ndjouri
+// perd de l'argent sur ce colis (avant commission sur les articles).
+const pricingTiers = ref<DeliveryFeeTierRead[]>([])
+const pricingMode = ref<DeliveryPricingSettings | null>(null)
+async function loadPricing() {
+  const [tiers, mode] = await Promise.all([
+    apiFetch<DeliveryFeeTierRead[]>('/admin/delivery-fee-tiers'),
+    apiFetch<DeliveryPricingSettings>('/admin/delivery-fee-tiers/settings'),
+  ])
+  pricingTiers.value = tiers
+  pricingMode.value = mode
+}
+const marginRows = computed(() => {
+  const mode = pricingMode.value
+  if (!mode) return []
+  const home = pricingTiers.value.filter((t) => (t.kind ?? 'home') === 'home')
+  const pickup = pricingTiers.value.filter((t) => t.kind === 'pickup')
+  const useGrid = mode.pickup_pricing_mode === 'grid' && pickup.length > 0
+  const rows = useGrid ? pickup : home
+  const courierPct = Number(settings.courier_delivery_share_percent) / 100
+  const sizes: [string, number, number][] = [
+    ['S', Number(settings.pickup_point_fee_per_parcel), 0],
+    ['M', Number(settings.pickup_fee_m), 0],
+    ['L', Number(settings.pickup_fee_l), Number(settings.delivery_surcharge_l)],
+    ['XL', Number(settings.pickup_fee_xl), Number(settings.delivery_surcharge_xl)],
+  ]
+  return rows.map((tier, index) => {
+    const price = useGrid ? tier.fee : Math.round((tier.fee * mode.pickup_fee_percent) / 100 / 100) * 100
+    const previous = index > 0 ? rows[index - 1]?.max_km : 0
+    return {
+      id: tier.id,
+      range: tier.max_km === null ? 'Au-delà' : `${previous} – ${tier.max_km} km`,
+      price,
+      margins: sizes.map(([size, pointFee, surcharge]) => {
+        const paid = price > 0 ? price + surcharge : 0
+        return { size, value: paid - Math.round(paid * courierPct) - pointFee }
+      }),
+    }
+  })
+})
+const losingRows = computed(() => marginRows.value.filter((r) => r.margins.some((m) => m.value < 0)))
+
 async function refreshAll() {
   await Promise.all([refreshOverview(), loadWithdrawals(), loadWallets(), loadJournal()])
 }
 
-onMounted(() => Promise.all([loadWithdrawals(), loadWallets(), loadJournal(), loadSettings()]))
+onMounted(() => Promise.all([loadWithdrawals(), loadWallets(), loadJournal(), loadSettings(), loadPricing()]))
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -399,9 +456,60 @@ function shortId(id: string) {
       </p>
       <div class="settings__grid">
         <v-text-field v-model="settings.courier_delivery_share_percent" label="Part livreur des frais de livraison" suffix="%" type="number" variant="outlined" />
-        <v-text-field v-model="settings.pickup_point_fee_per_parcel" label="Rémunération point de retrait / colis" suffix="GNF" type="number" variant="outlined" />
         <v-text-field v-model="settings.earnings_hold_days" label="Délai avant disponibilité" suffix="jours" type="number" variant="outlined" hint="Couvre litiges et retours." persistent-hint />
       </div>
+      <h2 class="settings__title mt-4">Points de retrait — rémunération par colis remis</h2>
+      <p class="text-muted text-meta mb-3">
+        Selon la taille du colis (déclarée par le vendeur, corrigée si besoin par le point à la réception), plus la garde
+        prolongée et un bonus de volume. Pris sur la part Ndjouri.
+      </p>
+      <div class="settings__grid settings__grid--4">
+        <v-text-field v-model="settings.pickup_point_fee_per_parcel" label="Colis S" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_fee_m" label="Colis M" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_fee_l" label="Colis L" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_fee_xl" label="Colis XL" suffix="GNF" type="number" variant="outlined" />
+      </div>
+      <div class="settings__grid">
+        <v-text-field v-model="settings.pickup_storage_fee_per_day" label="Garde prolongée, par jour" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_storage_free_days" label="Jours de garde inclus" suffix="jours" type="number" variant="outlined" hint="La garde est payée à partir du jour suivant." persistent-hint />
+        <v-text-field v-model="settings.pickup_storage_max_days" label="Garde payée jusqu'à" suffix="jours" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_volume_bonus_threshold" label="Bonus volume au-delà de" suffix="colis / mois" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_volume_bonus_percent" label="Bonus volume" suffix="%" type="number" variant="outlined" />
+        <v-text-field v-model="settings.pickup_return_percent" label="Colis non retiré (retour vendeur)" suffix="% du tarif" type="number" variant="outlined" hint="S'appliquera avec le circuit de retour." persistent-hint />
+      </div>
+
+      <h2 class="settings__title mt-4">Supplément colis encombrants (payé par l'acheteur)</h2>
+      <div class="settings__grid">
+        <v-text-field v-model="settings.delivery_surcharge_l" label="Colis L" suffix="GNF" type="number" variant="outlined" />
+        <v-text-field v-model="settings.delivery_surcharge_xl" label="Colis XL" suffix="GNF" type="number" variant="outlined" />
+      </div>
+
+      <div v-if="marginRows.length" class="margin-check mt-3" :class="{ 'margin-check--bad': losingRows.length }">
+        <div class="margin-check__head">
+          <PhWarningCircle v-if="losingRows.length" :size="18" />
+          <PhCheckCircle v-else :size="18" />
+          <strong>
+            {{ losingRows.length ? `Marge négative sur ${losingRows.length} palier${losingRows.length > 1 ? 's' : ''} en point de retrait` : 'Marge positive sur tous les paliers en point de retrait' }}
+          </strong>
+        </div>
+        <p class="text-fine mb-2">
+          Prix payé par l'acheteur − part du livreur − rémunération du point (hors garde et bonus), avant la commission
+          sur les articles. À corriger dans Frais de livraison ou ici.
+        </p>
+        <table class="margin-table">
+          <tr>
+            <th>Palier</th>
+            <th class="num">Prix</th>
+            <th v-for="m in marginRows[0]!.margins" :key="m.size" class="num">Marge {{ m.size }}</th>
+          </tr>
+          <tr v-for="row in marginRows" :key="row.id">
+            <td>{{ row.range }}</td>
+            <td class="num">{{ formatGnf(row.price) }}</td>
+            <td v-for="m in row.margins" :key="m.size" class="num" :class="{ 'is-neg': m.value < 0 }">{{ formatGnf(m.value) }}</td>
+          </tr>
+        </table>
+      </div>
+
       <h2 class="settings__title mt-4">Retraits</h2>
       <div class="settings__grid">
         <v-text-field v-model="settings.withdrawal_fee_percent" label="Frais d'envoi facturés" suffix="%" type="number" step="0.1" variant="outlined" hint="À caler sur la grille Djomy — l'écart est absorbé par Ndjouri." persistent-hint />
@@ -469,6 +577,53 @@ function shortId(id: string) {
 </template>
 
 <style scoped>
+.settings__grid--4 {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.margin-check {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: hsl(150 70% var(--tint-bg-soft, 17%));
+  color: hsl(150 55% var(--tint-fg));
+}
+
+.margin-check--bad {
+  background: hsl(355 80% var(--tint-bg-soft, 17%));
+  color: hsl(355 65% var(--tint-fg));
+}
+
+.margin-check__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.margin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  color: var(--color-neutral-200);
+}
+
+.margin-table th,
+.margin-table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.margin-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.margin-table .is-neg {
+  color: var(--color-error);
+  font-weight: 700;
+}
+
 /* Couleurs catégorielles de la composition (palette validée en clair et en sombre). */
 .finance {
   --fin-1: #2a78d6;

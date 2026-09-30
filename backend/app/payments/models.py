@@ -77,8 +77,25 @@ class PaymentSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # --- Répartition des gains (voir app/wallets/service.py::settle_sub_order) ---
     # Part des frais de livraison reversée au livreur ; Ndjouri garde le reste.
     courier_delivery_share_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
-    # Rémunération fixe d'un point de retrait par colis remis, prise sur la part Ndjouri.
-    pickup_point_fee_per_parcel: Mapped[int] = mapped_column(Integer, nullable=False, default=2000)
+    # Rémunération d'un point de retrait par colis remis, prise sur la part
+    # Ndjouri, selon la taille du colis (app/common/parcel.py) — la colonne
+    # historique pickup_point_fee_per_parcel est le tarif S.
+    pickup_point_fee_per_parcel: Mapped[int] = mapped_column(Integer, nullable=False, default=1500)
+    pickup_fee_m: Mapped[int] = mapped_column(Integer, nullable=False, default=2500, server_default="2500")
+    pickup_fee_l: Mapped[int] = mapped_column(Integer, nullable=False, default=4000, server_default="4000")
+    pickup_fee_xl: Mapped[int] = mapped_column(Integer, nullable=False, default=6000, server_default="6000")
+    # Garde prolongée : par jour au-delà des jours gratuits, plafonnée.
+    pickup_storage_free_days: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
+    pickup_storage_fee_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=200, server_default="200")
+    pickup_storage_max_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7, server_default="7")
+    # Bonus volume : au-delà de N colis remis dans le mois, +X % par colis.
+    pickup_volume_bonus_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    pickup_volume_bonus_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=10, server_default="10")
+    # Colis non retiré renvoyé au vendeur : part du tarif versée au point (circuit de retour à venir).
+    pickup_return_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=50, server_default="50")
+    # Supplément acheteur sur la livraison des colis encombrants.
+    delivery_surcharge_l: Mapped[int] = mapped_column(Integer, nullable=False, default=5000, server_default="5000")
+    delivery_surcharge_xl: Mapped[int] = mapped_column(Integer, nullable=False, default=10000, server_default="10000")
 
     # --- Tarif de livraison en point de retrait (voir app/delivery/service.py::grid_for) ---
     # « percent » : tarif domicile × pickup_fee_percent ; « grid » : grille
