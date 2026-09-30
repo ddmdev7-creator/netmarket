@@ -21,7 +21,7 @@ export interface LocalSearchResult {
   lng: number
 }
 
-// localSearch : résultats Netmarket (boutiques, points, livreurs…) affichés
+// localSearch : résultats NdjouriMarket (boutiques, points, livreurs…) affichés
 // tout de suite, avant les lieux trouvés par Nominatim.
 const props = withDefaults(defineProps<{ localSearch?: (q: string) => LocalSearchResult[]; placeholder?: string }>(), {
   localSearch: undefined,
@@ -119,7 +119,7 @@ onBeforeUnmount(() => {
     </div>
     <div v-if="open && (localResults.length || results.length)" class="map-search__results">
       <template v-if="localResults.length">
-        <div class="map-search__section">Sur Netmarket</div>
+        <div class="map-search__section">Sur NdjouriMarket</div>
         <button
           v-for="r in localResults"
           :key="r.id"

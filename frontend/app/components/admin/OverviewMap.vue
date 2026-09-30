@@ -71,7 +71,7 @@ const props = withDefaults(
     searchPlaceholder?: string
   }>(),
   {
-    searchPlaceholder: 'Rechercher sur Netmarket ou un lieu…',
+    searchPlaceholder: 'Rechercher sur NdjouriMarket ou un lieu…',
     lines: () => [],
     legendKinds: () => ['shop', 'pickup', 'shop_pickup'],
     ariaLabel: 'Carte des boutiques et points de retrait',
@@ -198,7 +198,7 @@ function fitToItems() {
 
 function onSearchSelect({ lat, lng, id }: { lat: number; lng: number; id?: string }) {
   map?.flyTo({ center: [lng, lat], zoom: 16 })
-  // Élément Netmarket : sa fiche s'ouvre aussi.
+  // Élément NdjouriMarket : sa fiche s'ouvre aussi.
   if (id) emit('select', id)
 }
 

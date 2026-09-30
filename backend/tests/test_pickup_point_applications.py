@@ -171,7 +171,7 @@ async def test_second_chance_reopens_the_dossier(
     state = (await client.get("/pickup-point-applications/me", headers=auth_headers(buyer_user))).json()
     assert state["application"]["admin_note"] == "Photo du local trop sombre"
     assert state["application"]["admin_suggestion"] == "Reprenez les photos en journée"
-    assert _stub_storage_and_email == [("candidat@example.com", "Votre dossier est à corriger — Marketplace Guinée")]
+    assert _stub_storage_and_email == [("candidat@example.com", "Votre dossier est à corriger — NdjouriMarket")]
 
     resubmitted = await _submit_complete(client, buyer_user)
     assert resubmitted["status"] == "submitted"

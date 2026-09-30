@@ -93,7 +93,7 @@ function badgeOf(item: NavItem) {
     <div class="as__brand">
       <span class="as__logo">N</span>
       <span class="as__brand-text">
-        <strong>Netmarket</strong>
+        <strong>NdjouriMarket</strong>
         <span>Administration</span>
       </span>
     </div>

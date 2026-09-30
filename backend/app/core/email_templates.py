@@ -9,7 +9,7 @@ the same wording, wrapped in `_layout()` so every email shares one look
 
 import html
 
-BRAND_NAME = "Marketplace Guinée"
+BRAND_NAME = "NdjouriMarket"
 COLOR_PRIMARY = "#0A66F5"
 COLOR_BACKGROUND = "#F3F4F6"
 COLOR_CARD = "#FFFFFF"

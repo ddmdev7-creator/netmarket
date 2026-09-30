@@ -71,7 +71,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="hero" aria-label="Pourquoi Netmarket" @pointerdown="stopAutoplay" @pointerup="startAutoplay">
+  <section class="hero" aria-label="Pourquoi NdjouriMarket" @pointerdown="stopAutoplay" @pointerup="startAutoplay">
     <div ref="trackRef" class="hero__track">
       <div
         v-for="(slide, i) in slides"

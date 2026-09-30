@@ -52,7 +52,7 @@ const shopLink = computed(() => ({ path: '/', query: { shop: props.vendorId, sho
       <span v-if="vendor?.zone || since" class="shop__meta">
         <template v-if="vendor?.zone"><PhMapPin :size="12" /> {{ vendor.zone }}</template>
         <template v-if="vendor?.zone && since"><span class="shop__dot">·</span></template>
-        <template v-if="since">Sur Netmarket depuis {{ since }}</template>
+        <template v-if="since">Sur NdjouriMarket depuis {{ since }}</template>
       </span>
     </span>
     <span class="shop__cta">

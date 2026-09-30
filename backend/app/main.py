@@ -57,7 +57,7 @@ async def lifespan(_app: FastAPI):
         subscriptions.cancel()
 
 
-app = FastAPI(title="Marketplace Guinée API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="NdjouriMarket API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

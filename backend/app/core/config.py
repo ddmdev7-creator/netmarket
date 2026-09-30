@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # app/core/email.py. Sans clé (dev/CI sans compte Brevo), l'email est
     # juste loggé, jamais réellement envoyé.
     brevo_api_key: str | None = None
-    brevo_sender_name: str = "Marketplace Guinée"
+    brevo_sender_name: str = "NdjouriMarket"
     brevo_sender_email: str = "no-reply@netmarket.ndjouri.com"
 
     # Base du frontend, pour construire les URLs de retour transmises aux

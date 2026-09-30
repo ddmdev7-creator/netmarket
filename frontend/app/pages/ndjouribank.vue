@@ -154,7 +154,7 @@ function formatDateTime(iso: string) {
   <div class="nb">
     <header class="nb__head">
       <h1 class="text-h6 mb-0">NdjouriBank</h1>
-      <span class="text-muted" style="font-size: 13px">Votre porte-monnaie pour payer en un clic sur Netmarket</span>
+      <span class="text-muted" style="font-size: 13px">Votre porte-monnaie pour payer en un clic sur NdjouriMarket</span>
     </header>
 
     <v-skeleton-loader v-if="pending && !wallet" type="card, list-item-three-line" />
@@ -206,7 +206,7 @@ function formatDateTime(iso: string) {
       <p class="info-note">
         <PhInfo :size="15" />
         <span>
-          Ton solde NdjouriBank sert à payer tes commandes sur Netmarket. Les remboursements d'annulation y sont crédités
+          Ton solde NdjouriBank sert à payer tes commandes sur NdjouriMarket. Les remboursements d'annulation y sont crédités
           instantanément. Il n'est pas retirable vers un compte mobile money.
         </span>
       </p>

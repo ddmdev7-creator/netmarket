@@ -383,7 +383,7 @@ async function buyNow() {
 async function share() {
   if (!product.value) return
   const url = window.location.href
-  const text = `${product.value.name} — ${formatGnf(effectivePrice.value)} sur Netmarket`
+  const text = `${product.value.name} — ${formatGnf(effectivePrice.value)} sur NdjouriMarket`
   if (navigator.share) {
     try {
       await navigator.share({ title: product.value.name, text, url })

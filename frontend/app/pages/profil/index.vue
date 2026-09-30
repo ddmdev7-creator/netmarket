@@ -111,7 +111,7 @@ const spaces = computed<Space[]>(() => [
   ...(role.value === 'vendor' ? [{ to: '/vendeur', label: 'Espace vendeur', hint: 'Commandes, produits, gains', icon: PhStorefront, hue: 150 }] : []),
   ...(role.value === 'courier' ? [{ to: '/livreur', label: 'Espace livreur', hint: 'Courses et gains', icon: PhMotorcycle, hue: 30 }] : []),
   ...(isPointManager.value ? [{ to: '/point-retrait', label: 'Point de retrait', hint: 'Colis à remettre', icon: PhWarehouse, hue: 270 }] : []),
-  ...(role.value === 'admin' ? [{ to: '/admin', label: 'Administration', hint: 'Pilotage de Netmarket', icon: PhChartBar, hue: 355 }] : []),
+  ...(role.value === 'admin' ? [{ to: '/admin', label: 'Administration', hint: 'Pilotage de NdjouriMarket', icon: PhChartBar, hue: 355 }] : []),
 ])
 
 // …et ceux qu'un acheteur peut rejoindre.
@@ -222,7 +222,7 @@ async function logout() {
         </section>
 
         <section v-if="joinable.length" class="pf-section">
-          <h2 class="pf-section__title">Gagner avec Netmarket</h2>
+          <h2 class="pf-section__title">Gagner avec NdjouriMarket</h2>
           <NuxtLink v-for="space in joinable" :key="space.to" :to="space.to" class="pf-link">
             <span class="pf-link__icon" :style="{ '--hue': space.hue }"><component :is="space.icon" :size="17" /></span>
             <span class="pf-link__text"><strong>{{ space.label }}</strong><small>{{ space.hint }}</small></span>

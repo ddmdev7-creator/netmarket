@@ -28,6 +28,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: 'fr' },
+      title: 'NdjouriMarket',
       // viewport-fit=cover lets the app draw under the notch/home-indicator so
       // env(safe-area-inset-*) below can push content back in — required for a
       // real edge-to-edge look once installed (standalone display mode).
@@ -35,7 +36,7 @@ export default defineNuxtConfig({
       // d'un champ est évité autrement, en gardant les champs à 16 px (main.css).
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
       meta: [
-        { name: 'description', content: 'Marketplace e-commerce multi-vendeurs pour le marché guinéen' },
+        { name: 'description', content: 'NdjouriMarket — le marché en ligne multi-vendeurs de Guinée' },
         // Valeur par défaut (thème clair "daylight") — mise à jour à l'exécution
         // par useAppTheme() quand l'utilisateur bascule en mode sombre.
         { name: 'theme-color', content: '#F3F4F6' },
@@ -44,7 +45,7 @@ export default defineNuxtConfig({
         { name: 'mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-capable', content: 'yes' },
         { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
-        { name: 'apple-mobile-web-app-title', content: 'Marketplace' },
+        { name: 'apple-mobile-web-app-title', content: 'NdjouriMarket' },
       ],
       link: [{ rel: 'apple-touch-icon', href: '/apple-touch-icon.png' }],
     },
@@ -85,9 +86,9 @@ export default defineNuxtConfig({
   pwa: {
     registerType: 'autoUpdate',
     manifest: {
-      name: 'Marketplace Guinée',
-      short_name: 'Marketplace',
-      description: 'Marketplace e-commerce multi-vendeurs pour le marché guinéen',
+      name: 'NdjouriMarket',
+      short_name: 'NdjouriMarket',
+      description: 'NdjouriMarket — le marché en ligne multi-vendeurs de Guinée',
       lang: 'fr',
       theme_color: '#F3F4F6',
       background_color: '#F3F4F6',
