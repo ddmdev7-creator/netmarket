@@ -3,7 +3,8 @@ import { PhCrown, PhImage, PhLink, PhSparkle, PhStar, PhUploadSimple, PhX } from
 
 // Sélecteur de photos du formulaire produit : photos du produit (mode
 // complet) et de chaque variante (compact). Avec `ai`, l'amélioration IA
-// (fond blanc, recadrage, netteté — app/uploads/enhance.py, Premium) se
+// (fond blanc, recadrage, netteté — app/uploads/enhance.py, quota mensuel
+// selon la formule d'abonnement) se
 // branche sur le même geste d'ajout : un interrupteur partagé par tous les
 // sélecteurs de la page, plus un bouton « Améliorer » sur une photo déjà là.
 const images = defineModel<string[]>({ required: true })
@@ -18,7 +19,7 @@ const props = withDefaults(defineProps<{ label?: string; compact?: boolean; ai?:
 const toast = useToastStore()
 const { apiFetch } = useApi()
 const apiBase = useApiBase()
-const { isPremium } = useVendorPremium()
+const { aiAvailable, aiLeft, aiLimit, maxImages, planName, countAi } = useVendorPlan()
 
 const MAX_SIZE = 8 * 1024 * 1024
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp']
@@ -33,11 +34,11 @@ const aiWanted = useState('nm-ai-enhance', () => {
     return false
   }
 })
-const aiOn = computed(() => props.ai && isPremium.value && aiWanted.value)
+const aiOn = computed(() => props.ai && aiAvailable.value && aiWanted.value)
 const premiumDialog = ref(false)
 
 function toggleAi() {
-  if (!isPremium.value) {
+  if (!aiAvailable.value) {
     premiumDialog.value = true
     return
   }
@@ -85,7 +86,10 @@ async function uploadOne(file: File, useAi: boolean): Promise<string | null> {
       body: formData,
     })
     const key = keys[0] ?? null
-    if (key && useAi) enhanced.value.add(key)
+    if (key && useAi) {
+      enhanced.value.add(key)
+      countAi()
+    }
     return key
   } catch (e) {
     toast.error(apiErrorMessage(e, `Impossible d'envoyer « ${file.name} ».`))
@@ -99,16 +103,35 @@ async function uploadOne(file: File, useAi: boolean): Promise<string | null> {
 // Un fichier par requête, deux à la fois : chaque tuile se remplit dès que
 // sa photo est prête au lieu d'attendre tout le lot (l'IA prend quelques
 // secondes par photo). L'ordre de sélection est conservé.
+// Place restante selon la formule (photos par produit) — null = sans limite.
+const room = computed(() =>
+  maxImages.value === null ? null : Math.max(0, maxImages.value - images.value.length - pending.value.length),
+)
+
 async function addFiles(raw: File[]) {
-  const files = validate(raw)
+  let files = validate(raw)
   if (!files.length) return
+  if (room.value !== null && files.length > room.value) {
+    toast.error(
+      room.value === 0
+        ? `Votre formule ${planName.value} permet ${maxImages.value} photos par produit : retirez-en une pour en ajouter.`
+        : `Votre formule ${planName.value} permet ${maxImages.value} photos par produit : seules les ${room.value} premières sont ajoutées.`,
+    )
+    files = files.slice(0, room.value)
+    if (!files.length) return
+  }
   const useAi = aiOn.value
+  // Quota IA plus court que la sélection : les suivantes partent sans IA.
+  const aiBudget = useAi ? (aiLeft.value ?? files.length) : 0
+  if (useAi && aiBudget < files.length) {
+    toast.info(`Il vous reste ${aiBudget} amélioration${aiBudget > 1 ? 's' : ''} IA ce mois-ci : les autres photos sont ajoutées sans IA.`)
+  }
   const results: (string | null)[] = new Array(files.length).fill(null)
   let next = 0
   async function worker() {
     while (next < files.length) {
       const index = next++
-      results[index] = await uploadOne(files[index]!, useAi)
+      results[index] = await uploadOne(files[index]!, index < aiBudget)
     }
   }
   await Promise.all([worker(), worker()])
@@ -156,7 +179,7 @@ function canEnhance(url: string): boolean {
 async function enhanceExisting(index: number) {
   const key = images.value[index]
   if (!key) return
-  if (!isPremium.value) {
+  if (!aiAvailable.value) {
     premiumDialog.value = true
     return
   }
@@ -166,6 +189,7 @@ async function enhanceExisting(index: number) {
     const fresh = keys[0]
     if (!fresh) return
     enhanced.value.add(fresh)
+    countAi()
     // La liste a pu bouger pendant le traitement : on remplace par la clé.
     const at = images.value.indexOf(key)
     if (at !== -1) images.value.splice(at, 1, fresh)
@@ -224,7 +248,10 @@ function addManualUrl() {
       <span class="ai-toggle__text">
         <span class="ai-toggle__title">
           Amélioration IA
-          <span v-if="!isPremium" class="ai-toggle__premium"><PhCrown :size="10" weight="fill" /> Premium</span>
+          <span v-if="aiLimit === 0" class="ai-toggle__premium"><PhCrown :size="10" weight="fill" /> Formule supérieure</span>
+          <span v-else-if="aiLeft !== null" class="ai-toggle__quota" :class="{ 'ai-toggle__quota--out': aiLeft === 0 }">
+            {{ aiLeft === 0 ? 'Quota du mois atteint' : `${aiLeft} restante${aiLeft > 1 ? 's' : ''}` }}
+          </span>
         </span>
         <span v-if="!compact" class="ai-toggle__sub">
           {{ aiOn ? 'Activée — fond blanc, recadrage et netteté sur chaque photo ajoutée' : 'Fond blanc, recadrage et netteté automatiques' }}
@@ -268,7 +295,7 @@ function addManualUrl() {
           v-else-if="canEnhance(url) && !enhancing.has(url)"
           type="button"
           class="ip-tile__enhance"
-          :title="isPremium ? 'Améliorer cette photo avec l\'IA' : 'Amélioration IA — Premium'"
+          :title="aiAvailable ? 'Améliorer cette photo avec l\'IA' : 'Quota d\'améliorations IA atteint'"
           @click="enhanceExisting(i)"
         >
           <PhSparkle :size="11" weight="fill" />
@@ -291,7 +318,7 @@ function addManualUrl() {
         <span class="ip-tile__progress" />
       </div>
 
-      <button type="button" class="ip-add" :class="{ 'ip-add--ai': aiOn, 'ip-add--wide': compact && !images.length && !pending.length }" @click="pickFiles">
+      <button v-if="room !== 0" type="button" class="ip-add" :class="{ 'ip-add--ai': aiOn, 'ip-add--wide': compact && !images.length && !pending.length }" @click="pickFiles">
         <PhSparkle v-if="aiOn" :size="20" weight="fill" />
         <PhUploadSimple v-else :size="20" />
         <span>{{ compact && !images.length && !pending.length ? (aiOn ? 'Ajouter des photos (IA)' : 'Ajouter des photos') : 'Ajouter' }}</span>
@@ -315,6 +342,9 @@ function addManualUrl() {
     </div>
 
     <template v-if="!compact">
+      <p v-if="maxImages !== null && images.length" class="text-muted mt-2 mb-0 text-fine">
+        {{ images.length }} / {{ maxImages }} photos (formule {{ planName }})
+      </p>
       <p v-if="images.length > 1" class="text-muted mt-2 mb-0 text-fine">
         La photo « Couverture » est celle affichée dans le catalogue — touche
         <PhStar :size="10" weight="bold" style="vertical-align: -1px" /> sur une autre pour la remplacer.
@@ -344,16 +374,18 @@ function addManualUrl() {
     <v-dialog v-model="premiumDialog" max-width="420">
       <div class="premium-card">
         <span class="premium-card__icon"><PhSparkle :size="26" weight="fill" /></span>
-        <h3 class="premium-card__title">Photos pro avec l'IA</h3>
+        <h3 class="premium-card__title">{{ aiLimit === 0 ? "Photos pro avec l'IA" : 'Quota IA du mois atteint' }}</h3>
         <p class="premium-card__text">
           Détourage, fond blanc, recadrage et netteté en un geste : des fiches qui inspirent confiance et se vendent
-          mieux. Cette fonction est incluse dans l'abonnement Premium.
+          mieux.
+          <template v-if="aiLimit === 0">Cette fonction n'est pas incluse dans la formule {{ planName }}.</template>
+          <template v-else>Vous avez utilisé les {{ aiLimit }} améliorations de la formule {{ planName }} ce mois-ci : passez à une formule supérieure pour continuer.</template>
         </p>
         <div class="premium-card__actions">
           <v-btn variant="text" @click="premiumDialog = false">Plus tard</v-btn>
           <v-btn color="primary" rounded="lg" to="/vendeur/abonnement" target="_blank" @click="premiumDialog = false">
             <PhCrown :size="16" weight="fill" class="mr-2" />
-            Voir Premium
+            Voir les formules
           </v-btn>
         </div>
         <p class="premium-card__note">S'ouvre dans un nouvel onglet — ton produit en cours n'est pas perdu.</p>
@@ -466,6 +498,20 @@ function addManualUrl() {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.ai-toggle__quota {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #8b5cf6 14%, transparent);
+  color: var(--ip-violet);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.ai-toggle__quota--out {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: var(--color-error);
 }
 
 .ai-toggle__switch {

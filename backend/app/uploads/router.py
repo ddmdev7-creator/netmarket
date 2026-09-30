@@ -13,16 +13,20 @@ object storage (see app/core/storage.py's module docstring).
 import re
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.concurrency import run_in_threadpool
 from PIL import UnidentifiedImageError
 
-from app.core.deps import require_role
+from app.core.deps import get_db, require_role
 from app.core.exceptions import ConflictError, NotFoundError
 from app.core.storage import VARIANT_WIDTHS, fetch_image, fetch_image_variant, upload_image
-from app.subscriptions.deps import require_premium_vendor
+from app.subscriptions import quotas
+from app.subscriptions.models import UsageKind
+from app.vendors import service as vendors_service
 from app.uploads.enhance import enhance_image
 from app.uploads.schemas import UploadedImages
-from app.users.models import UserRole
+from app.users.models import User, UserRole
+from app.vendors.models import Vendor
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -67,12 +71,23 @@ async def upload_images(files: list[UploadFile] = File(...)) -> UploadedImages:
     return UploadedImages(keys=keys)
 
 
-@router.post("/images/enhance", response_model=UploadedImages, dependencies=[Depends(require_premium_vendor)])
-async def enhance_images(files: list[UploadFile] = File(...)) -> UploadedImages:
+async def _enhancing_vendor(
+    current_user: User = Depends(require_role(UserRole.VENDOR)), db: AsyncSession = Depends(get_db)
+) -> Vendor:
+    return await vendors_service.get_my_vendor(db, current_user)
+
+
+@router.post("/images/enhance", response_model=UploadedImages)
+async def enhance_images(
+    files: list[UploadFile] = File(...),
+    vendor: Vendor = Depends(_enhancing_vendor),
+    db: AsyncSession = Depends(get_db),
+) -> UploadedImages:
     """Same constraints as /images, but runs each photo through the
     background-removal/crop/upscale pipeline first — see app/uploads/enhance.py.
-    Reserved for vendors with an active subscription (app/subscriptions/)."""
+    Counted against the vendor's monthly AI quota (app/subscriptions/quotas.py)."""
     contents = await _read_validated(files)
+    await quotas.ensure_ai_available(db, vendor.id, len(contents))
 
     keys: list[str] = []
     for filename, content in contents:
@@ -83,6 +98,7 @@ async def enhance_images(files: list[UploadFile] = File(...)) -> UploadedImages:
         except UnidentifiedImageError as exc:
             raise ConflictError(f"« {filename} » n'est pas une image valide.") from exc
 
+    await quotas.record_usage(db, vendor.id, UsageKind.AI_ENHANCEMENT, len(keys))
     return UploadedImages(keys=keys)
 
 
@@ -90,8 +106,10 @@ def _enhance_and_store(content: bytes) -> str:
     return upload_image(enhance_image(content))
 
 
-@router.post("/images/{key}/enhance", response_model=UploadedImages, dependencies=[Depends(require_premium_vendor)])
-async def enhance_stored_image(key: str) -> UploadedImages:
+@router.post("/images/{key}/enhance", response_model=UploadedImages)
+async def enhance_stored_image(
+    key: str, vendor: Vendor = Depends(_enhancing_vendor), db: AsyncSession = Depends(get_db)
+) -> UploadedImages:
     """Améliore une photo déjà envoyée (bouton « Améliorer » sur la vignette).
     L'original reste intact sous sa clé : le résultat reçoit une clé neuve,
     que le formulaire met à la place de l'ancienne."""
@@ -100,7 +118,10 @@ async def enhance_stored_image(key: str) -> UploadedImages:
     content = await run_in_threadpool(fetch_image, key)
     if content is None:
         raise NotFoundError("Image introuvable.")
-    return UploadedImages(keys=[await run_in_threadpool(_enhance_and_store, content)])
+    await quotas.ensure_ai_available(db, vendor.id, 1)
+    fresh = await run_in_threadpool(_enhance_and_store, content)
+    await quotas.record_usage(db, vendor.id, UsageKind.AI_ENHANCEMENT)
+    return UploadedImages(keys=[fresh])
 
 
 @router.get("/images/{key}")

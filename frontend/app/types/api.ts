@@ -91,11 +91,26 @@ export interface VendorPublicRead {
 }
 
 export interface SubscriptionPlanRead {
-  id: string
+  /** null pour la formule Gratuit de repli quand aucune n'existe en base. */
+  id: string | null
   name: string
   price_gnf: number
   duration_days: number
+  is_free: boolean
+  is_active: boolean
+  description: string | null
+  sort_order: number
+  /** Quotas — null = illimité. */
+  max_products: number | null
+  max_images_per_product: number
+  ai_enhancements_per_month: number | null
+  /** Mises en avant (phase 2 : affiché, pas encore utilisable). */
+  featured_per_month: number
+  /** Points de commission retirés au taux du vendeur. */
+  commission_discount: number
 }
+
+export type SubscriptionPlanWrite = Partial<Omit<SubscriptionPlanRead, 'id' | 'is_free'>>
 
 export interface VendorSubscriptionRead {
   id: string
@@ -103,11 +118,43 @@ export interface VendorSubscriptionRead {
   status: SubscriptionStatus
   started_at: string | null
   expires_at: string | null
+  is_trial: boolean
+  created_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
   plan: SubscriptionPlanRead
 }
 
+export interface QuotaUsage {
+  used: number
+  /** null = illimité. */
+  limit: number | null
+}
+
+/** GET /subscriptions/me/overview (et /admin/subscriptions/vendors/{id}). */
+export interface SubscriptionOverview {
+  /** Formule qui s'applique maintenant (en cours, sinon Gratuit). */
+  plan: SubscriptionPlanRead
+  current: VendorSubscriptionRead | null
+  /** Renouvellement payé d'avance, qui démarre à la fin de `current`. */
+  scheduled: VendorSubscriptionRead | null
+  pending: VendorSubscriptionRead | null
+  /** Fin de la période de grâce (produits en trop masqués ensuite). */
+  grace_until: string | null
+  products: QuotaUsage
+  ai_enhancements: QuotaUsage
+  ai_resets_at: string
+  max_images_per_product: number
+  featured_per_month: number
+  base_commission_rate: number
+  effective_commission_rate: number
+  history: VendorSubscriptionRead[]
+  trial_used_plan_ids: string[]
+  /** Gratuit puis les formules en vente. */
+  plans: SubscriptionPlanRead[]
+}
+
 export interface AdminSubscriptionRead extends VendorSubscriptionRead {
-  created_at: string
   payment_reference: string | null
   shop_name: string
   vendor_zone: string | null
@@ -116,6 +163,14 @@ export interface AdminSubscriptionRead extends VendorSubscriptionRead {
   owner_full_name: string | null
   owner_phone: string | null
   owner_email: string | null
+  products_used: number
+}
+
+export interface SubscriptionSettings {
+  auto_trial_enabled: boolean
+  auto_trial_plan_id: string | null
+  auto_trial_days: number
+  grace_days: number
 }
 
 export interface AddressRead {
@@ -956,6 +1011,8 @@ export type NotificationType =
   | 'favorite_price_drop'
   | 'favorite_back_in_stock'
   | 'cart_reminder'
+  | 'subscription_reminder'
+  | 'subscription_update'
 
 export interface NotificationRead {
   id: string

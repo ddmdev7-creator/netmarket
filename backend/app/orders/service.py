@@ -18,6 +18,7 @@ from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.couriers import repository as courier_repository
 from app.couriers.models import CourierStatus
 from app.delivery import service as delivery_service
+from app.subscriptions import quotas
 from app.notifications import service as notifications_service
 from app.orders import repository
 from app.orders import handoff
@@ -291,7 +292,8 @@ async def checkout_cart(db: AsyncSession, user: User, data: CheckoutRequest) -> 
     for vendor_items in by_vendor.values():
         vendor = vendor_items[0][3]
         amount = _vendor_amount(vendor_items)
-        commission = _commission_amount(amount, Decimal(str(vendor.commission_rate)))
+        # Taux réduit selon la formule d'abonnement du vendeur (app/subscriptions/quotas.py).
+        commission = _commission_amount(amount, await quotas.effective_commission_rate(db, vendor))
         # Figée au checkout — voir le commentaire sur SubOrder.estimated_delivery_min
         # dans app/orders/models.py pour pourquoi ce n'est pas recalculé à la volée.
         estimate = estimate_delivery_window(

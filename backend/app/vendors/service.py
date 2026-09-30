@@ -110,9 +110,15 @@ async def admin_update_vendor(db: AsyncSession, vendor_id: uuid.UUID, data: Vend
     vendor = await repository.get_by_id(db, vendor_id)
     if vendor is None:
         raise NotFoundError("Boutique introuvable.")
+    was_approved = vendor.status == VendorStatus.APPROVED
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(vendor, field, value)
     await db.commit()
+    if not was_approved and vendor.status == VendorStatus.APPROVED:
+        # Essai gratuit automatique à l'approbation, si activé (app/subscriptions).
+        from app.subscriptions import service as subscriptions_service
+
+        await subscriptions_service.maybe_auto_trial(db, vendor)
     await db.refresh(vendor)
     return vendor
 

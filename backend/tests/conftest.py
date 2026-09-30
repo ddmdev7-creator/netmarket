@@ -165,7 +165,16 @@ async def product(db_session: AsyncSession, vendor: Vendor, category: Category) 
 
 @pytest_asyncio.fixture
 async def subscription_plan(db_session: AsyncSession) -> SubscriptionPlan:
-    plan = SubscriptionPlan(name="Premium mensuel", price_gnf=20000, duration_days=30)
+    plan = SubscriptionPlan(
+        name="Pro",
+        price_gnf=20000,
+        duration_days=30,
+        max_products=150,
+        max_images_per_product=8,
+        ai_enhancements_per_month=100,
+        featured_per_month=3,
+        commission_discount=2,
+    )
     db_session.add(plan)
     await db_session.flush()
     return plan

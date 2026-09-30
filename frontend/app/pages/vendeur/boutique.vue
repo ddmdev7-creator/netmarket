@@ -231,7 +231,7 @@ async function submit() {
     <v-card variant="flat" class="pa-2">
       <NuxtLink to="/vendeur/abonnement" class="list-item">
         <PhSparkle :size="18" color="var(--color-neutral-400)" />
-        <span>Abonnement premium</span>
+        <span>Abonnement et quotas</span>
       </NuxtLink>
       <v-divider />
       <NuxtLink to="/profil" class="list-item">

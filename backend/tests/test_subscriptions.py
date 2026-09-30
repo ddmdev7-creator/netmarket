@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.subscriptions import service
+from app.subscriptions import quotas
 from app.subscriptions.models import SubscriptionPlan, SubscriptionStatus, VendorSubscription
 from app.users.models import User
 from app.vendors.models import Vendor
@@ -17,7 +17,7 @@ async def test_list_plans_is_public(client: AsyncClient, subscription_plan: Subs
 
     assert response.status_code == 200
     names = [plan["name"] for plan in response.json()]
-    assert "Premium mensuel" in names
+    assert "Pro" in names
 
 
 async def test_vendor_can_subscribe(
@@ -145,4 +145,4 @@ async def test_expired_subscription_is_not_premium(
     db_session.add(expired)
     await db_session.flush()
 
-    assert await service.is_premium(db_session, vendor.id) is False
+    assert await quotas.current_subscription(db_session, vendor.id) is None

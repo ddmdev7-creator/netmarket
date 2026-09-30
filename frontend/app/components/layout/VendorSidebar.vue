@@ -5,7 +5,7 @@ import {
   PhMapPinLine,
   PhPackage,
   PhReceipt,
-  PhSparkle,
+  PhCrown,
   PhStorefront,
   PhWallet,
 } from '@phosphor-icons/vue'
@@ -63,7 +63,7 @@ const groups = computed<{ title: string; items: NavItem[] }[]>(() => {
       items: [
         { to: '/vendeur/gains', label: 'Mes gains', icon: PhWallet },
         { to: '/vendeur/boutique', label: 'Réglages', icon: PhGear },
-        { to: '/vendeur/abonnement', label: 'Premium', icon: PhSparkle },
+        { to: '/vendeur/abonnement', label: 'Abonnement', icon: PhCrown },
         ...(auth.user?.is_pickup_point_manager
           ? [{ to: '/point-retrait', label: 'Mon point de retrait', icon: PhMapPinLine }]
           : []),

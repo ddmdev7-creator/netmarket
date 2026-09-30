@@ -34,6 +34,9 @@ class NotificationType(StrEnum):
     FAVORITE_PRICE_DROP = "favorite_price_drop"
     FAVORITE_BACK_IN_STOCK = "favorite_back_in_stock"
     CART_REMINDER = "cart_reminder"
+    # Abonnement vendeur : rappel de fin, et changements (essai, activation, fin, produits masqués).
+    SUBSCRIPTION_REMINDER = "subscription_reminder"
+    SUBSCRIPTION_UPDATE = "subscription_update"
 
 
 class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):

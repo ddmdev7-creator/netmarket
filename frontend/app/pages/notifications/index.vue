@@ -4,8 +4,9 @@ import {
   PhBell,
   PhBellSlash,
   PhCaretRight,
-  PhChecks,
   PhCheckCircle,
+  PhChecks,
+  PhCrown,
   PhHeart,
   PhMotorcycle,
   PhPackage,
@@ -57,6 +58,8 @@ const TYPE_META: Record<NotificationType, TypeMeta> = {
   pickup_application_approved: { icon: PhCheckCircle, hue: 150, category: 'account' },
   pickup_application_changes_requested: { icon: PhWarningCircle, hue: 38, category: 'account' },
   pickup_application_rejected: { icon: PhXCircle, hue: 355, category: 'account' },
+  subscription_reminder: { icon: PhCrown, hue: 38, category: 'account' },
+  subscription_update: { icon: PhCrown, hue: 270, category: 'account' },
 }
 const FALLBACK: TypeMeta = { icon: PhBell, hue: 220, category: 'account' }
 // Changement de statut : icône et teinte selon l'étape annoncée dans le titre.
@@ -87,6 +90,7 @@ const CATEGORY_LABELS: Record<Category, { label: string; icon: Component }> = {
 function target(n: NotificationRead): { path: string; label: string } | null {
   if (n.product_id) return { path: `/produits/${n.product_id}`, label: 'Voir le produit' }
   if (n.type === 'cart_reminder') return { path: '/panier', label: 'Voir mon panier' }
+  if (n.type.startsWith('subscription_')) return { path: '/vendeur/abonnement', label: 'Voir mon abonnement' }
   if (n.type.startsWith('pickup_application')) {
     return auth.user?.role === 'admin'
       ? { path: '/admin/candidatures', label: 'Voir les candidatures' }

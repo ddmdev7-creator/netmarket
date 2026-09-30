@@ -30,6 +30,7 @@ from app.reports.router import admin_router as reports_admin_router
 from app.reports.router import router as reports_router
 from app.reviews.router import me_router as my_reviews_router
 from app.reviews.router import router as reviews_router
+from app.subscriptions.router import admin_plans_router as subscription_plans_admin_router
 from app.subscriptions.router import admin_router as subscriptions_admin_router
 from app.subscriptions.router import router as subscriptions_router
 from app.uploads.router import router as uploads_router
@@ -37,6 +38,7 @@ from app.users.router import admin_router as users_admin_router
 from app.pickup_point_applications.router import admin_router as pickup_applications_admin_router
 from app.pickup_point_applications.router import router as pickup_applications_router
 from app.cart import reminders as cart_reminders
+from app.subscriptions import jobs as subscription_jobs
 from app.favorites.router import router as favorites_router
 from app.users.router import router as users_router
 from app.vendors.router import admin_router as vendors_admin_router
@@ -47,10 +49,12 @@ async def lifespan(_app: FastAPI):
     # Tâches de fond : l'API tourne en un seul processus (voir le ws_manager
     # des notifications), donc une seule boucle de rappels à la fois.
     reminders = asyncio.create_task(cart_reminders.run_forever())
+    subscriptions = asyncio.create_task(subscription_jobs.run_forever())
     try:
         yield
     finally:
         reminders.cancel()
+        subscriptions.cancel()
 
 
 app = FastAPI(title="Marketplace Guinée API", version="0.1.0", lifespan=lifespan)
@@ -93,6 +97,7 @@ app.include_router(reports_admin_router)
 app.include_router(uploads_router)
 app.include_router(subscriptions_router)
 app.include_router(subscriptions_admin_router)
+app.include_router(subscription_plans_admin_router)
 app.include_router(admin_router)
 app.include_router(notifications_router)
 app.include_router(pickup_applications_router)

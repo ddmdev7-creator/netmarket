@@ -278,7 +278,7 @@ async function confirmRemove() {
           <div class="fl-preview__head">Aperçu</div>
           <div v-for="(tier, index) in homeTiers" :key="tier.id" class="fl-preview__row">
             <span>{{ tier.max_km === null ? 'Au-delà' : `${index > 0 ? homeTiers[index - 1]?.max_km : 0} – ${tier.max_km} km` }}</span>
-            <span class="text-muted"><s>{{ formatGnf(tier.fee) }}</s></span>
+            <span class="text-muted"><s v-if="percentValue !== 100">{{ formatGnf(tier.fee) }}</s></span>
             <strong>{{ formatGnf(pickupFromHome(tier.fee)) }}</strong>
           </div>
         </div>

@@ -8,7 +8,7 @@ import nh3
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import repository
-from app.catalog.models import Category, Product, ProductVariant, ProductVariantAttribute
+from app.catalog.models import Category, Product, ProductStatus, ProductVariant, ProductVariantAttribute
 from app.catalog.schemas import (
     ProductDeliveryQuote,
     CategoryCreate,
@@ -27,6 +27,7 @@ from app.delivery.models import DeliveryFeeTier
 from app.common.geo import haversine_km
 from app.delivery.service import compute_fee, compute_transit_days
 from app.reviews import repository as reviews_repository
+from app.subscriptions import quotas
 from app.users.models import User, UserRole
 from app.vendors import repository as vendor_repository
 from app.vendors.models import VendorStatus
@@ -160,6 +161,8 @@ async def create_product(db: AsyncSession, user: User, data: ProductCreate) -> P
         raise NotFoundError("Catégorie introuvable.")
 
     vendor_id = await _require_own_vendor(db, user)
+    await quotas.ensure_can_add_active_product(db, vendor_id)
+    await quotas.ensure_images_allowed(db, vendor_id, data.images)
     fields = data.model_dump()
     fields["description"] = _sanitize_description(fields.get("description"))
     product = await repository.create_product(db, vendor_id=vendor_id, **fields)
@@ -269,6 +272,12 @@ async def update_product(db: AsyncSession, user: User, product_id: uuid.UUID, da
     if data.stock is not None and product.variants:
         raise ConflictError("Le stock de ce produit est calculé automatiquement à partir de ses variantes.")
 
+    # Quotas de la formule : remise en vente et nombre de photos (voir app/subscriptions/quotas.py).
+    if data.status == ProductStatus.ACTIVE and product.status != ProductStatus.ACTIVE:
+        await quotas.ensure_can_add_active_product(db, product.vendor_id)
+    if data.images is not None and len(data.images) > len(product.images or []):
+        await quotas.ensure_images_allowed(db, product.vendor_id, data.images)
+
     before = _favorites_snapshot(product)
     for field, value in data.model_dump(exclude_unset=True).items():
         if field == "description":
@@ -333,6 +342,7 @@ async def create_variant(
 ) -> ProductVariant:
     product = await get_product(db, product_id)
     await _check_product_owner(db, product, user)
+    await quotas.ensure_images_allowed(db, product.vendor_id, data.images)
     before = _favorites_snapshot(product)
 
     variant = await repository.create_variant(
@@ -354,6 +364,8 @@ async def update_variant(
     db: AsyncSession, user: User, product_id: uuid.UUID, variant_id: uuid.UUID, data: ProductVariantUpdate
 ) -> ProductVariant:
     product, variant = await _get_owned_variant(db, user, product_id, variant_id)
+    if data.images is not None and len(data.images) > len(variant.images or []):
+        await quotas.ensure_images_allowed(db, product.vendor_id, data.images)
     before = _favorites_snapshot(product)
 
     updates = data.model_dump(exclude_unset=True, exclude={"attributes"})

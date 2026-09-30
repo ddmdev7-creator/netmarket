@@ -48,6 +48,10 @@ const { data: vendor } = await useAsyncData('vendor-me-products-page', () => api
 const { data: categories } = await useAsyncData('vendor-products-categories', () => apiFetch<CategoryRead[]>('/categories'), {
   default: () => [],
 })
+// Quota de produits en vente de la formule (null = illimité).
+const { overview: plan, planName } = useVendorPlan()
+const productLimit = computed(() => plan.value?.products.limit ?? null)
+
 const { data: summary, refresh: refreshSummary } = await useAsyncData(
   'vendor-products-summary',
   () => apiFetch<MyProductsSummary>('/products/me/summary'),
@@ -288,6 +292,10 @@ async function deleteProduct() {
             {{ summary.total }} produit{{ summary.total > 1 ? 's' : '' }} · {{ summary.active }} en vente
           </template>
         </p>
+        <NuxtLink v-if="summary && productLimit !== null" to="/vendeur/abonnement" class="vp-quota" :class="{ 'vp-quota--full': summary.active >= productLimit }">
+          <span class="vp-quota__bar"><span :style="{ width: `${Math.min(100, (summary.active / Math.max(1, productLimit)) * 100)}%` }" /></span>
+          <span>{{ summary.active }} / {{ productLimit }} en vente · formule {{ planName }}</span>
+        </NuxtLink>
       </div>
       <v-btn
         :to="canPublish ? '/vendeur/produits/nouveau' : undefined"
@@ -497,6 +505,38 @@ async function deleteProduct() {
 </template>
 
 <style scoped>
+.vp-quota {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-neutral-400);
+  text-decoration: none;
+}
+
+.vp-quota__bar {
+  width: 90px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-neutral-800);
+  overflow: hidden;
+}
+
+.vp-quota__bar span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+}
+
+.vp-quota--full {
+  color: var(--color-error);
+}
+
+.vp-quota--full .vp-quota__bar span {
+  background: var(--color-error);
+}
+
 .vp__head {
   display: flex;
   align-items: flex-end;

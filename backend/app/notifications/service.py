@@ -308,3 +308,23 @@ async def notify_cart_reminder(db: AsyncSession, *, user: User, item_count: int)
         cta_label="Voir mon panier",
         path="/panier",
     )
+
+
+async def notify_subscription(
+    db: AsyncSession, *, user_id: uuid.UUID, title: str, body: str, reminder: bool = False
+) -> None:
+    """Abonnement vendeur (app/subscriptions) : rappel de fin, ou changement
+    (essai, activation, fin, produits masqués). Email aussi si vérifié."""
+    await _persist_and_push(
+        db,
+        user_id=user_id,
+        type_=NotificationType.SUBSCRIPTION_REMINDER if reminder else NotificationType.SUBSCRIPTION_UPDATE,
+        title=title,
+        body=body,
+        order_id=None,
+    )
+    user = await db.get(User, user_id)
+    if user is not None:
+        await _email_if_verified(
+            user, heading=title, paragraphs=["Bonjour,", body], cta_label="Voir mon abonnement", path="/vendeur/abonnement"
+        )
