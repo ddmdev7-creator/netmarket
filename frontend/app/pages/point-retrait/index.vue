@@ -18,6 +18,7 @@ import {
   PhWallet,
   PhWarning,
   PhPackage,
+  PhArrowUUpLeft,
 } from '@phosphor-icons/vue'
 import type { TodoItem } from '~/components/common/TodoCards.vue'
 import type { ParcelSize, PickupPointManagerSubOrderRead, PickupPointRead, WalletRead } from '~/types/api'
@@ -77,11 +78,13 @@ function daysSince(iso: string) {
 
 const byTab = computed(() => ({
   expected: deliveries.value.filter((so) => so.status === 'shipped'),
+  // Non retirés à temps (return_pending) : restent au point jusqu'au passage du livreur du retour.
   stock: deliveries.value
-    .filter((so) => so.status === 'arrived_at_pickup_point')
+    .filter((so) => so.status === 'arrived_at_pickup_point' || so.status === 'return_pending')
     .sort((a, b) => a.updated_at.localeCompare(b.updated_at)),
-  done: deliveries.value.filter((so) => so.status === 'delivered').slice(0, 50),
+  done: deliveries.value.filter((so) => ['delivered', 'returning', 'returned'].includes(so.status)).slice(0, 50),
 }))
+const toReturn = computed(() => byTab.value.stock.filter((so) => so.status === 'return_pending').length)
 const longWaits = computed(() => byTab.value.stock.filter((so) => daysSince(so.updated_at) >= LONG_WAIT_DAYS).length)
 
 // Au premier affichage : l'onglet qui a quelque chose à faire.
@@ -98,7 +101,7 @@ function normalize(value: string) {
 }
 // --- « À faire » -------------------------------------------------------------
 
-type StockFocus = 'unstored' | 'late'
+type StockFocus = 'unstored' | 'late' | 'return'
 const stockFocus = ref<StockFocus | null>(null)
 const unstored = computed(() => byTab.value.stock.filter((so) => !so.storage_location).length)
 
@@ -115,6 +118,17 @@ onMounted(async () => {
 const todos = computed<TodoItem[]>(() => {
   const items: TodoItem[] = []
   const expected = byTab.value.expected.length
+  if (toReturn.value)
+    items.push({
+      key: 'return',
+      count: toReturn.value,
+      title: toReturn.value > 1 ? 'colis à rendre' : 'colis à rendre',
+      text: "Non retirés : scannez le QR du livreur du retour quand il passe. Le client peut encore venir d'ici là.",
+      icon: PhArrowUUpLeft,
+      hue: 30,
+      urgent: true,
+      active: tab.value === 'stock' && stockFocus.value === 'return',
+    })
   if (longWaits.value)
     items.push({
       key: 'late',
@@ -178,6 +192,7 @@ const visible = computed(() => {
   let list = byTab.value[tab.value]
   if (tab.value === 'stock' && stockFocus.value === 'unstored') list = list.filter((so) => !so.storage_location)
   if (tab.value === 'stock' && stockFocus.value === 'late') list = list.filter((so) => daysSince(so.updated_at) >= LONG_WAIT_DAYS)
+  if (tab.value === 'stock' && stockFocus.value === 'return') list = list.filter((so) => so.status === 'return_pending')
   if (!term) return list
   const digits = term.replace(/\D/g, '')
   return list.filter((so) => {
@@ -255,6 +270,9 @@ async function handleDecode(code: string) {
     await refresh()
     if (updated.status === 'delivered') {
       toast.success(`Colis ${shortId(updated.order_id)} remis au client.`)
+      tab.value = 'done'
+    } else if (updated.status === 'returning') {
+      toast.success(`Colis ${shortId(updated.order_id)} remis au livreur du retour.`)
       tab.value = 'done'
     } else {
       toast.success(`Colis ${shortId(updated.order_id)} réceptionné — indiquez où vous le rangez.`)
@@ -358,6 +376,18 @@ function itemsSummary(so: PickupPointManagerSubOrderRead) {
           <span v-else class="text-muted text-fine">{{ formatDate(tab === 'done' ? so.updated_at : so.created_at) }}</span>
         </header>
 
+        <div v-if="so.status === 'return_pending'" class="parcel__return">
+          <PhArrowUUpLeft :size="15" />
+          <span>
+            Non retiré — à rendre au livreur du retour{{ so.courier_name ? ` (${so.courier_name})` : ', en cours de recherche par la boutique' }}.
+            Le client peut encore le retirer d'ici là.
+          </span>
+        </div>
+        <div v-else-if="tab === 'done' && so.status !== 'delivered'" class="parcel__return">
+          <PhArrowUUpLeft :size="15" />
+          <span>Rendu au livreur du retour</span>
+        </div>
+
         <div class="parcel__items">{{ itemsSummary(so) }}</div>
         <div class="parcel__shop text-muted text-fine"><PhStorefront :size="12" /> {{ so.shop_name }}</div>
 
@@ -425,6 +455,23 @@ function itemsSummary(so: PickupPointManagerSubOrderRead) {
 </template>
 
 <style scoped>
+.parcel__return {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: hsl(30 90% var(--tint-bg-soft, 17%));
+  color: hsl(30 70% var(--tint-fg));
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.parcel__return svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .parcel__size {
   display: flex;
   align-items: center;

@@ -328,3 +328,32 @@ async def notify_subscription(
         await _email_if_verified(
             user, heading=title, paragraphs=["Bonjour,", body], cta_label="Voir mon abonnement", path="/vendeur/abonnement"
         )
+
+
+async def notify_parcel_return(
+    db: AsyncSession,
+    *,
+    user: User,
+    title: str,
+    body: str,
+    order_id: uuid.UUID | None,
+    reminder: bool = False,
+    path: str | None = None,
+) -> None:
+    """Colis en attente au point de retrait (rappel), puis renvoyé au vendeur
+    (app/orders/returns.py). Email aussi si l'adresse est vérifiée."""
+    await _persist_and_push(
+        db,
+        user_id=user.id,
+        type_=NotificationType.PICKUP_REMINDER if reminder else NotificationType.PARCEL_RETURN,
+        title=title,
+        body=body,
+        order_id=order_id,
+    )
+    await _email_if_verified(
+        user,
+        heading=title,
+        paragraphs=["Bonjour,", body],
+        cta_label="Voir la commande",
+        path=path or (f"/commandes/{order_id}" if order_id else "/commandes"),
+    )

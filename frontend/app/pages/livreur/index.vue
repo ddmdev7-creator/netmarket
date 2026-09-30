@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  PhArrowUUpLeft,
   PhCheckCircle,
   PhHouse,
   PhMagnifyingGlass,
@@ -135,20 +136,26 @@ function itemsSummary(so: CourierSubOrderRead): string {
 // commandes/index.vue (acheteur), "À livrer" reste court et concentré sur
 // ce qui demande une action.
 const tab = ref<'ongoing' | 'done'>('ongoing')
-const ongoing = computed(() => deliveries.value.filter((so) => !['delivered', 'cancelled'].includes(so.status)))
-const done = computed(() => deliveries.value.filter((so) => ['delivered', 'cancelled'].includes(so.status)))
+const CLOSED = ['delivered', 'cancelled', 'returned']
+const ongoing = computed(() => deliveries.value.filter((so) => !CLOSED.includes(so.status)))
+const done = computed(() => deliveries.value.filter((so) => CLOSED.includes(so.status)))
 
 // --- « À faire » -------------------------------------------------------------
 
-// Étape d'une livraison en cours, vue du livreur.
-type Stage = 'collect' | 'home' | 'point'
+// Étape d'une livraison en cours, vue du livreur. « return » : colis non
+// retiré à récupérer au point et à rapporter à la boutique.
+type Stage = 'collect' | 'home' | 'point' | 'return'
 function stageOf(so: CourierSubOrderRead): Stage {
+  if (isReturn(so)) return 'return'
   if (so.status !== 'shipped') return 'collect'
   return so.delivery_type === 'pickup_point' ? 'point' : 'home'
 }
+function isReturn(so: CourierSubOrderRead): boolean {
+  return so.status === 'return_pending' || so.status === 'returning'
+}
 const stageFilter = ref<Stage | null>(null)
 const stageCounts = computed(() => {
-  const counts: Record<Stage, number> = { collect: 0, home: 0, point: 0 }
+  const counts: Record<Stage, number> = { collect: 0, home: 0, point: 0, return: 0 }
   for (const so of ongoing.value) counts[stageOf(so)]++
   return counts
 })
@@ -207,6 +214,17 @@ const todos = computed<TodoItem[]>(() => {
       icon: PhWarehouse,
       hue: 270,
       active: stageFilter.value === 'point',
+    })
+  if (c.return)
+    items.push({
+      key: 'return',
+      count: c.return,
+      title: plural(c.return, 'retour à la boutique', 'retours aux boutiques'),
+      text: 'Colis non retiré : du point de retrait à la boutique.',
+      icon: PhArrowUUpLeft,
+      hue: 30,
+      urgent: true,
+      active: stageFilter.value === 'return',
     })
   if (walletAvailable.value > 0)
     items.push({
@@ -431,7 +449,25 @@ const visible = computed(() => {
           :show-empty-manager-note="false"
         />
 
-        <template v-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
+        <template v-if="isReturn(so)">
+          <p class="delivery-card__next delivery-card__next--return">
+            <PhArrowUUpLeft :size="14" />
+            {{
+              so.status === 'return_pending'
+                ? 'Retour : récupérez le colis non retiré au point de retrait ci-dessus.'
+                : `Retour : rapportez le colis à ${so.shop_name}.`
+            }}
+          </p>
+          <div v-if="so.dropoff_handoff_ready" class="qr-block mb-2">
+            <div class="qr-block__label">
+              <PhQrCode :size="15" weight="bold" />
+              {{ so.status === 'return_pending' ? 'Code d’enlèvement — à faire scanner par le point' : 'Code de retour — à faire scanner par la boutique' }}
+            </div>
+            <OrderDeliveryQrCode :sub-order-id="so.id" />
+          </div>
+        </template>
+
+        <template v-else-if="so.status === 'shipped' && so.delivery_type === 'pickup_point'">
           <div v-if="so.dropoff_handoff_ready" class="qr-block mb-2">
             <div class="qr-block__label">
               <PhQrCode :size="15" weight="bold" />

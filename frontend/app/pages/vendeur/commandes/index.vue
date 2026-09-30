@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhCaretDown, PhImage, PhMagnifyingGlass, PhMotorcycle } from '@phosphor-icons/vue'
+import { PhCaretDown, PhImage, PhMagnifyingGlass, PhMotorcycle, PhQrCode } from '@phosphor-icons/vue'
 import type { CourierRead, OrderStatus, VehicleType, VendorSubOrderRead } from '~/types/api'
 
 definePageMeta({ middleware: 'vendor', layout: 'vendeur' })
@@ -110,7 +110,8 @@ watch(
 
 type StatusFilter = OrderStatus | 'all' | 'todo'
 // « À traiter » : ce qui attend une action du vendeur (confirmer, préparer, expédier).
-const TODO_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'preparing']
+// Colis non retiré : trouver un livreur pour le retour, puis le réceptionner.
+const TODO_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'return_pending', 'returning']
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'todo', label: 'À traiter' },
   { value: 'all', label: 'Toutes' },
@@ -120,6 +121,9 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'shipped', label: 'Expédiée' },
   { value: 'arrived_at_pickup_point', label: 'Arrivée au point' },
   { value: 'delivered', label: 'Livrée' },
+  { value: 'return_pending', label: 'Retour à organiser' },
+  { value: 'returning', label: 'Retour en cours' },
+  { value: 'returned', label: 'Rendue' },
   { value: 'cancelled', label: 'Annulée' },
 ]
 
@@ -195,6 +199,9 @@ const ACTIONS: Record<OrderStatus, { label: string; to: OrderStatus; color: stri
   preparing: [{ label: 'Marquer expédiée', to: 'shipped', color: 'primary' }],
   shipped: [],
   arrived_at_pickup_point: [],
+  return_pending: [],
+  returning: [],
+  returned: [],
   delivered: [],
   cancelled: [],
 }
@@ -215,6 +222,12 @@ function waitingMessage(so: VendorSubOrderRead): string | null {
   if (so.status === 'arrived_at_pickup_point') {
     return 'En attente de remise au client par le gestionnaire du point de retrait.'
   }
+  if (so.status === 'return_pending') {
+    return so.courier_name
+      ? `${so.courier_name} va récupérer le colis au point de retrait pour vous le rapporter.`
+      : "Le client n'a pas retiré sa commande : trouvez un livreur ci-dessus pour la rapporter. Le retour est à sa charge, pas à la vôtre."
+  }
+  if (so.status === 'returned') return 'Colis rendu : les articles sont revenus en stock.'
   return null
 }
 
@@ -224,6 +237,18 @@ function waitingMessage(so: VendorSubOrderRead): string | null {
 // laisser le vendeur cliquer dans le vide.
 function isActionDisabled(so: VendorSubOrderRead, action: { to: OrderStatus }) {
   return action.to === 'shipped' && !so.courier_id
+}
+
+// --- Retour d'un colis non retiré : réception par scan du QR du livreur ---
+const scannerOpen = ref(false)
+async function receiveReturn(code: string) {
+  try {
+    await apiFetch('/orders/sub-orders/confirm-delivery', { method: 'POST', body: { code } })
+    await refresh()
+    toast.success('Colis réceptionné : les articles sont revenus en stock.')
+  } catch (e) {
+    toast.error(apiErrorMessage(e, 'QR code invalide ou expiré.'))
+  }
 }
 
 const updatingId = ref<string | null>(null)
@@ -244,7 +269,7 @@ async function transition(subOrder: VendorSubOrderRead, to: OrderStatus) {
 }
 
 // Commandes terminées (livrées, annulées) : carte repliée, détails à la demande.
-const isClosed = (so: VendorSubOrderRead) => so.status === 'delivered' || so.status === 'cancelled'
+const isClosed = (so: VendorSubOrderRead) => ['delivered', 'cancelled', 'returned'].includes(so.status)
 const expanded = ref<Record<string, boolean>>({})
 const showDetails = (so: VendorSubOrderRead) => !isClosed(so) || !!expanded.value[so.id]
 
@@ -356,7 +381,7 @@ function formatDate(iso: string) {
         <strong>{{ formatDeliveryEstimate(so.estimated_delivery_min, so.estimated_delivery_max) }}</strong>
       </p>
 
-      <div v-if="!['delivered', 'cancelled'].includes(so.status)" class="courier-assign mb-3">
+      <div v-if="!['delivered', 'cancelled', 'returned'].includes(so.status)" class="courier-assign mb-3">
         <div class="d-flex align-center ga-1 mb-1">
           <PhMotorcycle :size="15" color="var(--color-primary)" />
           <span class="field-label mb-0">Livreur</span>
@@ -461,11 +486,20 @@ function formatDate(iso: string) {
           Assignez un livreur ci-dessus avant de pouvoir marquer cette commande expédiée.
         </span>
       </div>
+      <div v-else-if="so.status === 'returning'" class="return-receive">
+        <span>{{ so.courier_name ?? 'Le livreur' }} vous rapporte le colis : scannez son QR code à la réception.</span>
+        <v-btn color="primary" size="small" @click="scannerOpen = true">
+          <PhQrCode :size="16" class="mr-1" />
+          Scanner le livreur
+        </v-btn>
+      </div>
       <p v-else-if="waitingMessage(so)" class="text-muted mb-0" style="font-size: 12px">
         {{ waitingMessage(so) }}
       </p>
     </v-card>
     </div>
+
+    <VendorQrScannerDialog v-model="scannerOpen" @decode="receiveReturn" />
   </div>
 </template>
 
@@ -493,6 +527,21 @@ function formatDate(iso: string) {
 .vo-card--preparing { --vo-accent: var(--color-primary); }
 .vo-card--shipped,
 .vo-card--arrived_at_pickup_point { --vo-accent: hsl(265 70% 60%); }
+.vo-card--return_pending,
+.vo-card--returning { --vo-accent: hsl(30 85% 52%); }
+
+.return-receive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: hsl(30 90% var(--tint-bg-soft, 17%));
+  color: hsl(30 70% var(--tint-fg));
+  font-size: 12.5px;
+}
 .vo-card--delivered { --vo-accent: hsl(150 60% 45%); }
 .vo-card--cancelled { --vo-accent: var(--color-neutral-600); }
 

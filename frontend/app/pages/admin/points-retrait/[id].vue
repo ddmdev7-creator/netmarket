@@ -38,6 +38,9 @@ function formatDate(iso: string, withTime = false) {
 const PARCEL_STATUS: Record<string, string> = {
   shipped: 'En route vers le point',
   arrived_at_pickup_point: 'En stock',
+  return_pending: 'À rendre au livreur (non retiré)',
+  returning: 'Retour en cours',
+  returned: 'Rendu au vendeur',
   delivered: 'Retiré',
 }
 

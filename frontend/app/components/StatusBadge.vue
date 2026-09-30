@@ -9,6 +9,9 @@ const labels: Record<OrderStatus, string> = {
   preparing: 'En préparation',
   shipped: 'Expédiée',
   arrived_at_pickup_point: 'Arrivée au point de retrait',
+  return_pending: 'Non retirée — retour prévu',
+  returning: 'Retour en cours',
+  returned: 'Rendue au vendeur',
   delivered: 'Livrée',
   cancelled: 'Annulée',
 }
@@ -19,6 +22,9 @@ const colors: Record<OrderStatus, string> = {
   preparing: 'primary',
   shipped: 'info',
   arrived_at_pickup_point: 'warning',
+  return_pending: 'warning',
+  returning: 'warning',
+  returned: 'secondary',
   delivered: 'success',
   cancelled: 'error',
 }

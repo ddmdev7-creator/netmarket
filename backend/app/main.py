@@ -38,6 +38,7 @@ from app.users.router import admin_router as users_admin_router
 from app.pickup_point_applications.router import admin_router as pickup_applications_admin_router
 from app.pickup_point_applications.router import router as pickup_applications_router
 from app.cart import reminders as cart_reminders
+from app.orders import returns as order_returns
 from app.subscriptions import jobs as subscription_jobs
 from app.favorites.router import router as favorites_router
 from app.users.router import router as users_router
@@ -50,11 +51,13 @@ async def lifespan(_app: FastAPI):
     # des notifications), donc une seule boucle de rappels à la fois.
     reminders = asyncio.create_task(cart_reminders.run_forever())
     subscriptions = asyncio.create_task(subscription_jobs.run_forever())
+    parcel_returns = asyncio.create_task(order_returns.run_forever())
     try:
         yield
     finally:
         reminders.cancel()
         subscriptions.cancel()
+        parcel_returns.cancel()
 
 
 app = FastAPI(title="NdjouriMarket API", version="0.1.0", lifespan=lifespan)

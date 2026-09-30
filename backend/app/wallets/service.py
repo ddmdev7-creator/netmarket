@@ -168,7 +168,16 @@ async def committed_pickup_offers(db: AsyncSession, vendor_id: uuid.UUID) -> int
             select(func.coalesce(func.sum(SubOrder.vendor_delivery_fee), 0)).where(
                 SubOrder.vendor_id == vendor_id,
                 SubOrder.vendor_delivery_fee > 0,
-                SubOrder.status.notin_([OrderStatus.DELIVERED, OrderStatus.CANCELLED]),
+                # Colis non retiré : c'est l'acheteur qui supporte l'aller, plus rien n'est dû par le vendeur.
+                SubOrder.status.notin_(
+                    [
+                        OrderStatus.DELIVERED,
+                        OrderStatus.CANCELLED,
+                        OrderStatus.RETURN_PENDING,
+                        OrderStatus.RETURNING,
+                        OrderStatus.RETURNED,
+                    ]
+                ),
             )
         )
     ).scalar_one()
@@ -291,6 +300,69 @@ async def settle_sub_order(db: AsyncSession, order: Order, sub_order: SubOrder) 
         sub_order_id=sub_order.id,
     )
 
+
+
+async def settle_return(db: AsyncSession, order: Order, sub_order: SubOrder) -> None:
+    """Colis non retiré rendu au vendeur (app/orders/returns.py) : le séquestre
+    (articles + frais payés par l'acheteur) sert à rembourser l'acheteur des
+    articles moins l'aller et le retour, puis à payer le livreur de l'aller,
+    celui du retour et le point de retrait (pickup_return_percent de sa
+    rémunération) ; le reste revient à Ndjouri. Le vendeur ne reçoit ni ne
+    paie rien."""
+    from app.wallets import buyer_service
+
+    if order.payment_method not in SEQUESTERED_METHODS or sub_order.status != OrderStatus.RETURNED:
+        return
+    if await repository.transaction_exists(db, f"return:{sub_order.id}"):
+        return
+    payment = await payments_repository.get_by_order_id(db, order.id)
+    if payment is None or payment.status != PaymentStatus.PAID:
+        return
+    if order.payment_method == PaymentMethod.ONLINE:
+        await _post_capture(db, order)
+
+    settings_row = await payments_repository.get_settings(db)
+    outbound = sub_order.effective_delivery_fee
+    back = sub_order.return_fee or outbound
+    gross = sub_order.amount + sub_order.delivery_fee
+    refund = max(0, sub_order.amount - (sub_order.vendor_delivery_fee or 0) - back)
+    await buyer_service.refund_to_wallet(db, order, refund, reason="colis non retiré", sub_order_id=sub_order.id)
+
+    escrow = await _system(db, AccountKind.ORDER_ESCROW)
+    revenue = await _system(db, AccountKind.PLATFORM_REVENUE)
+    hold_until = _now() + timedelta(days=settings_row.earnings_hold_days)
+    remaining = gross - refund
+    lines: list[Line] = [(escrow, remaining, None)]
+    details = [f"remboursé à l'acheteur {refund}"]
+    paid_out = 0
+    for label, courier_id, fee in (("aller", sub_order.outbound_courier_id, outbound), ("retour", sub_order.courier_id, back)):
+        if courier_id is None or fee <= 0:
+            continue
+        share = round(fee * settings_row.courier_delivery_share_percent / 100)
+        account = await repository.get_or_create_account(db, AccountKind.COURIER, courier_id)
+        lines.append((account, -share, hold_until))
+        details.append(f"livreur {label} {share}")
+        paid_out += share
+    if order.pickup_point_id is not None:
+        full_fee, _detail = await pickup_point_fee(db, settings_row, sub_order, order.pickup_point_id)
+        point_fee = round(full_fee * settings_row.pickup_return_percent / 100)
+        if point_fee:
+            account = await repository.get_or_create_account(db, AccountKind.PICKUP_POINT, order.pickup_point_id)
+            lines.append((account, -point_fee, hold_until))
+            details.append(f"point de retrait {point_fee} ({settings_row.pickup_return_percent} %)")
+            paid_out += point_fee
+    platform = remaining - paid_out
+    lines.append((revenue, -platform, None))
+    details.append(f"Ndjouri {platform}")
+    await _post(
+        db,
+        kind=TransactionKind.SUB_ORDER_RETURNED,
+        key=f"return:{sub_order.id}",
+        description=f"Colis non retiré {_short(order.id)} · {sub_order.shop_name} — " + ", ".join(details),
+        lines=lines,
+        order_id=order.id,
+        sub_order_id=sub_order.id,
+    )
 
 async def record_refund_completed(db: AsyncSession, order: Order) -> None:
     """Remboursement Djomy confirmé : l'argent quitte la trésorerie."""

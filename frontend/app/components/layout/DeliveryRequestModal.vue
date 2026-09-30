@@ -91,7 +91,7 @@ function km(value: number | null): string {
     <v-card v-if="request" class="pa-4">
       <div class="d-flex align-center ga-2 mb-3">
         <PhMotorcycle :size="24" color="var(--color-primary)" />
-        <span class="offer-title">Nouvelle demande de livraison</span>
+        <span class="offer-title">{{ offer?.is_return ? 'Retour de colis à la boutique' : 'Nouvelle demande de livraison' }}</span>
         <span v-if="offer && secondsLeft > 0" class="offer-timer ml-auto"><PhClock :size="13" /> {{ secondsLeft }} s</span>
       </div>
 
@@ -104,11 +104,34 @@ function km(value: number | null): string {
         </div>
 
         <div class="offer-stats">
-          <div><span class="offer-stats__value">{{ km(offer.distance_to_shop_km) }}</span><span>jusqu'à la boutique</span></div>
-          <div><span class="offer-stats__value">{{ km(offer.delivery_distance_km) }}</span><span>boutique → livraison</span></div>
+          <div><span class="offer-stats__value">{{ km(offer.distance_to_shop_km) }}</span><span>{{ offer.is_return ? "jusqu'au point" : "jusqu'à la boutique" }}</span></div>
+          <div><span class="offer-stats__value">{{ km(offer.delivery_distance_km) }}</span><span>{{ offer.is_return ? 'point → boutique' : 'boutique → livraison' }}</span></div>
           <div><span class="offer-stats__value">{{ offer.item_count }}</span><span>article(s)</span></div>
         </div>
 
+        <!-- Retour d'un colis non retiré : enlèvement au point, puis la boutique. -->
+        <template v-if="offer.is_return">
+          <div class="offer-line">
+            <PhMapPin :size="16" />
+            <div>
+              <div class="offer-line__label">Récupérer au point de retrait</div>
+              <div class="offer-line__value">{{ offer.pickup_point_name }}</div>
+              <div v-if="offer.pickup_point_zone" class="text-muted text-fine">{{ offer.pickup_point_zone }}</div>
+              <div v-for="c in offer.pickup_point_contacts" :key="c.phone" class="offer-contact">
+                <PhPhone :size="12" /> {{ c.name ?? 'Gestionnaire' }} · <a :href="`tel:${c.phone}`">{{ c.phone }}</a>
+              </div>
+            </div>
+          </div>
+          <div class="offer-line">
+            <PhStorefront :size="16" />
+            <div>
+              <div class="offer-line__label">Rapporter à la boutique</div>
+              <div class="offer-line__value">{{ offer.destination_zone }}</div>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
         <div class="offer-line">
           <PhStorefront :size="16" />
           <div>
@@ -139,6 +162,7 @@ function km(value: number | null): string {
             <div v-if="offer.delivery_instructions" class="text-muted text-fine">« {{ offer.delivery_instructions }} »</div>
           </div>
         </div>
+        </template>
 
         <p class="text-muted text-fine mt-2 mb-0">
           <PhPackage :size="12" /> Les coordonnées complètes s'affichent dans ton espace une fois la livraison acceptée.

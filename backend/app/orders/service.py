@@ -66,10 +66,17 @@ _ALLOWED_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.CONFIRMED: {OrderStatus.PREPARING, OrderStatus.CANCELLED},
     OrderStatus.PREPARING: {OrderStatus.SHIPPED},
     OrderStatus.SHIPPED: set(),
-    OrderStatus.ARRIVED_AT_PICKUP_POINT: {OrderStatus.DELIVERED},
+    # Non retiré à temps : retour au vendeur (app/orders/returns.py). Tant
+    # que le livreur du retour n'est pas passé, l'acheteur peut encore venir.
+    OrderStatus.ARRIVED_AT_PICKUP_POINT: {OrderStatus.DELIVERED, OrderStatus.RETURN_PENDING},
+    OrderStatus.RETURN_PENDING: {OrderStatus.DELIVERED, OrderStatus.RETURNING},
+    OrderStatus.RETURNING: {OrderStatus.RETURNED},
+    OrderStatus.RETURNED: set(),
     OrderStatus.DELIVERED: set(),
     OrderStatus.CANCELLED: set(),
 }
+
+RETURN_STATUSES = (OrderStatus.RETURN_PENDING, OrderStatus.RETURNING, OrderStatus.RETURNED)
 
 _STATUS_RANK = {
     OrderStatus.PENDING: 0,
@@ -77,6 +84,8 @@ _STATUS_RANK = {
     OrderStatus.PREPARING: 2,
     OrderStatus.SHIPPED: 3,
     OrderStatus.ARRIVED_AT_PICKUP_POINT: 4,
+    OrderStatus.RETURN_PENDING: 4,
+    OrderStatus.RETURNING: 4,
     OrderStatus.DELIVERED: 5,
 }
 
@@ -96,8 +105,11 @@ def _allowed_next_statuses(current: OrderStatus, delivery_type: DeliveryType) ->
 
 
 def _compute_order_status(sub_orders: list[SubOrder]) -> OrderStatus:
-    active = [so for so in sub_orders if so.status != OrderStatus.CANCELLED]
+    # Un colis rendu au vendeur est clos, comme un colis annulé.
+    active = [so for so in sub_orders if so.status not in (OrderStatus.CANCELLED, OrderStatus.RETURNED)]
     if not active:
+        if any(so.status == OrderStatus.RETURNED for so in sub_orders):
+            return OrderStatus.RETURNED
         return OrderStatus.CANCELLED
     return min(active, key=lambda so: _STATUS_RANK[so.status]).status
 
@@ -123,12 +135,17 @@ def _is_buyers_turn(sub_order: SubOrder, delivery_type: DeliveryType) -> bool:
     livraison à domicile (le livreur scanne), à « arrived_at_pickup_point »
     pour un point de retrait (le gestionnaire scanne)."""
     return (sub_order.status == OrderStatus.SHIPPED and delivery_type == DeliveryType.HOME_DELIVERY) or (
-        sub_order.status == OrderStatus.ARRIVED_AT_PICKUP_POINT and delivery_type == DeliveryType.PICKUP_POINT
+        sub_order.status in (OrderStatus.ARRIVED_AT_PICKUP_POINT, OrderStatus.RETURN_PENDING)
+        and delivery_type == DeliveryType.PICKUP_POINT
     )
 
 
 def _is_couriers_dropoff_turn(sub_order: SubOrder) -> bool:
-    """Le livreur présente son QR « dépôt » au gestionnaire du point."""
+    """Le livreur présente son QR : dépôt au point (au gestionnaire), puis,
+    pour un retour, enlèvement au point (au gestionnaire) et remise à la
+    boutique (au vendeur)."""
+    if sub_order.status in (OrderStatus.RETURN_PENDING, OrderStatus.RETURNING):
+        return sub_order.courier_id is not None
     return sub_order.status == OrderStatus.SHIPPED and sub_order.order.delivery_type == DeliveryType.PICKUP_POINT
 
 
@@ -595,8 +612,10 @@ async def assign_courier(
     if vendor is None or vendor.user_id != user.id:
         raise ForbiddenError("Cette sous-commande ne fait pas partie de votre boutique.")
 
-    if sub_order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED):
+    if sub_order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderStatus.RETURNED):
         raise ConflictError("Cette sous-commande est déjà finalisée.")
+    if sub_order.status == OrderStatus.RETURNING:
+        raise ConflictError("Le livreur du retour a déjà récupéré le colis.")
 
     if data.courier_id is not None:
         courier = await courier_repository.get_by_id(db, data.courier_id)
@@ -692,6 +711,17 @@ async def update_storage_location(
     return updated
 
 
+async def _restock(db: AsyncSession, sub_order: SubOrder) -> None:
+    for item in sub_order.items:
+        product = await catalog_repository.get_product_by_id(db, item.product_id)
+        if product is not None:
+            product.stock += item.quantity
+        if item.variant_id is not None:
+            variant = await catalog_repository.get_variant_by_id(db, item.variant_id)
+            if variant is not None:
+                variant.stock += item.quantity
+
+
 async def update_parcel_size(db: AsyncSession, user: User, sub_order_id: uuid.UUID, size: ParcelSize) -> SubOrder:
     """Le gestionnaire corrige la taille du colis à sa réception (avant la
     remise) : c'est elle qui fixe sa rémunération. declared_parcel_size
@@ -719,7 +749,12 @@ async def update_parcel_size(db: AsyncSession, user: User, sub_order_id: uuid.UU
 
 
 # Étapes où le colis change de mains : scan obligatoire.
-HANDOFF_STATUSES = {OrderStatus.ARRIVED_AT_PICKUP_POINT, OrderStatus.DELIVERED}
+HANDOFF_STATUSES = {
+    OrderStatus.ARRIVED_AT_PICKUP_POINT,
+    OrderStatus.DELIVERED,
+    OrderStatus.RETURNING,
+    OrderStatus.RETURNED,
+}
 
 
 async def update_sub_order_status(
@@ -764,14 +799,24 @@ async def update_sub_order_status(
         # Le livreur scanne le client pour une livraison à domicile ; pour un
         # point de retrait, c'est le gestionnaire qui scanne (livreur au
         # dépôt, puis client au retrait).
-        allowed = is_assigned_point_manager if is_pickup else (
-            is_assigned_courier and data.status == OrderStatus.DELIVERED
-        )
+        if data.status == OrderStatus.RETURNING:
+            # Retour : le gestionnaire remet le colis au livreur du retour…
+            allowed = is_assigned_point_manager
+        elif data.status == OrderStatus.RETURNED:
+            # … qui le rend au vendeur, lequel scanne son QR.
+            allowed = is_owner_vendor
+        else:
+            allowed = is_assigned_point_manager if is_pickup else (
+                is_assigned_courier and data.status == OrderStatus.DELIVERED
+            )
         if not allowed:
             raise ForbiddenError(
                 "Un livreur confirme la remise au client pour une livraison à domicile ; pour un point de "
                 "retrait, c'est le gestionnaire du point qui confirme la réception et la remise."
             )
+    elif data.status == OrderStatus.RETURN_PENDING:
+        # Déclenché uniquement par la tâche des retours (app/orders/returns.py).
+        raise ForbiddenError("Le retour d'un colis non retiré se déclenche automatiquement.")
     elif not is_owner_vendor:
         # Accepter, préparer, expédier, annuler : toujours le vendeur.
         raise ForbiddenError("Seul le vendeur peut faire avancer cette commande avant son expédition.")
@@ -787,15 +832,9 @@ async def update_sub_order_status(
     if data.status == OrderStatus.SHIPPED and sub_order.courier_id is None:
         raise ConflictError("Assignez un livreur avant de marquer cette commande comme expédiée.")
 
-    if data.status == OrderStatus.CANCELLED:
-        for item in sub_order.items:
-            product = await catalog_repository.get_product_by_id(db, item.product_id)
-            if product is not None:
-                product.stock += item.quantity
-            if item.variant_id is not None:
-                variant = await catalog_repository.get_variant_by_id(db, item.variant_id)
-                if variant is not None:
-                    variant.stock += item.quantity
+    if data.status in (OrderStatus.CANCELLED, OrderStatus.RETURNED):
+        # Annulé, ou rendu au vendeur : les articles reviennent en stock.
+        await _restock(db, sub_order)
 
     sub_order.status = data.status
     handoff.reset(sub_order)
@@ -821,6 +860,10 @@ async def update_sub_order_status(
         # Paiement en ligne : répartition du séquestre entre vendeur, livreur,
         # point de retrait et Ndjouri (voir app/wallets/service.py).
         await wallets_service.settle_sub_order(db, order, sub_order)
+    if data.status == OrderStatus.RETURNED:
+        # Remboursement de l'acheteur (articles − aller − retour) et paiement
+        # des deux livreurs et du point — voir app/wallets/service.py::settle_return.
+        await wallets_service.settle_return(db, order, sub_order)
     if order.status == OrderStatus.DELIVERED and order.payment_method == PaymentMethod.CASH_ON_DELIVERY:
         # Cash on delivery: money only actually changes hands once every
         # vendor in the order has delivered — see payments/provider.py. For
@@ -834,6 +877,10 @@ async def update_sub_order_status(
     buyer = await user_repository.get_by_id(db, order.user_id)
     if buyer is not None:
         await notifications_service.notify_sub_order_status_changed(db, buyer, sub_order)
+        if data.status == OrderStatus.RETURNED:
+            from app.orders import returns
+
+            await returns.notify_returned(db, buyer, order, sub_order)
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
     await _signal_parcel_followers(db, updated)
@@ -856,7 +903,13 @@ async def _handoff_candidates(db: AsyncSession, user: User) -> list[SubOrder]:
     manager = await pickup_point_manager_repository.get_by_user_id(db, user.id)
     if manager is not None:
         for so in await repository.list_sub_orders_for_pickup_point(db, manager.pickup_point_id):
-            if so.status in (OrderStatus.SHIPPED, OrderStatus.ARRIVED_AT_PICKUP_POINT):
+            if so.status in (OrderStatus.SHIPPED, OrderStatus.ARRIVED_AT_PICKUP_POINT, OrderStatus.RETURN_PENDING):
+                candidates.append(so)
+    # Vendeur : un colis non retiré qui lui revient (QR du livreur du retour).
+    vendor = await vendor_repository.get_by_user_id(db, user.id)
+    if vendor is not None:
+        for so in await repository.list_sub_orders_for_vendor(db, vendor.id):
+            if so.status == OrderStatus.RETURNING:
                 candidates.append(so)
     return candidates
 
@@ -873,13 +926,23 @@ async def confirm_delivery_by_code(db: AsyncSession, user: User, raw_code: str) 
     le gestionnaire), puis arrived_at_pickup_point → delivered (QR client,
     scanné par le gestionnaire)."""
     code = handoff.normalize(raw_code)
-    match = next((so for so in await _handoff_candidates(db, user) if handoff.matches(so, code)), None)
-    if match is None:
-        raise ConflictError("QR code invalide, expiré ou ne concernant aucun de vos colis.")
-
-    next_statuses = _allowed_next_statuses(match.status, match.order.delivery_type)
-    next_status = next(iter(next_statuses & HANDOFF_STATUSES), None)
-    if next_status is None:
+    match = None
+    next_status = None
+    for so in await _handoff_candidates(db, user):
+        if so.status == OrderStatus.RETURN_PENDING:
+            # Deux QR possibles au point : le livreur du retour, ou l'acheteur retardataire.
+            if so.courier_id is not None and handoff.matches(so, code, role=handoff.COURIER_ROLE):
+                match, next_status = so, OrderStatus.RETURNING
+            elif handoff.matches(so, code):
+                match, next_status = so, OrderStatus.DELIVERED
+        elif handoff.matches(so, code):
+            match = so
+            next_status = next(
+                iter(_allowed_next_statuses(so.status, so.order.delivery_type) & HANDOFF_STATUSES), None
+            )
+        if match is not None:
+            break
+    if match is None or next_status is None:
         raise ConflictError("QR code invalide, expiré ou ne concernant aucun de vos colis.")
     return await update_sub_order_status(
         db, user, match.id, SubOrderStatusUpdate(status=next_status), via_scan=True
@@ -902,14 +965,17 @@ async def get_handoff_code(db: AsyncSession, user: User, sub_order_id: uuid.UUID
         raise NotFoundError("Aucun QR code à présenter pour ce colis.")
     handoff.ensure_stage_nonce(sub_order)
     await db.commit()
-    return handoff.current_code(sub_order)
+    # Au point, en attente de retour : le livreur a son propre code, distinct de celui de l'acheteur.
+    role = handoff.COURIER_ROLE if is_dropping_courier and sub_order.status == OrderStatus.RETURN_PENDING else ""
+    return handoff.current_code(sub_order, role=role)
 
 
 async def _courier_earning(db: AsyncSession, sub_order: SubOrder) -> int:
     """Part des frais de livraison qui revient au livreur (réglage admin, voir
     app/wallets/service.py::settle_sub_order)."""
     settings_row = await payments_repository.get_settings(db)
-    return round(sub_order.effective_delivery_fee * settings_row.courier_delivery_share_percent / 100)
+    fee = sub_order.return_fee if sub_order.status in RETURN_STATUSES else sub_order.effective_delivery_fee
+    return round(fee * settings_row.courier_delivery_share_percent / 100)
 
 
 async def get_delivery_offer(db: AsyncSession, user: User, sub_order_id: uuid.UUID) -> dict:
@@ -958,6 +1024,16 @@ async def get_delivery_offer(db: AsyncSession, user: User, sub_order_id: uuid.UU
         offer["pickup_point_name"] = point.name if point else None
         offer["pickup_point_zone"] = point.zone if point else None
         offer["pickup_point_contacts"] = [{"name": m.full_name, "phone": m.phone} for m in managers]
+        if sub_order.status == OrderStatus.RETURN_PENDING and point is not None:
+            # Retour : enlèvement au point, livraison à la boutique.
+            offer["is_return"] = True
+            offer["distance_to_shop_km"] = distance(courier.latitude, courier.longitude, point.latitude, point.longitude)
+            offer["delivery_distance_km"] = distance(
+                point.latitude, point.longitude, vendor.latitude if vendor else None, vendor.longitude if vendor else None
+            )
+            offer["destination_zone"] = f"{sub_order.shop_name}" + (f" — {vendor.zone}" if vendor and vendor.zone else "")
+            offer["delivery_instructions"] = "Colis non retiré : à récupérer au point de retrait et à rapporter à la boutique."
+            offer["recipient_name"] = None
     return offer
 
 
@@ -997,7 +1073,7 @@ async def start_dispatch(db: AsyncSession, user: User, sub_order_id: uuid.UUID, 
     vendor = await vendor_repository.get_by_id(db, sub_order.vendor_id)
     if vendor is None or vendor.user_id != user.id:
         raise ForbiddenError("Cette sous-commande ne fait pas partie de votre boutique.")
-    if sub_order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED):
+    if sub_order.status in (OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderStatus.RETURNED, OrderStatus.RETURNING):
         raise ConflictError("Cette sous-commande est déjà finalisée.")
     if sub_order.courier_id is not None:
         raise ConflictError("Un livreur est déjà assigné à cette sous-commande.")
@@ -1008,9 +1084,16 @@ async def start_dispatch(db: AsyncSession, user: User, sub_order_id: uuid.UUID, 
     if not candidates:
         raise ConflictError("Aucun livreur disponible pour le moment.")
 
+    # Point de départ de la course : la boutique, ou le point de retrait pour un retour.
+    origin_lat, origin_lng = vendor.latitude, vendor.longitude
+    if sub_order.status == OrderStatus.RETURN_PENDING and sub_order.order.pickup_point_id is not None:
+        point = await pickup_points_repository.get_by_id(db, sub_order.order.pickup_point_id)
+        if point is not None and point.latitude is not None and point.longitude is not None:
+            origin_lat, origin_lng = point.latitude, point.longitude
+
     ranked = sorted(
         candidates,
-        key=lambda c: haversine_km(vendor.latitude, vendor.longitude, c.latitude, c.longitude),
+        key=lambda c: haversine_km(origin_lat, origin_lng, c.latitude, c.longitude),
     )
     queue = [c.id for c in ranked[1:]]
     first = ranked[0]
@@ -1025,11 +1108,11 @@ async def start_dispatch(db: AsyncSession, user: User, sub_order_id: uuid.UUID, 
         sub_order_id=sub_order.id,
         shop_name=sub_order.shop_name,
         courier_earning=await _courier_earning(db, sub_order),
-        distance_km=haversine_km(vendor.latitude, vendor.longitude, first.latitude, first.longitude),
+        distance_km=haversine_km(origin_lat, origin_lng, first.latitude, first.longitude),
     )
 
     _dispatch_events[sub_order.id] = asyncio.Event()
-    asyncio.create_task(_run_dispatch(sub_order.id, vendor.latitude, vendor.longitude))
+    asyncio.create_task(_run_dispatch(sub_order.id, origin_lat, origin_lng))
 
     updated = await repository.get_sub_order_by_id(db, sub_order_id)
     _attach_delivery_address(updated)

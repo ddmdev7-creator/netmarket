@@ -30,6 +30,13 @@ class OrderStatus(StrEnum):
     ARRIVED_AT_PICKUP_POINT = "arrived_at_pickup_point"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
+    # Colis non retiré au point de retrait (app/orders/returns.py) : en
+    # attente du livreur du retour, puis en route vers la boutique, puis
+    # rendu au vendeur (l'acheteur est remboursé des articles, moins l'aller
+    # et le retour — décision métier 2026-09-30).
+    RETURN_PENDING = "return_pending"
+    RETURNING = "returning"
+    RETURNED = "returned"
 
 
 class PaymentMethod(StrEnum):
@@ -181,6 +188,16 @@ class SubOrder(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # rapidement le colis physique au moment de la remise. Sans objet pour
     # une livraison à domicile (delivery_type == home_delivery).
     storage_location: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # Retour d'un colis non retiré (app/orders/returns.py) : livreur de l'aller
+    # (payé au règlement du retour, courier_id devenant celui du retour),
+    # prix de la course retour, et dernier rappel « votre colis vous attend »
+    # envoyé (jours d'attente) pour ne pas le répéter.
+    outbound_courier_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("couriers.id"), nullable=True
+    )
+    return_fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    pickup_reminder_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Taille du colis (app/common/parcel.py) : calculée au checkout
     # (declared_parcel_size, figée), corrigeable par le point à l'arrivée

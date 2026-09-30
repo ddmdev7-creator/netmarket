@@ -79,6 +79,9 @@ const statusLabels: Record<OrderStatus, string> = {
   preparing: 'En préparation',
   shipped: 'Expédiée',
   arrived_at_pickup_point: 'Arrivée au point de retrait',
+  return_pending: 'Non retirée — retour prévu',
+  returning: 'Retour en cours',
+  returned: 'Rendue au vendeur',
   delivered: 'Livrée',
   cancelled: 'Annulée',
 }
@@ -91,6 +94,9 @@ const statusColors: Record<OrderStatus, string> = {
   preparing: 'var(--color-primary)',
   shipped: 'var(--color-primary-300)',
   arrived_at_pickup_point: 'var(--color-accent)',
+  return_pending: 'var(--color-warning, #e0822e)',
+  returning: 'var(--color-warning, #e0822e)',
+  returned: 'var(--color-neutral-500)',
   delivered: 'var(--color-success)',
   cancelled: 'var(--color-error)',
 }

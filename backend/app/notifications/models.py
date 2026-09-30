@@ -37,6 +37,9 @@ class NotificationType(StrEnum):
     # Abonnement vendeur : rappel de fin, et changements (essai, activation, fin, produits masqués).
     SUBSCRIPTION_REMINDER = "subscription_reminder"
     SUBSCRIPTION_UPDATE = "subscription_update"
+    # Colis au point de retrait pas encore retiré, puis renvoyé au vendeur (app/orders/returns.py).
+    PICKUP_REMINDER = "pickup_reminder"
+    PARCEL_RETURN = "parcel_return"
 
 
 class Notification(Base, UUIDPrimaryKeyMixin, TimestampMixin):

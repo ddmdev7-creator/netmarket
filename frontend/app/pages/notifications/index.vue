@@ -60,6 +60,8 @@ const TYPE_META: Record<NotificationType, TypeMeta> = {
   pickup_application_rejected: { icon: PhXCircle, hue: 355, category: 'account' },
   subscription_reminder: { icon: PhCrown, hue: 38, category: 'account' },
   subscription_update: { icon: PhCrown, hue: 270, category: 'account' },
+  pickup_reminder: { icon: PhStorefront, hue: 30, category: 'orders' },
+  parcel_return: { icon: PhStorefront, hue: 30, category: 'orders' },
 }
 const FALLBACK: TypeMeta = { icon: PhBell, hue: 220, category: 'account' }
 // Changement de statut : icône et teinte selon l'étape annoncée dans le titre.
@@ -91,6 +93,9 @@ function target(n: NotificationRead): { path: string; label: string } | null {
   if (n.product_id) return { path: `/produits/${n.product_id}`, label: 'Voir le produit' }
   if (n.type === 'cart_reminder') return { path: '/panier', label: 'Voir mon panier' }
   if (n.type.startsWith('subscription_')) return { path: '/vendeur/abonnement', label: 'Voir mon abonnement' }
+  if (n.type === 'parcel_return' && auth.user?.role === 'vendor') {
+    return { path: '/vendeur/commandes?status=return_pending', label: 'Organiser le retour' }
+  }
   if (n.type.startsWith('pickup_application')) {
     return auth.user?.role === 'admin'
       ? { path: '/admin/candidatures', label: 'Voir les candidatures' }

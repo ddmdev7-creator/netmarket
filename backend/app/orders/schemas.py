@@ -146,6 +146,8 @@ class DeliveryOfferRead(BaseModel):
     pickup_point_zone: str | None
     pickup_point_contacts: list[PickupPointContactRead]
     expires_in_seconds: int
+    # Retour d'un colis non retiré : enlèvement au point, livraison à la boutique.
+    is_return: bool = False
 
 
 class OrderItemRead(BaseModel):
@@ -182,6 +184,8 @@ class SubOrderBase(BaseModel):
     parcel_size: str = "S"
     declared_parcel_size: str = "S"
     size_surcharge: int = 0
+    # Course du retour d'un colis non retiré (app/orders/returns.py).
+    return_fee: int = 0
     items: list[OrderItemRead]
     # None pour les commandes passées avant l'ajout de l'estimation de
     # livraison (voir app/orders/models.py::SubOrder.estimated_delivery_min).

@@ -63,7 +63,7 @@ type Sort = 'recent' | 'oldest' | 'amount_desc' | 'amount_asc'
 const STATUS_FILTERS: { value: StatusFilter; label: string; match: (s: OrderStatus) => boolean }[] = [
   { value: 'all', label: 'Toutes', match: () => true },
   { value: 'ongoing', label: 'En cours', match: (s) => ['pending', 'confirmed', 'preparing', 'shipped'].includes(s) },
-  { value: 'pickup', label: 'À récupérer', match: (s) => s === 'arrived_at_pickup_point' },
+  { value: 'pickup', label: 'À récupérer', match: (s) => s === 'arrived_at_pickup_point' || s === 'return_pending' },
   { value: 'delivered', label: 'Livrées', match: (s) => s === 'delivered' },
   { value: 'cancelled', label: 'Annulées', match: (s) => s === 'cancelled' },
 ]
@@ -230,11 +230,14 @@ const STEP_RANK: Record<OrderStatus, number> = {
   preparing: 2,
   shipped: 3,
   arrived_at_pickup_point: 4,
+  return_pending: 4,
+  returning: 4,
+  returned: -1,
   delivered: 5,
   cancelled: -1,
 }
 function progressPct(order: OrderRead): number {
-  if (order.status === 'cancelled') return 0
+  if (order.status === 'cancelled' || order.status === 'returned') return 0
   const last = order.delivery_type === 'pickup_point' ? 5 : 4
   const rank = order.status === 'delivered' ? last : Math.min(STEP_RANK[order.status], last)
   return Math.round((rank / last) * 100)
@@ -246,6 +249,9 @@ const STEP_LABELS: Record<OrderStatus, string> = {
   preparing: 'En préparation',
   shipped: 'En route',
   arrived_at_pickup_point: 'Au point de retrait',
+  return_pending: 'Non retirée — retour au vendeur',
+  returning: 'Retour au vendeur en cours',
+  returned: 'Rendue au vendeur',
   delivered: 'Livrée',
   cancelled: 'Annulée',
 }
@@ -272,6 +278,9 @@ const statusAccent: Record<OrderStatus, string> = {
   preparing: 'var(--color-primary)',
   shipped: 'rgb(var(--v-theme-info))',
   arrived_at_pickup_point: 'rgb(var(--v-theme-warning))',
+  return_pending: 'rgb(var(--v-theme-warning))',
+  returning: 'rgb(var(--v-theme-warning))',
+  returned: 'var(--color-neutral-500)',
   delivered: 'rgb(var(--v-theme-success))',
   cancelled: 'rgb(var(--v-theme-error))',
 }

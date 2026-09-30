@@ -107,6 +107,8 @@ class TransactionKind(StrEnum):
     WALLET_TOPUP = "wallet_topup"
     WALLET_PAYMENT = "wallet_payment"
     REFUND_TO_WALLET = "refund_to_wallet"
+    # Colis non retiré rendu au vendeur : répartition de l'aller et du retour.
+    SUB_ORDER_RETURNED = "sub_order_returned"
 
 
 class LedgerTransaction(Base, UUIDPrimaryKeyMixin):

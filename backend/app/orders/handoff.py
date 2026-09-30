@@ -41,8 +41,15 @@ def _window(now: float) -> int:
     return int(now // WINDOW_SECONDS)
 
 
-def _code(sub_order: SubOrder, window: int) -> str:
-    message = f"{sub_order.id}:{sub_order.handoff_stage}:{sub_order.handoff_nonce}:{window}".encode()
+# Rôle du porteur du QR quand deux personnes peuvent se présenter à la même
+# étape (colis en attente de retour au point : l'acheteur retardataire, ou le
+# livreur du retour) — chacune a son propre code.
+COURIER_ROLE = "courier"
+
+
+def _code(sub_order: SubOrder, window: int, role: str = "") -> str:
+    stage = f"{sub_order.handoff_stage}/{role}" if role else sub_order.handoff_stage
+    message = f"{sub_order.id}:{stage}:{sub_order.handoff_nonce}:{window}".encode()
     digest = hmac.new(_KEY, message, hashlib.sha256).digest()
     return base64.b32encode(digest).decode()[:_CODE_LENGTH]
 
@@ -62,11 +69,11 @@ def reset(sub_order: SubOrder) -> None:
     sub_order.handoff_stage = None
 
 
-def current_code(sub_order: SubOrder, now: float | None = None) -> tuple[str, int]:
+def current_code(sub_order: SubOrder, now: float | None = None, role: str = "") -> tuple[str, int]:
     """(contenu du QR, secondes avant renouvellement)."""
     now = time.time() if now is None else now
     expires_in = WINDOW_SECONDS - int(now % WINDOW_SECONDS)
-    return PREFIX + _code(sub_order, _window(now)), expires_in
+    return PREFIX + _code(sub_order, _window(now), role), expires_in
 
 
 def normalize(raw: str) -> str:
@@ -74,11 +81,11 @@ def normalize(raw: str) -> str:
     return value[len(PREFIX):] if value.startswith(PREFIX) else value
 
 
-def matches(sub_order: SubOrder, code: str, now: float | None = None) -> bool:
+def matches(sub_order: SubOrder, code: str, now: float | None = None, role: str = "") -> bool:
     """Code valable pour l'étape en cours : créneau actuel ou précédent (un QR
     affiché juste avant son renouvellement reste lisible le temps du scan)."""
     if not sub_order.handoff_nonce or sub_order.handoff_stage != sub_order.status.value:
         return False
     now = time.time() if now is None else now
     window = _window(now)
-    return any(hmac.compare_digest(code, _code(sub_order, w)) for w in (window, window - 1))
+    return any(hmac.compare_digest(code, _code(sub_order, w, role)) for w in (window, window - 1))

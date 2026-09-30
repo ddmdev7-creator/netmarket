@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  PhArrowUUpLeft,
   PhCheck,
   PhCheckCircle,
   PhHandshake,
@@ -41,12 +42,15 @@ const steps = computed<Step[]>(() => {
     { key: 'shipped', label: 'En route', icon: PhTruck },
   ]
   if (props.deliveryType === 'pickup_point') list.push({ key: 'arrived_at_pickup_point', label: 'Au point', icon: PhStorefront })
-  list.push({ key: 'delivered', label: 'Livrée', icon: PhHandshake })
+  // Colis non retiré : la dernière étape devient le retour à la boutique.
+  if (isReturn.value) list.push({ key: props.status, label: 'Retour boutique', icon: PhArrowUUpLeft })
+  else list.push({ key: 'delivered', label: 'Livrée', icon: PhHandshake })
   return list
 })
 
+const isReturn = computed(() => ['return_pending', 'returning', 'returned'].includes(props.status))
 const currentIndex = computed(() => steps.value.findIndex((s) => s.key === props.status))
-const isCancelled = computed(() => props.status === 'cancelled')
+const isCancelled = computed(() => props.status === 'cancelled' || props.status === 'returned')
 const isDone = computed(() => props.status === 'delivered')
 
 // Heure du DERNIER passage par chaque statut.
@@ -101,6 +105,27 @@ const headline = computed<{ title: string; text: string; icon: Component; hue: n
         text: `Remis ${formatWhen(reachedAt.value.get('delivered'))?.toLowerCase() ?? ''}`.trim(),
         icon: PhHandshake,
         hue: 150,
+      }
+    case 'return_pending':
+      return {
+        title: 'Non retiré à temps',
+        text: 'Il va retourner à la boutique. Vous pouvez encore le retirer au point avec votre QR code tant que le livreur n’est pas passé.',
+        icon: PhArrowUUpLeft,
+        hue: 30,
+      }
+    case 'returning':
+      return {
+        title: 'Retour à la boutique en cours',
+        text: 'Vous serez remboursé à sa réception : les articles, moins la livraison aller et le retour.',
+        icon: PhArrowUUpLeft,
+        hue: 30,
+      }
+    case 'returned':
+      return {
+        title: 'Colis rendu à la boutique',
+        text: 'Le remboursement (articles, moins la livraison aller et le retour) a été crédité sur NdjouriBank.',
+        icon: PhArrowUUpLeft,
+        hue: 30,
       }
     default:
       return { title: 'Commande annulée', text: 'Ce colis ne sera pas livré.', icon: PhXCircle, hue: 0 }

@@ -16,6 +16,9 @@ export type OrderStatus =
   | 'preparing'
   | 'shipped'
   | 'arrived_at_pickup_point'
+  | 'return_pending'
+  | 'returning'
+  | 'returned'
   | 'delivered'
   | 'cancelled'
 export type PaymentMethod = 'cash_on_delivery' | 'online' | 'wallet'
@@ -683,6 +686,8 @@ interface SubOrderBase {
   declared_parcel_size?: ParcelSize
   /** Supplément L/XL inclus dans les frais de livraison. */
   size_surcharge?: number
+  /** Course du retour d'un colis non retiré (déduite du remboursement de l'acheteur). */
+  return_fee?: number
   items: OrderItemRead[]
   /** null for orders placed before the delivery-estimate feature existed. */
   estimated_delivery_min: string | null
@@ -1025,6 +1030,8 @@ export type NotificationType =
   | 'cart_reminder'
   | 'subscription_reminder'
   | 'subscription_update'
+  | 'pickup_reminder'
+  | 'parcel_return'
 
 export interface NotificationRead {
   id: string
@@ -1263,6 +1270,8 @@ export interface DeliveryOfferRead {
   pickup_point_zone: string | null
   pickup_point_contacts: PickupPointContactRead[]
   expires_in_seconds: number
+  /** Retour d'un colis non retiré : enlèvement au point, livraison à la boutique. */
+  is_return?: boolean
 }
 
 // --- Candidatures gestionnaire de point de retrait (backend app/pickup_point_applications) ---
